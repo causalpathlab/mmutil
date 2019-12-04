@@ -1,19 +1,24 @@
 ////////////////////////////////////////////////////////////////
 // I/O routines
-#include "utils/strbuf.hh"
-#include "utils/gzstream.hh"
-#include <iostream>
-#include <fstream>
-#include <string>
-#include <memory>
-#include <vector>
-
 #include <boost/filesystem.hpp>
+#include <cctype>
+#include <fstream>
+#include <iostream>
+#include <memory>
+#include <string>
+#include <vector>
+#include "utils/gzstream.hh"
+#include "utils/strbuf.hh"
 
 #include "eigen3/Eigen/Core"
+#include "eigen3/Eigen/Sparse"
 
 #ifndef UTIL_IO_HH_
 #define UTIL_IO_HH_
+
+/////////////////////////////////
+// common utility for data I/O //
+/////////////////////////////////
 
 auto is_gz(const std::string filename) {
   if (filename.size() < 3) return false;
@@ -21,7 +26,8 @@ auto is_gz(const std::string filename) {
 }
 
 std::shared_ptr<std::ifstream> open_ifstream(const std::string filename) {
-  std::shared_ptr<std::ifstream> ret(new std::ifstream(filename.c_str(), std::ios::in));
+  std::shared_ptr<std::ifstream> ret(
+      new std::ifstream(filename.c_str(), std::ios::in));
   return ret;
 }
 
@@ -57,7 +63,211 @@ auto read_vector_file(const std::string filename, std::vector<T> &in) {
   return ret;
 }
 
-template<typename IFS>
+/////////////////////////////////////////////////////////////
+// read matrix market triplets and construct sparse matrix //
+/////////////////////////////////////////////////////////////
+
+template <typename IFS, typename Derived>
+auto read_matrix_market_stream(IFS &ifs,
+                               Eigen::SparseMatrixBase<Derived> &Amat) {
+  ///////////////////////
+  // basic definitions //
+  ///////////////////////
+
+  Derived &A = Amat.derived();
+
+  using Scalar = typename Derived::Scalar;
+  using Triplet = Eigen::Triplet<Scalar>;
+  using TripletVec = std::vector<Triplet>;
+  using Index = typename Eigen::SparseMatrix<Scalar>::Index;
+
+  //////////////////////////
+  // Finite state machine //
+  //////////////////////////
+
+  typedef enum _state_t { S_COMMENT, S_WORD, S_EOW, S_EOL } state_t;
+  const auto eol = '\n';
+  const auto comment = '%';
+
+  std::istreambuf_iterator<char> END;
+  std::istreambuf_iterator<char> it(ifs);
+
+  strbuf_t strbuf;
+  state_t state = S_EOL;
+
+  auto num_rows = 0u;  // number of rows
+  auto num_cols = 0u;  // number of columns
+
+  // read the first line and headers
+  // %%MatrixMarket matrix coordinate integer general
+
+  std::vector<Index> Dims(3);
+
+  auto extract_idx_word = [&]() {
+    const Index _idx = strbuf.get<Index>();
+    if (num_cols < Dims.size()) {
+      Dims[num_cols] = _idx;
+    }
+    state = S_EOW;
+    strbuf.clear();
+    return _idx;
+  };
+
+  for (; num_rows < 1 && it != END; ++it) {
+    char c = *it;
+
+    // Skip the comment line. It doesn't count toward the line
+    // count, and we don't bother reading the content.
+    if (state == S_COMMENT) {
+      if (c == eol) state = S_EOL;
+      continue;
+    }
+
+    if (c == comment) {
+      state = S_COMMENT;
+      continue;
+    }
+
+    // Do the regular parsing of a triplet
+
+    if (c == eol) {
+      if (state == S_WORD) {
+        const auto nelem = extract_idx_word();
+        num_cols++;
+        TLOG("Elements : " << nelem);
+      }
+
+      state = S_EOL;
+      num_rows++;
+
+    } else if (isspace(c)) {
+      auto d = extract_idx_word();
+      num_cols++;
+      TLOG("Dimsension : " << d);
+    } else {
+      strbuf.add(c);
+      state = S_WORD;
+    }
+  }
+
+#ifdef DEBUG
+  for (auto d : Dims) {
+    TLOG(d);
+  }
+  TLOG("Read the header of the file.");
+#endif
+
+  // Read a list of triplets
+  TLOG("Start reading a list of triplets");
+
+  Index row, col;
+  Scalar weight;
+  TripletVec Tvec;
+
+  auto read_triplet = [&]() {
+    switch (num_cols) {
+      case 0:
+        row = strbuf.get<Index>();
+        break;
+      case 1:
+        col = strbuf.get<Index>();
+        break;
+      case 2:
+        weight = strbuf.get<Scalar>();
+        break;
+    }
+    state = S_EOW;
+    strbuf.clear();
+  };
+
+  num_cols = 0;
+  num_rows = 0;
+
+  const Index max_row = Dims[0];
+  const Index max_col = Dims[1];
+  const Index max_elem = Dims[2];
+  const Index INTERVAL = 1e6;
+
+  for (; num_rows < max_elem && it != END; ++it) {
+    char c = *it;
+
+    // Skip the comment line. It doesn't count toward the line
+    // count, and we don't bother reading the content.
+    if (state == S_COMMENT) {
+      if (c == eol) state = S_EOL;
+      continue;
+    }
+
+    if (c == comment) {
+      state = S_COMMENT;
+      continue;
+    }
+
+    // Do the regular parsing of a triplet
+
+    if (c == eol) {
+      if (state == S_WORD) {
+        read_triplet();
+        num_cols++;
+      }
+
+      state = S_EOL;
+      num_rows++;
+
+      if (row < 0 || row > max_row) return EXIT_FAILURE;
+      if (col < 0 || row > max_col) return EXIT_FAILURE;
+
+      Tvec.push_back(Triplet(row - 1, col - 1, weight));
+      num_cols = 0;
+
+      if (num_rows % INTERVAL == 0) {
+        std::cerr << "\rRead " << std::setw(10) << (num_rows / INTERVAL)
+                  << " x 1M triplets (total " << std::setw(10)
+                  << (max_elem / INTERVAL) << ")\r" << std::flush;
+      }
+
+    } else if (isspace(c)) {
+      read_triplet();
+      num_cols++;
+    } else {
+      strbuf.add(c);
+      state = S_WORD;
+    }
+  }
+
+  TLOG("Finished reading a list of triplets");
+
+  A.resize(max_row, max_col);
+  A.setFromTriplets(Tvec.begin(), Tvec.end());
+  A.makeCompressed();
+
+  TLOG("Constructed the sparse matrix");
+
+  return EXIT_SUCCESS;
+}
+
+template <typename T, typename Derived>
+auto read_matrix_market_file(const std::string filename,
+                             Eigen::SparseMatrixBase<Derived> &Amat) {
+  auto ret = EXIT_SUCCESS;
+
+  if (is_gz(filename)) {
+    igzstream ifs(filename.c_str(), std::ios::in);
+    ret = read_matrix_market_stream(ifs, Amat);
+    ifs.close();
+  } else {
+    std::ifstream ifs(filename.c_str(), std::ios::in);
+    ret = read_matrix_market_stream(ifs, Amat);
+    ifs.close();
+  }
+  return ret;
+}
+
+/////////////////////////////
+// identify dimensionality //
+/////////////////////////////
+
+template <typename IFS>
 auto num_cols(IFS &ifs) {
   std::istreambuf_iterator<char> eos;
   std::istreambuf_iterator<char> it(ifs);
@@ -72,7 +282,7 @@ auto num_cols(IFS &ifs) {
   return ret;
 }
 
-template<typename IFS>
+template <typename IFS>
 auto num_rows(IFS &ifs) {
   std::istreambuf_iterator<char> eos;
   std::istreambuf_iterator<char> it(ifs);
@@ -147,7 +357,9 @@ auto read_data_stream(IFS &ifs, T &in) {
 #endif
 
   auto mtot = data.size();
-  ERR_RET(mtot != (nr * nc), "# data points: " << mtot << " elements in " << nr << " x " << nc << " matrix");
+  ERR_RET(mtot != (nr * nc),
+          "# data points: " << mtot << " elements in " << nr << " x " << nc
+                            << " matrix");
   ERR_RET(mtot < 1, "empty file");
   ERR_RET(nr < 1, "zero number of rows; incomplete line?");
   in = Eigen::Map<T>(data.data(), nc, nr);
@@ -198,7 +410,7 @@ template <typename OFS, typename Derived>
 void write_data_stream(OFS &ofs, const Eigen::MatrixBase<Derived> &out) {
   ofs.precision(4);
 
-  const Derived& M = out.derived();
+  const Derived &M = out.derived();
 
   for (auto r = 0u; r < M.rows(); ++r) {
     ofs << M.coeff(r, 0);
@@ -211,7 +423,7 @@ template <typename OFS, typename Derived>
 void write_data_stream(OFS &ofs, const Eigen::SparseMatrixBase<Derived> &out) {
   ofs.precision(4);
 
-  const Derived& M = out.derived();
+  const Derived &M = out.derived();
 
   // column major
   for (auto k = 0; k < M.outerSize(); ++k) {

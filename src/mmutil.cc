@@ -2,12 +2,16 @@
 #include "utils/util.hh"
 #include "utils/io.hh"
 
+#include "eigen3/Eigen/Core"
+#include "eigen3/Eigen/Sparse"
+
 bool exists(const std::string fname) {
   using namespace boost::filesystem;
 
 
 
 }
+
 
 
 // Merge two large matrix market files
@@ -20,12 +24,33 @@ void print_help(const char* fname) {
 
 int main(const int argc, const char *argv[]) {
 
-  if(argc < 2) {
+  if(argc < 3) {
     print_help(argv[0]);
     return EXIT_FAILURE;
   }
 
   // std::string filename(argv[1]);
+
+  std::string mtx_file(argv[1]);
+  std::string row_name_file(argv[2]);
+
+  std::vector<std::string> row_names(0);
+
+  auto _rows = read_vector_file(row_name_file, row_names);
+
+  using Scalar = float;
+
+  Eigen::SparseMatrix<Scalar> A;
+
+  auto _data = read_matrix_market_file<Scalar>(mtx_file, A);
+
+
+  // if(ret == EXIT_SUCCESS) {
+  //   for(auto s : row_names){
+  //     std::cout << s << std::endl;
+  //   }
+  // }
+
 
 
 

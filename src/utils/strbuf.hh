@@ -1,5 +1,5 @@
-#include <cstdio>
 #include <cctype>
+#include <cstdio>
 #include "utils/util.hh"
 
 #ifndef STRBUF_T_HH_
@@ -61,7 +61,8 @@ struct strbuf_t {
     if (size() >= 2) {
       const auto c1 = data[0];
       const auto c2 = data[1];
-      return ((c1 == 'N') & (c2 == 'a')) || ((c1 == 'n') & (c2 == 'a')) || ((c1 == 'N') & (c2 == 'A'));
+      return ((c1 == 'N') & (c2 == 'a')) || ((c1 == 'n') & (c2 == 'a')) ||
+             ((c1 == 'N') & (c2 == 'A'));
     }
     return false;
   }
