@@ -2,7 +2,7 @@
 #include "utils/util.hh"
 #include "utils/io.hh"
 
-bool exists(const std::stringn fname) {
+bool exists(const std::string fname) {
   using namespace boost::filesystem;
 
 
