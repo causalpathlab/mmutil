@@ -32,6 +32,13 @@ std::string curr_time();
     }                     \
   }
 
+#define CHECK(cond)   \
+  {                               \
+    if ((cond) != EXIT_SUCCESS) { \
+      std::exit(1);               \
+    }                             \
+  }
+
 #define CHK_ERR_EXIT(cond, msg)   \
   {                               \
     if ((cond) != EXIT_SUCCESS) { \

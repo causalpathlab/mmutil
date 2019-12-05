@@ -1,6 +1,5 @@
 ////////////////////////////////////////////////////////////////
 // I/O routines
-#include <boost/filesystem.hpp>
 #include <cctype>
 #include <fstream>
 #include <iostream>
@@ -10,8 +9,8 @@
 #include "utils/gzstream.hh"
 #include "utils/strbuf.hh"
 
-#include "eigen3/Eigen/Core"
-#include "eigen3/Eigen/Sparse"
+#include <eigen3/Eigen/Core>
+#include <eigen3/Eigen/Sparse>
 
 #ifndef UTIL_IO_HH_
 #define UTIL_IO_HH_
@@ -19,8 +18,7 @@
 /////////////////////////////////
 // common utility for data I/O //
 /////////////////////////////////
-
-auto is_gz(const std::string filename) {
+auto is_file_gz(const std::string filename) {
   if (filename.size() < 3) return false;
   return filename.substr(filename.size() - 3) == ".gz";
 }
@@ -51,7 +49,7 @@ template <typename T>
 auto read_vector_file(const std::string filename, std::vector<T> &in) {
   auto ret = EXIT_SUCCESS;
 
-  if (is_gz(filename)) {
+  if (is_file_gz(filename)) {
     igzstream ifs(filename.c_str(), std::ios::in);
     ret = read_vector_stream(ifs, in);
     ifs.close();
@@ -67,19 +65,14 @@ auto read_vector_file(const std::string filename, std::vector<T> &in) {
 // read matrix market triplets and construct sparse matrix //
 /////////////////////////////////////////////////////////////
 
-template <typename IFS, typename Derived>
-auto read_matrix_market_stream(IFS &ifs,
-                               Eigen::SparseMatrixBase<Derived> &Amat) {
+template <typename IFS>
+auto read_matrix_market_stream(IFS &ifs) {
   ///////////////////////
   // basic definitions //
   ///////////////////////
 
-  Derived &A = Amat.derived();
-
-  using Scalar = typename Derived::Scalar;
-  using Triplet = Eigen::Triplet<Scalar>;
-  using TripletVec = std::vector<Triplet>;
-  using Index = typename Eigen::SparseMatrix<Scalar>::Index;
+  using Scalar = float;
+  using Index = long int;
 
   //////////////////////////
   // Finite state machine //
@@ -134,7 +127,9 @@ auto read_matrix_market_stream(IFS &ifs,
       if (state == S_WORD) {
         const auto nelem = extract_idx_word();
         num_cols++;
+#ifdef DEBUG
         TLOG("Elements : " << nelem);
+#endif
       }
 
       state = S_EOL;
@@ -143,7 +138,9 @@ auto read_matrix_market_stream(IFS &ifs,
     } else if (isspace(c)) {
       auto d = extract_idx_word();
       num_cols++;
+#ifdef DEBUG
       TLOG("Dimsension : " << d);
+#endif
     } else {
       strbuf.add(c);
       state = S_WORD;
@@ -154,7 +151,7 @@ auto read_matrix_market_stream(IFS &ifs,
   for (auto d : Dims) {
     TLOG(d);
   }
-  TLOG("Read the header of the file.");
+  TLOG("debug -- read the header.");
 #endif
 
   // Read a list of triplets
@@ -162,6 +159,10 @@ auto read_matrix_market_stream(IFS &ifs,
 
   Index row, col;
   Scalar weight;
+
+  using Triplet = std::tuple<Index, Index, Scalar>;
+  using TripletVec = std::vector<Triplet>;
+
   TripletVec Tvec;
 
   auto read_triplet = [&]() {
@@ -214,8 +215,10 @@ auto read_matrix_market_stream(IFS &ifs,
       state = S_EOL;
       num_rows++;
 
-      if (row < 0 || row > max_row) return EXIT_FAILURE;
-      if (col < 0 || row > max_col) return EXIT_FAILURE;
+      if (row < 0 || row > max_row)
+        WLOG("Ignore unexpected row" << std::setw(10) << row);
+      if (col < 0 || col > max_col)
+        WLOG("Ignore unexpected column" << std::setw(10) << col);
 
       Tvec.push_back(Triplet(row - 1, col - 1, weight));
       num_cols = 0;
@@ -237,30 +240,60 @@ auto read_matrix_market_stream(IFS &ifs,
 
   TLOG("Finished reading a list of triplets");
 
-  A.resize(max_row, max_col);
-  A.setFromTriplets(Tvec.begin(), Tvec.end());
-  A.makeCompressed();
+  if (Tvec.size() < max_elem) {
+    WLOG("This file may have lost elements : " << Tvec.size() << " vs. "
+                                               << max_elem);
+  }
 
-  TLOG("Constructed the sparse matrix");
-
-  return EXIT_SUCCESS;
+  return std::make_tuple(Tvec, max_row, max_col);
 }
 
-template <typename T, typename Derived>
-auto read_matrix_market_file(const std::string filename,
-                             Eigen::SparseMatrixBase<Derived> &Amat) {
-  auto ret = EXIT_SUCCESS;
-
-  if (is_gz(filename)) {
+auto read_matrix_market_file(const std::string filename) {
+  if (is_file_gz(filename)) {
     igzstream ifs(filename.c_str(), std::ios::in);
-    ret = read_matrix_market_stream(ifs, Amat);
+    auto ret = read_matrix_market_stream(ifs);
     ifs.close();
+    return ret;
   } else {
     std::ifstream ifs(filename.c_str(), std::ios::in);
-    ret = read_matrix_market_stream(ifs, Amat);
+    auto ret = read_matrix_market_stream(ifs);
     ifs.close();
+    return ret;
   }
-  return ret;
+}
+
+template <typename OFS, typename Derived>
+void write_matrix_market_stream(OFS &ofs,
+                                const Eigen::SparseMatrixBase<Derived> &out) {
+  ofs.precision(4);
+
+  const Derived &M = out.derived();
+
+  ofs << "%%MatrixMarket matrix coordinate integer general" << std::endl;
+  ofs << M.rows() << " " << M.cols() << " " << M.nonZeros() << std::endl;
+
+  // column major
+  for (auto k = 0; k < M.outerSize(); ++k) {
+    for (typename Derived::InnerIterator it(M, k); it; ++it) {
+      const auto i = it.row() + 1;  // fix zero-based to one-based
+      const auto j = it.col() + 1;  // fix zero-based to one-based
+      const auto v = it.value();
+      ofs << i << " " << j << " " << v << std::endl;
+    }
+  }
+}
+
+template <typename T>
+void write_matrix_market_file(const std::string filename, T &out) {
+  if (is_file_gz(filename)) {
+    ogzstream ofs(filename.c_str(), std::ios::out);
+    write_matrix_market_stream(ofs, out);
+    ofs.close();
+  } else {
+    std::ofstream ofs(filename.c_str(), std::ios::out);
+    write_matrix_market_stream(ofs, out);
+    ofs.close();
+  }
 }
 
 /////////////////////////////
@@ -373,7 +406,7 @@ template <typename T>
 auto read_data_file(const std::string filename, T &in) {
   auto ret = EXIT_SUCCESS;
 
-  if (is_gz(filename)) {
+  if (is_file_gz(filename)) {
     igzstream ifs(filename.c_str(), std::ios::in);
     ret = read_data_stream(ifs, in);
     ifs.close();
@@ -392,7 +425,7 @@ auto read_data_file(const std::string filename) {
   typename std::shared_ptr<T> ret(new T{});
   auto &in = *ret.get();
 
-  if (is_gz(filename)) {
+  if (is_file_gz(filename)) {
     igzstream ifs(filename.c_str(), std::ios::in);
     CHK_ERR_EXIT(read_data_stream(ifs, in), "Failed to read " << filename);
     ifs.close();
@@ -439,7 +472,7 @@ void write_data_stream(OFS &ofs, const Eigen::SparseMatrixBase<Derived> &out) {
 ////////////////////////////////////////////////////////////////
 template <typename T>
 void write_data_file(const std::string filename, const T &out) {
-  if (is_gz(filename)) {
+  if (is_file_gz(filename)) {
     ogzstream ofs(filename.c_str(), std::ios::out);
     write_data_stream(ofs, out);
     ofs.close();
