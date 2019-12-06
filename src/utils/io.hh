@@ -296,6 +296,54 @@ void write_matrix_market_file(const std::string filename, T &out) {
   }
 }
 
+/////////////////////////////////////
+// frequently used output routines //
+/////////////////////////////////////
+
+template <typename OFS, typename Vec>
+void write_pair_stream(OFS &ofs, const Vec &vec) {
+  ofs.precision(4);
+
+  for (auto pp : vec) {
+    ofs << std::get<0>(pp) << " " << std::get<1>(pp) << std::endl;
+  }
+}
+
+template <typename Vec>
+void write_pair_file(const std::string filename, const Vec &out) {
+  if (is_file_gz(filename)) {
+    ogzstream ofs(filename.c_str(), std::ios::out);
+    write_pair_stream(ofs, out);
+    ofs.close();
+  } else {
+    std::ofstream ofs(filename.c_str(), std::ios::out);
+    write_pair_stream(ofs, out);
+    ofs.close();
+  }
+}
+
+template <typename OFS, typename Vec>
+void write_vector_stream(OFS &ofs, const Vec &vec) {
+  ofs.precision(4);
+
+  for (auto pp : vec) {
+    ofs << pp << std::endl;
+  }
+}
+
+template <typename Vec>
+void write_vector_file(const std::string filename, const Vec &out) {
+  if (is_file_gz(filename)) {
+    ogzstream ofs(filename.c_str(), std::ios::out);
+    write_vector_stream(ofs, out);
+    ofs.close();
+  } else {
+    std::ofstream ofs(filename.c_str(), std::ios::out);
+    write_vector_stream(ofs, out);
+    ofs.close();
+  }
+}
+
 /////////////////////////////
 // identify dimensionality //
 /////////////////////////////

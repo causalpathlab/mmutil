@@ -1,6 +1,8 @@
 #include "mmutil.hh"
 
 void print_help(const char* fname) {
+  std::cerr << "Merge the columns of sparse matrices matching rows" << std::endl;
+  std::cerr << std::endl;
   std::cerr << fname << " master_feature count_threshold output" << std::endl;
   std::cerr << " { mtx[1] feature[1] mtx[2] feature[2] ... }" << std::endl;
   std::cerr << std::endl;
@@ -13,28 +15,6 @@ void print_help(const char* fname) {
   std::cerr << "mtx[i]          : i-th matrix market format file" << std::endl;
   std::cerr << "feature[i]      : i-th feature file" << std::endl;
   std::cerr << std::endl;
-}
-
-template <typename OFS, typename Vec>
-void write_pair_stream(OFS& ofs, const Vec& vec) {
-  ofs.precision(4);
-
-  for (auto pp : vec) {
-    ofs << std::get<0>(pp) << " " << std::get<1>(pp) << std::endl;
-  }
-}
-
-template <typename Vec>
-void write_pair_file(const std::string filename, const Vec& out) {
-  if (is_file_gz(filename)) {
-    ogzstream ofs(filename.c_str(), std::ios::out);
-    write_pair_stream(ofs, out);
-    ofs.close();
-  } else {
-    std::ofstream ofs(filename.c_str(), std::ios::out);
-    write_pair_stream(ofs, out);
-    ofs.close();
-  }
 }
 
 int main(const int argc, const char* argv[]) {
@@ -120,7 +100,7 @@ int main(const int argc, const char* argv[]) {
       Scalar w;
       std::tie(r, c, w) = tt;
 
-      if (remap.at(std::get<0>(tt)) != NA) {
+      if (remap.at(r) != NA) {
         const auto new_r = remap.at(r);
         Tvec_trim.push_back(_Triplet(new_r, c, w));
       }
