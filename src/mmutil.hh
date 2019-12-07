@@ -11,6 +11,7 @@
 #include <algorithm>
 #include <functional>
 #include <numeric>
+#include <vector>
 
 #ifndef MMUTIL_HH_
 #define MMUTIL_HH_

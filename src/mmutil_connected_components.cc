@@ -9,6 +9,16 @@ void print_help(const char* fname) {
   std::cerr << std::endl;
 }
 
+template <typename Vec>
+auto std_argsort(const Vec& data) {
+  using Index = unsigned int;
+  std::vector<Index> index(data.size());
+  std::iota(std::begin(index), std::end(index), 0);
+  std::sort(std::begin(index), std::end(index),
+            [&](Index lhs, Index rhs) { return data.at(lhs) > data.at(rhs); });
+  return index;
+}
+
 int main(const int argc, const char* argv[]) {
   if (argc < 4) {
     print_help(argv[0]);
@@ -73,6 +83,8 @@ int main(const int argc, const char* argv[]) {
 
   Graph S;
 
+  for (Index u = num_vertices(S); u < max_col; ++u) add_vertex(S);
+
   Graph::adjacency_iterator ri, rEnd;
   Graph::adjacency_iterator ci, cEnd;
   std::unordered_map<Index, int> sn_count;
@@ -133,11 +145,48 @@ int main(const int argc, const char* argv[]) {
   using IndexVec = std::vector<Index>;
   IndexVec membership(num_vertices(S));
   const Index numComp = connected_components(S, &membership[0]);
-  TLOG("Found " << numComp << " connected components");
 
-  // TODO: output each component's mtx file
+  /////////////////////////////
+  // sort components by size //
+  /////////////////////////////
 
+  std::vector<Index> component_size(numComp, 0);
+  for (auto k : membership) component_size[k]++;
+  auto comp_order = std_argsort(component_size);
 
+  // for(auto k : comp_order) {
+  //   std::cout << k << " " << component_size.at(k) << std::endl;
+  // }
+
+  std::vector<std::shared_ptr<TripletVec>> components;
+
+  for (Index k = 0; k < numComp; ++k) {
+    components.push_back(std::make_shared<TripletVec>(0));
+  }
+
+  for (auto tt : Tvec) {
+    const Index c = std::get<1>(tt);
+    const Index k = membership.at(c);
+    TripletVec& compVec = *(components.at(k).get());
+    compVec.push_back(tt);
+  }
+
+  Index ki = 0;
+
+  for(auto k : comp_order) {
+
+    const SpMat Gc =
+        build_eigen_sparse(*(components.at(k).get()), max_row, max_col);
+
+    if (Gc.nonZeros() < 1) {
+      continue;
+    }
+
+    ++ki;
+    const std::string out_file = output + "_" + boost::lexical_cast<std::string>(ki) + ".mtx.gz";
+    write_matrix_market_file(out_file, Gc);
+  }
 
   return EXIT_SUCCESS;
 }
+

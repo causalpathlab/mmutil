@@ -168,13 +168,16 @@ auto read_matrix_market_stream(IFS &ifs) {
   auto read_triplet = [&]() {
     switch (num_cols) {
       case 0:
-        row = strbuf.get<Index>();
+        // row = strbuf.get<Index>();
+        row = strbuf.take_int();
         break;
       case 1:
-        col = strbuf.get<Index>();
+        // col = strbuf.get<Index>();
+        col = strbuf.take_int();
         break;
       case 2:
-        weight = strbuf.get<Scalar>();
+        // weight = strbuf.get<Scalar>();
+        weight = strbuf.take_float();
         break;
     }
     state = S_EOW;
@@ -229,7 +232,7 @@ auto read_matrix_market_stream(IFS &ifs) {
                   << (max_elem / INTERVAL) << ")\r" << std::flush;
       }
 
-    } else if (isspace(c)) {
+    } else if (isspace(c) && strbuf.size() > 0) {
       read_triplet();
       num_cols++;
     } else {
@@ -438,9 +441,8 @@ auto read_data_stream(IFS &ifs, T &in) {
 #endif
 
   auto mtot = data.size();
-  ERR_RET(mtot != (nr * nc),
-          "# data points: " << mtot << " elements in " << nr << " x " << nc
-                            << " matrix");
+  ERR_RET(mtot != (nr * nc), "# data points: " << mtot << " elements in " << nr
+                                               << " x " << nc << " matrix");
   ERR_RET(mtot < 1, "empty file");
   ERR_RET(nr < 1, "zero number of rows; incomplete line?");
   in = Eigen::Map<T>(data.data(), nc, nr);
