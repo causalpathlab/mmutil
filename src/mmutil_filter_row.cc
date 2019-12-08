@@ -29,7 +29,6 @@ int main(const int argc, const char* argv[]) {
     return EXIT_FAILURE;
   }
 
-
   using Str = std::string;
 
   const Index Ntop = boost::lexical_cast<Index>(argv[1]);
@@ -63,7 +62,8 @@ int main(const int argc, const char* argv[]) {
     Vec s1 = xx * Mat::Ones(xx.cols(), 1);
     Vec s2 = xx.cwiseProduct(xx) * Mat::Ones(xx.cols(), 1);
     const Scalar n = xx.cols();
-    Vec ret = s2 / n - (s1 / n).cwiseProduct(s1 / n);
+    Vec ret = s2 - s1.cwiseProduct(s1 / n);
+    ret = ret / std::max(n - 1.0, 1.0);
     ret = ret.cwiseSqrt();
     return ret;
   };
