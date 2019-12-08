@@ -23,10 +23,6 @@ int main(const int argc, const char* argv[]) {
     return EXIT_FAILURE;
   }
 
-  using Scalar = float;
-  using Index = long int;
-  using SpMat = Eigen::SparseMatrix<Scalar>;
-
   using Str = std::string;
   using Str2Index = std::unordered_map<Str, Index>;
   using Index2Str = std::vector<Str>;

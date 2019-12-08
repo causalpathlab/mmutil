@@ -25,9 +25,6 @@ int main(const int argc, const char* argv[]) {
     return EXIT_FAILURE;
   }
 
-  using Scalar = float;
-  using Index = long int;
-  using SpMat = Eigen::SparseMatrix<Scalar>;
   using Str = std::string;
 
   const Scalar jaccard_cutoff = boost::lexical_cast<Scalar>(argv[1]);

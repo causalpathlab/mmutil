@@ -16,6 +16,13 @@
 #ifndef MMUTIL_HH_
 #define MMUTIL_HH_
 
+using Scalar = float;
+using SpMat = Eigen::SparseMatrix<Scalar, Eigen::RowMajor>;
+using Index = SpMat::Index;
+
+using Mat = typename Eigen::Matrix<Scalar, Eigen::Dynamic, Eigen::Dynamic>;
+using Vec = typename Eigen::Matrix<Scalar, Eigen::Dynamic, 1>;
+
 template <typename EigenVec>
 inline auto std_vector(const EigenVec& eigen_vec) {
   std::vector<typename EigenVec::Scalar> ret(eigen_vec.size());
@@ -26,9 +33,6 @@ inline auto std_vector(const EigenVec& eigen_vec) {
 
 template <typename TVEC>
 inline auto build_eigen_triplets(const TVEC& Tvec) {
-  using Scalar = float;
-  using SpMat = Eigen::SparseMatrix<Scalar>;
-  using Index = SpMat::Index;
 
   using _Triplet = Eigen::Triplet<Scalar>;
   using _TripletVec = std::vector<_Triplet>;
@@ -48,10 +52,6 @@ inline auto build_eigen_triplets(const TVEC& Tvec) {
 template <typename TVEC, typename INDEX>
 inline auto build_eigen_sparse(const TVEC& Tvec, const INDEX max_row,
                                const INDEX max_col) {
-  using Scalar = float;
-  using SpMat = Eigen::SparseMatrix<Scalar>;
-  using Index = SpMat::Index;
-
   auto _tvec = build_eigen_triplets(Tvec);
 
   SpMat ret(max_row, max_col);
@@ -63,14 +63,8 @@ template <typename Derived>
 auto filter_columns(Eigen::SparseMatrixBase<Derived>& Amat,
                     const float column_threshold) {
   Derived& A = Amat.derived();
-  using Scalar = typename Derived::Scalar;
-  using SpMat = typename Eigen::SparseMatrix<Scalar, Eigen::ColMajor>;
   using Triplet = Eigen::Triplet<Scalar>;
   using TripletVec = std::vector<Triplet>;
-  using Index = typename Eigen::SparseMatrix<Scalar>::Index;
-
-  using Mat = typename Eigen::Matrix<Scalar, Eigen::Dynamic, Eigen::Dynamic>;
-  using Vec = typename Eigen::Matrix<Scalar, Eigen::Dynamic, 1>;
 
   Vec onesRow = Mat::Ones(A.rows(), 1);
   Vec CountCols = A.transpose() * onesRow;
@@ -96,7 +90,7 @@ auto filter_columns(Eigen::SparseMatrixBase<Derived>& Amat,
 
   for (Index j = 0; j < valid_cols.size(); ++j) {
     const Index k = valid_cols.at(j);
-    for (typename SpMat::InnerIterator it(A, k); it; ++it) {
+    for (SpMat::InnerIterator it(A, k); it; ++it) {
       Tvec.push_back(Triplet(it.row(), j, it.value()));
     }
   }

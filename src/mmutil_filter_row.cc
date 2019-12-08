@@ -29,9 +29,7 @@ int main(const int argc, const char* argv[]) {
     return EXIT_FAILURE;
   }
 
-  using Scalar = float;
-  using Index = long int;
-  using SpMat = Eigen::SparseMatrix<Scalar>;
+
   using Str = std::string;
 
   const Index Ntop = boost::lexical_cast<Index>(argv[1]);
@@ -49,14 +47,37 @@ int main(const int argc, const char* argv[]) {
   std::vector<Str> features(0);
   CHECK(read_vector_file(feature_file, features));
 
-  // Calculate some scores
+  // Calculate some scores on the sparse matrix
   const SpMat X = build_eigen_sparse(Tvec, max_row, max_col);
 
-  using Mat = typename Eigen::Matrix<Scalar, Eigen::Dynamic, Eigen::Dynamic>;
-  using Vec = typename Eigen::Matrix<Scalar, Eigen::Dynamic, 1>;
-  Vec RowScores = X * Mat::Ones(X.cols(), 1);
+  //////////////////////////
+  // Calculate the degree //
+  //////////////////////////
+
+  auto _score_degree = [](const SpMat& xx) {
+    return xx.unaryExpr([](const Scalar x) { return std::abs(x); }) *
+           Mat::Ones(xx.cols(), 1);
+  };
+
+  auto _score_sd = [](const SpMat& xx) {
+    Vec s1 = xx * Mat::Ones(xx.cols(), 1);
+    Vec s2 = xx.cwiseProduct(xx) * Mat::Ones(xx.cols(), 1);
+    const Scalar n = xx.cols();
+    Vec ret = s2 / n - (s1 / n).cwiseProduct(s1 / n);
+    ret = ret.cwiseSqrt();
+    return ret;
+  };
+
+  /////////////////////
+  // Prioritize rows //
+  /////////////////////
+
+  Vec RowScores = _score_sd(X);
 
   auto order = eigen_argsort(RowScores);
+
+  TLOG("row scores: " << RowScores(order.at(0)) << " ~ "
+                      << RowScores(order.at(order.size() - 1)));
 
   // Output
   const Index Nout = std::min(Ntop, max_row);
@@ -83,7 +104,7 @@ int main(const int argc, const char* argv[]) {
   }
 
   const SpMat out_X = build_eigen_sparse(out_Tvec, Nout, max_col);
-  auto out_scores = std_vector(out_X * Mat::Ones(out_X.cols(), 1));
+  auto out_scores = std_vector(_score_sd(out_X));
 
   Str output_mtx_file = output + ".mtx.gz";
   Str output_feature_file = output + ".features.gz";
