@@ -6,10 +6,8 @@
 #ifndef STRBUF_T_HH_
 #define STRBUF_T_HH_
 
-using namespace std;
-
 ////////////////////////////////////////////////////////////////
-// C-stype string buffer
+// C-style string buffer
 struct strbuf_t {
   explicit strbuf_t() {
     si = -1;
@@ -58,10 +56,11 @@ struct strbuf_t {
     return var;
   }
 
-  const float take_float() {
+  const float take_float() const {
     // if (is_data_na()) return NAN;
     // return std::atof(data);
     const char *p = data;
+    // while (isspace(*p)) ++p;  // ignore white space
     const float TEN = 10.0;
     float r = 0.0;
     bool neg = false;
@@ -69,10 +68,12 @@ struct strbuf_t {
       neg = true;
       ++p;
     }
+    // parse >= 1
     while (*p >= '0' && *p <= '9') {
       r = (r * 10.0) + (*p - '0');
       ++p;
     }
+    // parse <= 1
     if (*p == '.') {
       float f = 0.0;
       int n = 0;
@@ -84,18 +85,42 @@ struct strbuf_t {
       }
       r += f / std::pow(TEN, n);
     }
+    // parse the power of 10
+    if (*p == 'e' || *p == 'E') {
+      ++p;
+      float e = 0.0;
+      bool neg_exp = false;
+      if (*p == '-') {
+        neg_exp = true;
+        ++p;
+      } else if (*p == '+') {
+        neg_exp = false;
+        ++p;
+      }
+      while (*p >= '0' && *p <= '9') {
+        e = (e * 10.0) + (*p - '0');
+        ++p;
+      }
+      if (neg_exp) {
+        e = -e;
+      }
+      r *= std::pow(TEN, e);
+    }
     if (neg) {
       r = -r;
     }
+#ifdef DEBUG
+    ASSERT(std::abs(std::atof(data) - r) < 1e-8,
+           data << " : " << std::atof(data) << " vs. " << r);
+#endif
     return r;
   }
 
-  const int take_int() {
-    // if (is_data_na()) return NAN;
-    // return std::atoi(data);
+  const int take_int() const {
     int x = 0;
     bool neg = false;
     const char *p = data;
+    // while (isspace(*p)) ++p;  // ignore white space
     if (*p == '-') {
       neg = true;
       ++p;
@@ -107,6 +132,11 @@ struct strbuf_t {
     if (neg) {
       x = -x;
     }
+
+#ifdef DEBUG
+    ASSERT(std::atoi(data) == x,
+           data << " : " << std::atoi(data) << " vs. " << x);
+#endif
     return x;
   }
 
