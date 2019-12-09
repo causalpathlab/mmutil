@@ -5,7 +5,9 @@
 #include <iostream>
 #include <memory>
 #include <string>
+#include <unordered_map>
 #include <vector>
+
 #include "utils/gzstream.hh"
 #include "utils/strbuf.hh"
 
@@ -31,6 +33,35 @@ std::shared_ptr<std::ifstream> open_ifstream(const std::string filename) {
 
 std::shared_ptr<igzstream> open_igzstream(const std::string filename) {
   std::shared_ptr<igzstream> ret(new igzstream(filename.c_str(), std::ios::in));
+  return ret;
+}
+
+template <typename IFS, typename T1, typename T2>
+auto read_pair_stream(IFS &ifs, std::unordered_map<T1, T2> &in) {
+  in.clear();
+  T1 v;
+  T2 w;
+  while (ifs >> v >> w) {
+    in[v] = w;
+  }
+  ERR_RET(in.size() == 0, "empty file");
+  return EXIT_SUCCESS;
+}
+
+template <typename T1, typename T2>
+auto read_pair_file(const std::string filename,
+                    std::unordered_map<T1, T2> &in) {
+  auto ret = EXIT_SUCCESS;
+
+  if (is_file_gz(filename)) {
+    igzstream ifs(filename.c_str(), std::ios::in);
+    ret = read_pair_stream(ifs, in);
+    ifs.close();
+  } else {
+    std::ifstream ifs(filename.c_str(), std::ios::in);
+    ret = read_pair_stream(ifs, in);
+    ifs.close();
+  }
   return ret;
 }
 
@@ -227,11 +258,11 @@ auto read_matrix_market_stream(IFS &ifs) {
       num_cols = 0;
 
       if (num_rows % INTERVAL == 0) {
-        std::cerr << "\rRead " << std::setw(10) << (num_rows / INTERVAL)
-                  << " x 1M triplets (total " << std::setw(10)
-                  << (max_elem / INTERVAL) << ")\r" << std::flush;
+        std::cerr << "\r" << std::setw(30) << "Reading " << std::setw(10)
+                  << (num_rows / INTERVAL) << " x 1M triplets (total "
+                  << std::setw(10) << (max_elem / INTERVAL) << ")"
+                  << std::flush;
       }
-
     } else if (isspace(c) && strbuf.size() > 0) {
       read_triplet();
       num_cols++;
@@ -240,6 +271,7 @@ auto read_matrix_market_stream(IFS &ifs) {
       state = S_WORD;
     }
   }
+  std::cerr << std::endl;
 
   TLOG("Finished reading a list of triplets");
 
@@ -275,6 +307,10 @@ void write_matrix_market_stream(OFS &ofs,
   ofs << "%%MatrixMarket matrix coordinate integer general" << std::endl;
   ofs << M.rows() << " " << M.cols() << " " << M.nonZeros() << std::endl;
 
+  const typename Derived::Index INTERVAL = 1e6;
+  const typename Derived::Index max_triples = M.nonZeros();
+  typename Derived::Index _num_triples = 0;
+
   // column major
   for (auto k = 0; k < M.outerSize(); ++k) {
     for (typename Derived::InnerIterator it(M, k); it; ++it) {
@@ -282,8 +318,16 @@ void write_matrix_market_stream(OFS &ofs,
       const auto j = it.col() + 1;  // fix zero-based to one-based
       const auto v = it.value();
       ofs << i << " " << j << " " << v << std::endl;
+
+      if (++_num_triples % INTERVAL == 0) {
+        std::cerr << "\r" << std::setw(30) << "Writing " << std::setw(10)
+                  << (_num_triples / INTERVAL) << " x 1M triplets (total "
+                  << std::setw(10) << (max_triples / INTERVAL) << ")"
+                  << std::flush;
+      }
     }
   }
+  std::cerr << std::endl;
 }
 
 template <typename T>
@@ -441,8 +485,9 @@ auto read_data_stream(IFS &ifs, T &in) {
 #endif
 
   auto mtot = data.size();
-  ERR_RET(mtot != (nr * nc), "# data points: " << mtot << " elements in " << nr
-                                               << " x " << nc << " matrix");
+  ERR_RET(mtot != (nr * nc),
+          "# data points: " << mtot << " elements in " << nr << " x " << nc
+                            << " matrix");
   ERR_RET(mtot < 1, "empty file");
   ERR_RET(nr < 1, "zero number of rows; incomplete line?");
   in = Eigen::Map<T>(data.data(), nc, nr);
@@ -507,14 +552,24 @@ void write_data_stream(OFS &ofs, const Eigen::SparseMatrixBase<Derived> &out) {
   ofs.precision(4);
 
   const Derived &M = out.derived();
+  using Index = typename Derived::Index;
+  using Scalar = typename Derived::Scalar;
 
-  // column major
-  for (auto k = 0; k < M.outerSize(); ++k) {
+  // Not necessarily column major
+  const Index INTERVAL = 1000;
+  const Index max_outer = M.outerSize();
+
+  for (auto k = 0; k < max_outer; ++k) {
     for (typename Derived::InnerIterator it(M, k); it; ++it) {
-      const auto i = it.row();
-      const auto j = it.col();
-      const auto v = it.value();
+      const Index i = it.row();
+      const Index j = it.col();
+      const Scalar v = it.value();
       ofs << i << " " << j << " " << v << std::endl;
+    }
+    if ((k + 1) % INTERVAL == 0) {
+      std::cerr << "\rWriting " << std::setw(10) << (k / INTERVAL)
+                << " x 1k outer-iterations (total " << std::setw(10)
+                << (max_outer / INTERVAL) << ")" << std::flush;
     }
   }
 }

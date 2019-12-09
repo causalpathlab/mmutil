@@ -8,19 +8,9 @@ void print_help(const char* fname) {
             << std::endl;
   std::cerr << std::endl;
   std::cerr
-      << "We prioritize features by their prevalence across samples (columns)."
+      << "We prioritize features by their prevalence across samples."
       << std::endl;
   std::cerr << std::endl;
-}
-
-template <typename Vec>
-auto eigen_argsort(const Vec& data) {
-  using Index = typename Vec::Index;
-  std::vector<Index> index(data.size());
-  std::iota(std::begin(index), std::end(index), 0);
-  std::sort(std::begin(index), std::end(index),
-            [&](Index lhs, Index rhs) { return data(lhs) > data(rhs); });
-  return index;
 }
 
 int main(const int argc, const char* argv[]) {
@@ -74,7 +64,7 @@ int main(const int argc, const char* argv[]) {
 
   Vec RowScores = _score_sd(X);
 
-  auto order = eigen_argsort(RowScores);
+  auto order = eigen_argsort_descending(RowScores);
 
   TLOG("row scores: " << RowScores(order.at(0)) << " ~ "
                       << RowScores(order.at(order.size() - 1)));
