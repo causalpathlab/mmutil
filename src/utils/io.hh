@@ -156,22 +156,16 @@ auto read_matrix_market_stream(IFS &ifs) {
 
     if (c == eol) {
       if (state == S_WORD) {
-        const auto nelem = extract_idx_word();
+        std::ignore = extract_idx_word();
         num_cols++;
-#ifdef DEBUG
-        TLOG("Elements : " << nelem);
-#endif
       }
 
       state = S_EOL;
       num_rows++;
 
     } else if (isspace(c)) {
-      auto d = extract_idx_word();
+      std::ignore = extract_idx_word();
       num_cols++;
-#ifdef DEBUG
-      TLOG("Dimsension : " << d);
-#endif
     } else {
       strbuf.add(c);
       state = S_WORD;
@@ -284,17 +278,25 @@ auto read_matrix_market_stream(IFS &ifs) {
 }
 
 auto read_matrix_market_file(const std::string filename) {
+  using Scalar = float;
+  using Index = long int;
+  using Triplet = std::tuple<Index, Index, Scalar>;
+  using TripletVec = std::vector<Triplet>;
+
+  Index max_row, max_col;
+  TripletVec ret;
+
   if (is_file_gz(filename)) {
     igzstream ifs(filename.c_str(), std::ios::in);
-    auto ret = read_matrix_market_stream(ifs);
+    std::tie(ret, max_row, max_col) = read_matrix_market_stream(ifs);
     ifs.close();
-    return ret;
   } else {
     std::ifstream ifs(filename.c_str(), std::ios::in);
-    auto ret = read_matrix_market_stream(ifs);
+    std::tie(ret, max_row, max_col) = read_matrix_market_stream(ifs);
     ifs.close();
-    return ret;
   }
+  // TLOG(max_row << " " << max_col)
+  return std::make_tuple(ret, max_row, max_col);
 }
 
 template <typename OFS, typename Derived>
@@ -485,9 +487,8 @@ auto read_data_stream(IFS &ifs, T &in) {
 #endif
 
   auto mtot = data.size();
-  ERR_RET(mtot != (nr * nc),
-          "# data points: " << mtot << " elements in " << nr << " x " << nc
-                            << " matrix");
+  ERR_RET(mtot != (nr * nc), "# data points: " << mtot << " elements in " << nr
+                                               << " x " << nc << " matrix");
   ERR_RET(mtot < 1, "empty file");
   ERR_RET(nr < 1, "zero number of rows; incomplete line?");
   in = Eigen::Map<T>(data.data(), nc, nr);
