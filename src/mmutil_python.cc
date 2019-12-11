@@ -1,11 +1,27 @@
 #include "mmutil_python.hh"
+
 #include "mmutil_python_io.hh"
 
+const char* _read_numpy_desc =
+    "Read triplets from a matrix market file and save to a numpy array.\n"
+    "\n"
+    "Input: A matrix market file name.  The function treats it gzipped\n"
+    "       if the file name ends with `.gz`\n"
+    "\n"
+    "Output: A numpy matrix (C-ordered, row-major)\n";
+
+const char* _read_triplets_desc =
+    "Read triplets from a matrix market file and save to a dictionary.\n"
+    "\n"
+    "Input: A matrix market file name.  The function treats it gzipped\n"
+    "       if the file name ends with `.gz`\n"
+    "\n"
+    "Output: A dictionary with the following keys:\n"
+    "       `rows`, `columns`, `values`, `shape`\n";
+
 static PyMethodDef mmutil_methods[] = {
-    {"read_triplets", mmutil_read_triplets, METH_VARARGS,
-     "Read triplets from a matrix market file"},
-    {"read_numpy", mmutil_read_numpy, METH_VARARGS,
-     "Read triplets from a matrix market file and save to a numpy array"},
+    {"read_triplets", mmutil_read_triplets, METH_VARARGS, _read_triplets_desc},
+    {"read_numpy", mmutil_read_numpy, METH_VARARGS, _read_numpy_desc},
     {NULL, NULL, 0, NULL},
 };
 

@@ -22,9 +22,18 @@ mmutil_module = Extension(
     extra_compile_args=_compile_args,
 )
 
+
+with open("README.md", "r") as fh:
+    long_description = fh.read()
+
 setup(
-    name='mmutil',
-    versio='0.1.0',
+    name="mmutil",
+    version="0.1.0",
+    author="Yongjin Park",
+    author_email="yongjin.peter.park@gmail.com",
     description='matrix market utility',
+    long_description=long_description,
+    long_description_content_type="text/markdown",
+    python_requires='>=3.5',
     ext_modules=[mmutil_module],
 )

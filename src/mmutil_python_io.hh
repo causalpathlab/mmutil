@@ -30,6 +30,8 @@ static PyObject* mmutil_read_numpy(PyObject* self, PyObject* args) {
   // fill data in row-major //
   ////////////////////////////
 
+  TLOG("Allocating a numpy matrix");
+
   PyObject* ret = PyArray_ZEROS(2, dims, NPY_FLOAT, NPY_CORDER);
   float* data = (float*)PyArray_DATA(ret);
 
@@ -48,7 +50,7 @@ static PyObject* mmutil_read_numpy(PyObject* self, PyObject* args) {
                 << std::flush;
     }
   }
-  std::cerr << std::flush;
+  std::cerr << std::endl;
 
   TLOG("Return a numpy array with " << elem << " non-zero elements");
 
