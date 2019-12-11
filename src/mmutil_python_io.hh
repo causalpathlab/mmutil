@@ -3,6 +3,23 @@
 #ifndef MMUTIL_PYTHON_IO_HH_
 #define MMUTIL_PYTHON_IO_HH_
 
+const char* _read_numpy_desc =
+    "Read triplets from a matrix market file and save to a numpy array.\n"
+    "\n"
+    "Input: A matrix market file name.  The function treats it gzipped\n"
+    "       if the file name ends with `.gz`\n"
+    "\n"
+    "Output: A numpy matrix (C-ordered, row-major)\n";
+
+const char* _read_triplets_desc =
+    "Read triplets from a matrix market file and save to a dictionary.\n"
+    "\n"
+    "Input: A matrix market file name.  The function treats it gzipped\n"
+    "       if the file name ends with `.gz`\n"
+    "\n"
+    "Output: A dictionary with the following keys:\n"
+    "       `rows`, `columns`, `values`, `shape`\n";
+
 static PyObject* mmutil_read_numpy(PyObject* self, PyObject* args);
 
 static PyObject* mmutil_read_triplets(PyObject* self, PyObject* args);

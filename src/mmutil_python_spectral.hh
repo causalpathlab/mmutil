@@ -1,8 +1,19 @@
 #include "mmutil_python.hh"
 #include "mmutil_spectral.hh"
+#include "utils/io.hh"
 
 #ifndef MMUTIL_PYTHON_SPECTRAL_HH_
 #define MMUTIL_PYTHON_SPECTRAL_HH_
+
+const char* _take_svd_desc =
+    "Take the eigen spectrum of regularized graph Laplacian\n"
+    "\n"
+    "[Input]\n"
+    "file       : A matrix market file name.  The function treats it gzipped\n"
+    "             if the file name ends with `.gz`\n"
+    "rank       : Set the maximal rank to save computational cost.\n"
+    "tau        : Regularization parameter. We add tau/mean_degree * I \n"
+    "iterations : Regularization parameter. We add tau/mean_degree * I \n";
 
 static PyObject* mmutil_take_svd(PyObject* self, PyObject* args, PyObject* keywords);
 
