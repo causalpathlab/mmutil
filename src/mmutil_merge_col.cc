@@ -3,22 +3,20 @@
 void print_help(const char* fname) {
   std::cerr << "Merge the columns of sparse matrices matching rows" << std::endl;
   std::cerr << std::endl;
-  std::cerr << fname << " master_feature count_threshold output" << std::endl;
-  std::cerr << " { mtx[1] feature[1] mtx[2] feature[2] ... }" << std::endl;
+  std::cerr << fname << " master_row count_threshold output" << std::endl;
+  std::cerr << " { mtx[1] row[1] column[1] mtx[2] row[2] column[2] ... }" << std::endl;
   std::cerr << std::endl;
-  std::cerr << "master_feature  : A file that contains the names of features."
-            << std::endl;
-  std::cerr << "output          : Header string for the output fileset."
-            << std::endl;
-  std::cerr << "count_threshold : Set the minimum sum of features per column"
-            << std::endl;
+  std::cerr << "master_row  : A file that contains the names of rows." << std::endl;
+  std::cerr << "output          : Header string for the output fileset." << std::endl;
+  std::cerr << "count_threshold : Set the minimum sum of rows per column" << std::endl;
   std::cerr << "mtx[i]          : i-th matrix market format file" << std::endl;
-  std::cerr << "feature[i]      : i-th feature file" << std::endl;
+  std::cerr << "row[i]          : i-th row file" << std::endl;
+  std::cerr << "column[i]       : i-th column file" << std::endl;
   std::cerr << std::endl;
 }
 
 int main(const int argc, const char* argv[]) {
-  if (argc < 6) {
+  if (argc < 7) {
     print_help(argv[0]);
     return EXIT_FAILURE;
   }
@@ -35,45 +33,52 @@ int main(const int argc, const char* argv[]) {
   using _TripletVec = std::vector<_Triplet>;
 
   ///////////////////////////////////
-  // first read universal features //
+  // first read universal rows //
   ///////////////////////////////////
 
-  const Str univ_feature_file(argv[1]);
+  const Str univ_row_file(argv[1]);
   const Scalar column_threshold = boost::lexical_cast<Scalar>(argv[2]);
   const Str output(argv[3]);
 
-  Index2Str univ_features(0);
-  CHECK(read_vector_file(univ_feature_file, univ_features));
-  TLOG("Read the universal feature names: "
-       << univ_feature_file << " " << univ_features.size() << " features");
+  Index2Str univ_rows(0);
+  CHECK(read_vector_file(univ_row_file, univ_rows));
+  TLOG("Read the universal row names: " << univ_row_file << " " << univ_rows.size() << " rows");
 
   Str2Index univ_positions;
-  const Index univ_max_row = univ_features.size();
+  const Index univ_max_row = univ_rows.size();
 
-  for (Index r = 0; r < univ_features.size(); ++r) {
-    univ_positions[univ_features.at(r)] = r;
+  for (Index r = 0; r < univ_rows.size(); ++r) {
+    univ_positions[univ_rows.at(r)] = r;
   }
 
   // Do the basic Q/C for each pair of files
 
   Index univ_max_col = 0;
   _TripletVec univ_Tvec;
-  using IndexPair = std::pair<Index, Index>;  // batch, column
+  using IndexPair = std::pair<Str, Index>;  // column, batch
   std::vector<IndexPair> univ_columns;
   Index batch_index = 0;
 
-  for (int j = 4; j < argc; j += 2) {
-    std::string mtx_file(argv[j]);
-    std::string feature_file(argv[j + 1]);
-    std::vector<std::string> features(0);
-    CHECK(read_vector_file(feature_file, features));
+  for (int b = 4; b < argc; b += 3) {
+    const std::string mtx_file(argv[b]);
+    const std::string row_file(argv[b + 1]);
+    const std::string col_file(argv[b + 2]);
 
-    TLOG("Processing : " << mtx_file << ", " << feature_file);
+    TLOG("MTX : " << mtx_file);
+    TLOG("ROW : " << row_file);
+    TLOG("COL : " << col_file);
+
+    std::vector<std::string> row_names(0);
+    CHECK(read_vector_file(row_file, row_names));
+    std::vector<std::string> column_names(0);
+    CHECK(read_vector_file(col_file, column_names));
+
+    TLOG("Processing : " << mtx_file << ", " << row_file);
 
     // a. Learn how to repmap them
-    Index2Index remap(features.size(), NA);
-    for (Index _from = 0; _from < features.size(); ++_from) {
-      const auto& s = features.at(_from);
+    Index2Index remap(row_names.size(), NA);
+    for (Index _from = 0; _from < row_names.size(); ++_from) {
+      const auto& s = row_names.at(_from);
       if (univ_positions.count(s) > 0) {
         Index _to = univ_positions.at(s);
         remap[_from] = _to;
@@ -87,7 +92,7 @@ int main(const int argc, const char* argv[]) {
 
     TLOG("The list of all triplets : " << Tvec_all.size());
 
-    // c. Select those containing relevant features
+    // c. Select those containing relevant row_names
     _TripletVec Tvec_trim;
 
     for (auto tt : Tvec_all) {
@@ -117,15 +122,15 @@ int main(const int argc, const char* argv[]) {
     // e. Save
     for (Index j = 0; j < X.outerSize(); ++j) {
       for (SpMat::InnerIterator it(X, j); it; ++it) {
-        const Index row = it.row();
-        const Index col = j + univ_max_col;
-        const Scalar val = it.value();
-        univ_Tvec.push_back(_Triplet(row, col, val));
+        const Index _row = it.row();
+        const Index _col = it.col() + univ_max_col;
+        const Scalar _val = it.value();
+        univ_Tvec.push_back(_Triplet(_row, _col, _val));
       }
     }
 
     for (auto j : Columns) {
-      univ_columns.push_back(IndexPair(batch_index + 1, j + 1));
+      univ_columns.push_back(IndexPair(column_names.at(j), batch_index + 1));
     }
 
     batch_index++;
