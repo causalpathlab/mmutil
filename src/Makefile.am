@@ -12,5 +12,4 @@ mmutil_filter_col_SOURCES = mmutil_filter_col.cc mmutil.hh $(common)
 
 mmutil_distribute_col_SOURCES = mmutil_distribute_col.cc mmutil.hh $(common)
 
-mmutil_spectral_col_SOURCES = mmutil_spectral_col.cc mmutil.hh $(common) $(math)
-
+mmutil_spectral_col_SOURCES = mmutil_spectral_col.cc mmutil.hh $(common) $(math) mmutil_spectral.hh

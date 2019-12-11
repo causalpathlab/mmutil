@@ -30,6 +30,16 @@ inline auto std_vector(const EigenVec& eigen_vec) {
   return ret;
 }
 
+template <typename Vec>
+auto std_argsort(const Vec& data) {
+  using Index = unsigned int;
+  std::vector<Index> index(data.size());
+  std::iota(std::begin(index), std::end(index), 0);
+  std::sort(std::begin(index), std::end(index),
+            [&](Index lhs, Index rhs) { return data.at(lhs) > data.at(rhs); });
+  return index;
+}
+
 template <typename TVEC>
 inline auto build_eigen_triplets(const TVEC& Tvec) {
   using _Triplet = Eigen::Triplet<Scalar>;

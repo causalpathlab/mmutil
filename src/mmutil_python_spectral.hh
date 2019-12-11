@@ -1,0 +1,80 @@
+#include "mmutil_python.hh"
+#include "mmutil_spectral.hh"
+
+#ifndef MMUTIL_PYTHON_SPECTRAL_HH_
+#define MMUTIL_PYTHON_SPECTRAL_HH_
+
+static PyObject* mmutil_take_svd(PyObject* self, PyObject* args, PyObject* keywords);
+
+static PyObject* mmutil_take_svd(PyObject* self, PyObject* args, PyObject* keywords) {
+  static const char* kwlist[] = {"file", "rank", "tau", "iter", NULL};
+
+  char* mtx_file;
+  int rank;
+  float tau_scale = 1.0;
+  int iterations = 5;
+
+  if (!PyArg_ParseTupleAndKeywords(args,
+                                   keywords,                    // keywords
+                                   "si|fi",                     // format
+                                   const_cast<char**>(kwlist),  //
+                                   &mtx_file,                   // filename
+                                   &rank,                       //
+                                   &tau_scale,                  // regularization
+                                   &iterations                  // iteration
+                                   )) {
+    return NULL;
+  }
+
+  TLOG("Reading            " << mtx_file);
+  TLOG("Regularization:    " << tau_scale);
+  TLOG("Rank:              " << rank);
+  TLOG("RandAlg iteration: " << iterations);
+
+  using Triplet = std::tuple<Index, Index, Scalar>;
+  using TripletVec = std::vector<Triplet>;
+  TripletVec Tvec;
+  Index max_row, max_col;
+  std::tie(Tvec, max_row, max_col) = read_matrix_market_file(mtx_file);
+
+  TLOG(max_row << " x " << max_col);
+
+  if (max_row < 1 || max_col < 1 || Tvec.size() < 1) {
+    PyErr_SetString(PyExc_TypeError, "shouldn't be empty data");
+    return NULL;
+  }
+
+  const SpMat X0 = build_eigen_sparse(Tvec, max_row, max_col);
+
+  Mat _U, _V, _D;
+  std::tie(_U, _V, _D) = take_spectrum_laplacian(X0, tau_scale, rank, iterations);
+
+  TLOG("Output results");
+
+  npy_intp _dims_u[2] = {_U.rows(), _U.cols()};
+  PyObject* U = PyArray_ZEROS(2, _dims_u, NPY_FLOAT, NPY_CORDER);
+  Scalar* u_data = (Scalar*)PyArray_DATA(U);
+  std::copy(_U.data(), _U.data() + _U.size(), u_data);
+
+  npy_intp _dims_v[2] = {_V.rows(), _V.cols()};
+  PyObject* V = PyArray_ZEROS(2, _dims_v, NPY_FLOAT, NPY_CORDER);
+  Scalar* v_data = (Scalar*)PyArray_DATA(V);
+  std::copy(_V.data(), _V.data() + _V.size(), v_data);
+
+  npy_intp _dims_d[2] = {_D.rows(), _D.cols()};
+  PyObject* D = PyArray_ZEROS(2, _dims_d, NPY_FLOAT, NPY_CORDER);
+  Scalar* d_data = (Scalar*)PyArray_DATA(D);
+  std::copy(_D.data(), _D.data() + _D.size(), d_data);
+
+  PyObject* ret = PyDict_New();
+  PyObject* _u_key = PyUnicode_FromString("u");
+  PyDict_SetItem(ret, _u_key, U);
+  PyObject* _v_key = PyUnicode_FromString("v");
+  PyDict_SetItem(ret, _v_key, V);
+  PyObject* _d_key = PyUnicode_FromString("d");
+  PyDict_SetItem(ret, _d_key, D);
+
+  return ret;
+}
+
+#endif

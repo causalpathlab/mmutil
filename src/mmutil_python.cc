@@ -1,6 +1,6 @@
 #include "mmutil_python.hh"
-
 #include "mmutil_python_io.hh"
+#include "mmutil_python_spectral.hh"
 
 const char* _read_numpy_desc =
     "Read triplets from a matrix market file and save to a numpy array.\n"
@@ -19,9 +19,12 @@ const char* _read_triplets_desc =
     "Output: A dictionary with the following keys:\n"
     "       `rows`, `columns`, `values`, `shape`\n";
 
+const char* _take_svd_desc = "";
+
 static PyMethodDef mmutil_methods[] = {
-    {"read_triplets", mmutil_read_triplets, METH_VARARGS, _read_triplets_desc},
-    {"read_numpy", mmutil_read_numpy, METH_VARARGS, _read_numpy_desc},
+    {"read_triplets", (PyCFunction)mmutil_read_triplets, METH_VARARGS, _read_triplets_desc},
+    {"read_numpy", (PyCFunction)mmutil_read_numpy, METH_VARARGS, _read_numpy_desc},
+    {"take_svd", (PyCFunction)mmutil_take_svd, METH_VARARGS | METH_KEYWORDS, _take_svd_desc},
     {NULL, NULL, 0, NULL},
 };
 
