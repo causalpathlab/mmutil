@@ -7,8 +7,8 @@ void print_help(const char* fname) {
   std::cerr << " { mtx[1] row[1] column[1] mtx[2] row[2] column[2] ... }" << std::endl;
   std::cerr << std::endl;
   std::cerr << "master_row  : A file that contains the names of rows." << std::endl;
-  std::cerr << "output          : Header string for the output fileset." << std::endl;
   std::cerr << "count_threshold : Set the minimum sum of rows per column" << std::endl;
+  std::cerr << "output          : Header string for the output fileset." << std::endl;
   std::cerr << "mtx[i]          : i-th matrix market format file" << std::endl;
   std::cerr << "row[i]          : i-th row file" << std::endl;
   std::cerr << "column[i]       : i-th column file" << std::endl;
@@ -73,8 +73,6 @@ int main(const int argc, const char* argv[]) {
     std::vector<std::string> column_names(0);
     CHECK(read_vector_file(col_file, column_names));
 
-    TLOG("Processing : " << mtx_file << ", " << row_file);
-
     // a. Learn how to repmap them
     Index2Index remap(row_names.size(), NA);
     for (Index _from = 0; _from < row_names.size(); ++_from) {
@@ -117,7 +115,7 @@ int main(const int argc, const char* argv[]) {
     std::vector<Index> Columns;
     std::tie(X, Columns) = filter_columns(X0, column_threshold);
 
-    TLOG("Eliminated the under-sampled : " << X.rows() << " x " << X.cols());
+    TLOG("Eliminated the under-sampled -> " << X.rows() << " x " << X.cols());
 
     // e. Save
     for (Index j = 0; j < X.outerSize(); ++j) {

@@ -83,7 +83,7 @@ auto filter_columns(const Eigen::SparseMatrixBase<Derived>& Amat, const float co
   using Triplet = Eigen::Triplet<Scalar>;
   using TripletVec = std::vector<Triplet>;
 
-  TLOG("Filtering the columns matrix [" << _A.rows() << " x " << _A.cols() << "]");
+  TLOG("Filtering the columns in a matrix [" << _A.rows() << " x " << _A.cols() << "]");
 
   //////////////////////////////
   // note: SpMat is row-major //
