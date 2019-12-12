@@ -59,7 +59,8 @@ inline auto build_eigen_triplets(const TVEC& Tvec) {
     ret.push_back(_Triplet(r, c, w));
 
     if (++j % INTERVAL == 0) {
-      std::cerr << "\r" << std::left << std::setfill('.') << std::setw(30) << "Adding ";
+      std::cerr << "\r" << std::left << std::setfill('.');
+      std::cerr << std::setw(30) << "Adding ";
       std::cerr << std::right << std::setfill(' ') << std::setw(10);
       std::cerr << (j / INTERVAL) << " x 1M triplets";
       std::cerr << " (total " << std::setw(10) << (max_tvec_size / INTERVAL) << ")";

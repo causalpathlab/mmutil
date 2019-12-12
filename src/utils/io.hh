@@ -255,12 +255,12 @@ auto read_matrix_market_stream(IFS &ifs) {
       num_cols = 0;
 
       if (num_rows % INTERVAL == 0) {
-        std::cerr << "\r" << std::left << std::setfill('.') << std::setw(30)
-                  << "Reading ";
-        std::cerr << std::setfill(' ') << std::setw(10) << (num_rows / INTERVAL)
-                  << " x 1M triplets";
-        std::cerr << " (total " << std::setw(10) << MAX_PRINT << ")\r"
-                  << std::flush;
+        std::cerr << "\r" << std::left << std::setfill('.');
+        std::cerr << std::setw(30) << "Reading ";
+        std::cerr << std::right << std::setfill(' ') << std::setw(10)
+                  << (num_rows / INTERVAL) << " x 1M triplets";
+        std::cerr << " (total " << std::setw(10) << MAX_PRINT << ")";
+        std::cerr << "\r" << std::flush;
       }
     } else if (isspace(c) && strbuf.size() > 0) {
       read_triplet();
