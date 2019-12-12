@@ -39,30 +39,11 @@ int main(const int argc, const char* argv[]) {
   // Calculate some scores on the sparse matrix
   const SpMat X = build_eigen_sparse(Tvec, max_row, max_col);
 
-  //////////////////////////
-  // Calculate the degree //
-  //////////////////////////
-
-  auto _score_degree = [](const SpMat& xx) {
-    return xx.unaryExpr([](const Scalar x) { return std::abs(x); }) *
-           Mat::Ones(xx.cols(), 1);
-  };
-
-  auto _score_sd = [](const SpMat& xx) {
-    Vec s1 = xx * Mat::Ones(xx.cols(), 1);
-    Vec s2 = xx.cwiseProduct(xx) * Mat::Ones(xx.cols(), 1);
-    const Scalar n = xx.cols();
-    Vec ret = s2 - s1.cwiseProduct(s1 / n);
-    ret = ret / std::max(n - 1.0, 1.0);
-    ret = ret.cwiseSqrt();
-    return ret;
-  };
-
   /////////////////////
   // Prioritize rows //
   /////////////////////
 
-  Vec RowScores = _score_sd(X);
+  Vec RowScores = row_score_sd(X);
 
   auto order = eigen_argsort_descending(RowScores);
 
@@ -94,7 +75,7 @@ int main(const int argc, const char* argv[]) {
   }
 
   const SpMat out_X = build_eigen_sparse(out_Tvec, Nout, max_col);
-  auto out_scores = std_vector(_score_sd(out_X));
+  auto out_scores = std_vector(row_score_sd(out_X));
 
   Str output_mtx_file = output + ".mtx.gz";
   Str output_feature_file = output + ".features.gz";

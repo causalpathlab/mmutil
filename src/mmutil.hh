@@ -1,23 +1,23 @@
-#include <iostream>
-#include "utils/io.hh"
-#include "utils/util.hh"
-
+#include <algorithm>
 #include <boost/graph/adjacency_list.hpp>
 #include <boost/graph/connected_components.hpp>
 #include <boost/lexical_cast.hpp>
 #include <eigen3/Eigen/Core>
 #include <eigen3/Eigen/Sparse>
-
-#include <algorithm>
 #include <functional>
+#include <iomanip>
+#include <iostream>
 #include <numeric>
 #include <vector>
+
+#include "utils/io.hh"
+#include "utils/util.hh"
 
 #ifndef MMUTIL_HH_
 #define MMUTIL_HH_
 
 using Scalar = float;
-using SpMat = Eigen::SparseMatrix<Scalar, Eigen::RowMajor>;
+using SpMat = Eigen::SparseMatrix<Scalar, Eigen::RowMajor, std::ptrdiff_t>;
 using Index = SpMat::Index;
 
 using Mat = typename Eigen::Matrix<Scalar, Eigen::Dynamic, Eigen::Dynamic>;
@@ -32,7 +32,7 @@ inline auto std_vector(const EigenVec& eigen_vec) {
 
 template <typename Vec>
 auto std_argsort(const Vec& data) {
-  using Index = unsigned int;
+  using Index = std::ptrdiff_t;
   std::vector<Index> index(data.size());
   std::iota(std::begin(index), std::end(index), 0);
   std::sort(std::begin(index), std::end(index),
@@ -59,9 +59,11 @@ inline auto build_eigen_triplets(const TVEC& Tvec) {
     ret.push_back(_Triplet(r, c, w));
 
     if (++j % INTERVAL == 0) {
-      std::cerr << "\r" << std::setw(30) << "Adding " << std::setw(10) << (j / INTERVAL)
-                << " x 1M triplets (total " << std::setw(10) << (max_tvec_size / INTERVAL) << ")"
-                << std::flush;
+      std::cerr << "\r" << std::left << std::setfill('.') << std::setw(30) << "Adding ";
+      std::cerr << std::right << std::setfill(' ') << std::setw(10);
+      std::cerr << (j / INTERVAL) << " x 1M triplets";
+      std::cerr << " (total " << std::setw(10) << (max_tvec_size / INTERVAL) << ")";
+      std::cerr << "\r" << std::flush;
     }
   }
   std::cerr << std::endl;
@@ -73,6 +75,7 @@ inline auto build_eigen_sparse(const TVEC& Tvec, const INDEX max_row, const INDE
   auto _tvec = build_eigen_triplets(Tvec);
 
   SpMat ret(max_row, max_col);
+  ret.reserve(_tvec.size());
   ret.setFromTriplets(_tvec.begin(), _tvec.end());
   return ret;
 }
@@ -102,8 +105,7 @@ auto filter_columns(const Eigen::SparseMatrixBase<Derived>& Amat, const float co
     }
   }
 
-  TLOG("Found " << valid_cols.size());
-  TLOG("(with the sum >=" << column_threshold << ")");
+  TLOG("Found " << valid_cols.size() << "(with the sum >=" << column_threshold << ")");
 
   using Triplet = Eigen::Triplet<Scalar>;
   using TripletVec = std::vector<Triplet>;
@@ -112,6 +114,7 @@ auto filter_columns(const Eigen::SparseMatrixBase<Derived>& Amat, const float co
 
   const Index valid_max_cols = valid_cols.size();
   const Index INTERVAL = 1000;
+  const Index MAX_PRINT = valid_max_cols / INTERVAL;
 
   for (Index j = 0; j < valid_max_cols; ++j) {
     const Index k = valid_cols.at(j);  // row of At
@@ -121,14 +124,18 @@ auto filter_columns(const Eigen::SparseMatrixBase<Derived>& Amat, const float co
     }
 
     if ((j + 1) % INTERVAL == 0) {
-      std::cerr << "\r" << std::setw(30) << "Adding " << std::setw(10) << (j / INTERVAL)
-                << " x 1k columns  (total " << std::setw(10) << (valid_max_cols / INTERVAL) << ")"
-                << std::flush;
+      std::cerr << "\r" << std::left << std::setfill('.') << std::setw(30) << "Adding ";
+      std::cerr << std::right << std::setfill(' ');
+      std::cerr << std::setw(10) << ((j + 1) / INTERVAL) << " x 1k columns";
+      std::cerr << " (total " << std::right << std::setfill(' ');
+      std::cerr << std::setw(10) << (MAX_PRINT) << ")";
+      std::cerr << "\r" << std::flush;
     }
   }
   std::cerr << std::endl;
 
   SpMat ret(At.cols(), valid_cols.size());
+  ret.reserve(Tvec.size());
   ret.setFromTriplets(Tvec.begin(), Tvec.end());
 
   return std::make_tuple(ret, valid_cols);
@@ -142,6 +149,26 @@ auto eigen_argsort_descending(const Vec& data) {
   std::sort(std::begin(index), std::end(index),
             [&](Index lhs, Index rhs) { return data(lhs) > data(rhs); });
   return index;
+}
+
+template <typename Derived>
+Mat row_score_degree(const Eigen::SparseMatrixBase<Derived>& _xx) {
+  const Derived& xx = _xx.derived();
+  return xx.unaryExpr([](const Scalar x) { return std::abs(x); }) * Mat::Ones(xx.cols(), 1);
+}
+
+template <typename Derived>
+Mat row_score_sd(const Eigen::SparseMatrixBase<Derived>& _xx) {
+  const Derived& xx = _xx.derived();
+
+  Vec s1 = xx * Mat::Ones(xx.cols(), 1);
+  Vec s2 = xx.cwiseProduct(xx) * Mat::Ones(xx.cols(), 1);
+  const Scalar n = xx.cols();
+  Vec ret = s2 - s1.cwiseProduct(s1 / n);
+  ret = ret / std::max(n - 1.0, 1.0);
+  ret = ret.cwiseSqrt();
+
+  return ret;
 }
 
 #endif

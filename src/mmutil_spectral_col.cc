@@ -1,6 +1,5 @@
 #include "mmutil.hh"
 #include "mmutil_spectral.hh"
-#include "svd.hh"
 
 void print_help(const char* fname) {
   std::cerr << "Find an eigen spectrum of regularized graph Laplacian" << std::endl;

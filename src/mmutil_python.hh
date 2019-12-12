@@ -11,8 +11,10 @@
 #ifndef MMUTIL_PYTHON_HH_
 #define MMUTIL_PYTHON_HH_
 
-using Index = long int;
-using Scalar = float;
+// Already declared in mmutil.hh:
+// using Index = size_t;
+// using Scalar = float;
+
 using Triplet = std::tuple<Index, Index, Scalar>;
 using TripletVec = std::vector<Triplet>;
 

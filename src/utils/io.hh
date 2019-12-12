@@ -1,7 +1,10 @@
 ////////////////////////////////////////////////////////////////
 // I/O routines
 #include <cctype>
+#include <eigen3/Eigen/Core>
+#include <eigen3/Eigen/Sparse>
 #include <fstream>
+#include <iomanip>
 #include <iostream>
 #include <memory>
 #include <string>
@@ -10,9 +13,6 @@
 
 #include "utils/gzstream.hh"
 #include "utils/strbuf.hh"
-
-#include <eigen3/Eigen/Core>
-#include <eigen3/Eigen/Sparse>
 
 #ifndef UTIL_IO_HH_
 #define UTIL_IO_HH_
@@ -216,6 +216,7 @@ auto read_matrix_market_stream(IFS &ifs) {
   const Index max_col = Dims[1];
   const Index max_elem = Dims[2];
   const Index INTERVAL = 1e6;
+  const Index MAX_PRINT(max_elem / INTERVAL);
 
   for (; num_rows < max_elem && it != END; ++it) {
     char c = *it;
@@ -244,17 +245,21 @@ auto read_matrix_market_stream(IFS &ifs) {
       num_rows++;
 
       if (row < 0 || row > max_row)
-        WLOG("Ignore unexpected row" << std::setw(10) << row);
+        WLOG("Ignore unexpected row" << std::setfill(' ') << std::setw(10)
+                                     << row);
       if (col < 0 || col > max_col)
-        WLOG("Ignore unexpected column" << std::setw(10) << col);
+        WLOG("Ignore unexpected column" << std::setfill(' ') << std::setw(10)
+                                        << col);
 
       Tvec.push_back(Triplet(row - 1, col - 1, weight));
       num_cols = 0;
 
       if (num_rows % INTERVAL == 0) {
-        std::cerr << "\r" << std::setw(30) << "Reading " << std::setw(10)
-                  << (num_rows / INTERVAL) << " x 1M triplets (total "
-                  << std::setw(10) << (max_elem / INTERVAL) << ")"
+        std::cerr << "\r" << std::left << std::setfill('.') << std::setw(30)
+                  << "Reading ";
+        std::cerr << std::setfill(' ') << std::setw(10) << (num_rows / INTERVAL)
+                  << " x 1M triplets";
+        std::cerr << " (total " << std::setw(10) << MAX_PRINT << ")\r"
                   << std::flush;
       }
     } else if (isspace(c) && strbuf.size() > 0) {
@@ -311,21 +316,23 @@ void write_matrix_market_stream(OFS &ofs,
 
   const typename Derived::Index INTERVAL = 1e6;
   const typename Derived::Index max_triples = M.nonZeros();
-  typename Derived::Index _num_triples = 0;
+  using Index = typename Derived::Index;
+  Index _num_triples = 0;
 
   // column major
   for (auto k = 0; k < M.outerSize(); ++k) {
     for (typename Derived::InnerIterator it(M, k); it; ++it) {
-      const auto i = it.row() + 1;  // fix zero-based to one-based
-      const auto j = it.col() + 1;  // fix zero-based to one-based
+      const Index i = it.row() + 1;  // fix zero-based to one-based
+      const Index j = it.col() + 1;  // fix zero-based to one-based
       const auto v = it.value();
       ofs << i << " " << j << " " << v << std::endl;
 
       if (++_num_triples % INTERVAL == 0) {
-        std::cerr << "\r" << std::setw(30) << "Writing " << std::setw(10)
-                  << (_num_triples / INTERVAL) << " x 1M triplets (total "
-                  << std::setw(10) << (max_triples / INTERVAL) << ")"
-                  << std::flush;
+        std::cerr << "\r" << std::left << std::setfill('.') << std::setw(30)
+                  << "Writing " << std::right << std::setfill(' ')
+                  << std::setw(10) << (_num_triples / INTERVAL)
+                  << " x 1M triplets (total " << std::setw(10)
+                  << (max_triples / INTERVAL) << ")" << std::flush;
       }
     }
   }
@@ -559,6 +566,7 @@ void write_data_stream(OFS &ofs, const Eigen::SparseMatrixBase<Derived> &out) {
   // Not necessarily column major
   const Index INTERVAL = 1000;
   const Index max_outer = M.outerSize();
+  const Index MAX_PRINT = (max_outer / INTERVAL);
 
   for (auto k = 0; k < max_outer; ++k) {
     for (typename Derived::InnerIterator it(M, k); it; ++it) {
@@ -568,11 +576,13 @@ void write_data_stream(OFS &ofs, const Eigen::SparseMatrixBase<Derived> &out) {
       ofs << i << " " << j << " " << v << std::endl;
     }
     if ((k + 1) % INTERVAL == 0) {
-      std::cerr << "\rWriting " << std::setw(10) << (k / INTERVAL)
-                << " x 1k outer-iterations (total " << std::setw(10)
-                << (max_outer / INTERVAL) << ")" << std::flush;
+      std::cerr << "\rWriting " << std::right << std::setfill(' ')
+                << std::setw(10) << (k / INTERVAL);
+      std::cerr << " x 1k outer-iterations (total ";
+      std::cerr << std::setw(10) << MAX_PRINT << ")\r" << std::flush;
     }
   }
+  std::cerr << std::endl;
 }
 
 ////////////////////////////////////////////////////////////////
