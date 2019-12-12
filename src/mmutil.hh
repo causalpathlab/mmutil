@@ -4,6 +4,7 @@
 #include <boost/lexical_cast.hpp>
 #include <eigen3/Eigen/Core>
 #include <eigen3/Eigen/Sparse>
+#include <execution>
 #include <functional>
 #include <iomanip>
 #include <iostream>
@@ -35,8 +36,10 @@ auto std_argsort(const Vec& data) {
   using Index = std::ptrdiff_t;
   std::vector<Index> index(data.size());
   std::iota(std::begin(index), std::end(index), 0);
-  std::sort(std::begin(index), std::end(index),
+  std::sort(std::execution::par, std::begin(index), std::end(index),
             [&](Index lhs, Index rhs) { return data.at(lhs) > data.at(rhs); });
+  // std::sort(std::begin(index), std::end(index),
+  //           [&](Index lhs, Index rhs) { return data.at(lhs) > data.at(rhs); });
   return index;
 }
 
@@ -44,12 +47,13 @@ template <typename TVEC>
 inline auto build_eigen_triplets(const TVEC& Tvec) {
   using _Triplet = Eigen::Triplet<Scalar>;
   using _TripletVec = std::vector<_Triplet>;
-  _TripletVec ret;
+
+  _TripletVec ret(Tvec.size());
 
   const Index INTERVAL = 1e6;
   const Index max_tvec_size = Tvec.size();
-  Index j = 0;
 
+  Index j = 0;
   for (auto tt : Tvec) {
     Index r;
     Index c;
@@ -67,6 +71,7 @@ inline auto build_eigen_triplets(const TVEC& Tvec) {
       std::cerr << "\r" << std::flush;
     }
   }
+
   std::cerr << std::endl;
   return ret;
 }
@@ -147,8 +152,10 @@ auto eigen_argsort_descending(const Vec& data) {
   using Index = typename Vec::Index;
   std::vector<Index> index(data.size());
   std::iota(std::begin(index), std::end(index), 0);
-  std::sort(std::begin(index), std::end(index),
+  std::sort(std::execution::par, std::begin(index), std::end(index),
             [&](Index lhs, Index rhs) { return data(lhs) > data(rhs); });
+  // std::sort(std::begin(index), std::end(index),
+  //           [&](Index lhs, Index rhs) { return data(lhs) > data(rhs); });
   return index;
 }
 

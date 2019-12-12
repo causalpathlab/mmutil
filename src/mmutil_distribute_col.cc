@@ -1,9 +1,7 @@
 #include "mmutil.hh"
 
 void print_help(const char* fname) {
-  std::cerr
-      << "Distribute columns into multiple files to reduce computational cost"
-      << std::endl;
+  std::cerr << "Distribute columns into multiple files to reduce computational cost" << std::endl;
   std::cerr << std::endl;
   std::cerr << fname << " mtx_file membership_file output" << std::endl;
   std::cerr << std::endl;
@@ -84,10 +82,10 @@ int main(const int argc, const char* argv[]) {
     column_batches.at(_index).push_back(columns.at(j));
 
     if (++_num_triples % INTERVAL == 0) {
-      std::cerr << "\r" << std::setw(30) << "Partitioning " << std::setw(10)
-                << (_num_triples / INTERVAL) << " x 1M triplets (total "
-                << std::setw(10) << (max_tvec_size / INTERVAL) << ")"
-                << std::flush;
+      std::cerr << "\r" << std::left << std::setfill('.') << std::setw(30);
+      std::cerr << "Partitioning " << std::right << std::setfill(' ');
+      std::cerr << (_num_triples / INTERVAL) << " x 1M triplets (total ";
+      std::cerr << std::setw(10) << (max_tvec_size / INTERVAL) << ")" << std::flush;
     }
   }
 

@@ -9,6 +9,15 @@ void print_help(const char* fname) {
   std::cerr << std::endl;
 }
 
+using Triplet = std::tuple<Index, Index, Scalar>;
+using TripletVec = std::vector<Triplet>;
+
+struct TripletCompare {
+  inline bool operator()(const Triplet& lhs, const Triplet& rhs) {
+    return std::get<0>(lhs) < std::get<0>(rhs);
+  }
+};
+
 int main(const int argc, const char* argv[]) {
   if (argc < 5) {
     print_help(argv[0]);
@@ -21,9 +30,6 @@ int main(const int argc, const char* argv[]) {
   const Str mtx_file(argv[2]);
   const Str feature_file(argv[3]);
   const Str output(argv[4]);
-
-  using Triplet = std::tuple<Index, Index, Scalar>;
-  using TripletVec = std::vector<Triplet>;
 
   TripletVec Tvec;
   Index max_row, max_col;
@@ -38,9 +44,9 @@ int main(const int argc, const char* argv[]) {
 
   TLOG("Sorting the triplet vector by the row index...");
 
-  std::sort(Tvec.begin(), Tvec.end(), [](const Triplet& lhs, const Triplet& rhs) {
-    return std::get<0>(lhs) < std::get<0>(rhs);
-  });
+  // std::sort(Tvec.begin(), Tvec.end(), TripletCompare());
+
+  std::sort(std::execution::par, Tvec.begin(), Tvec.end(), TripletCompare());
 
   Vec RowScores(max_row);
   const Index BATCH_SIZE = 1000;

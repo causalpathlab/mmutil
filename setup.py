@@ -9,7 +9,7 @@ _inc_dirs = [
 ]
 
 _compile_args = [
-    '--std=c++14',
+    '--std=c++17',
     '-O3',
     '-DNDEBUG',
     '-DNPY_NO_DEPRECATED_API',

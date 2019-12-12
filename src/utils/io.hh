@@ -97,7 +97,7 @@ auto read_vector_file(const std::string filename, std::vector<T> &in) {
 /////////////////////////////////////////////////////////////
 
 template <typename IFS>
-auto read_matrix_market_stream(IFS &ifs) {
+inline auto read_matrix_market_stream(IFS &ifs) {
   ///////////////////////
   // basic definitions //
   ///////////////////////
@@ -110,8 +110,8 @@ auto read_matrix_market_stream(IFS &ifs) {
   //////////////////////////
 
   typedef enum _state_t { S_COMMENT, S_WORD, S_EOW, S_EOL } state_t;
-  const auto eol = '\n';
-  const auto comment = '%';
+  const char eol = '\n';
+  const char comment = '%';
 
   std::istreambuf_iterator<char> END;
   std::istreambuf_iterator<char> it(ifs);
@@ -119,8 +119,9 @@ auto read_matrix_market_stream(IFS &ifs) {
   strbuf_t strbuf;
   state_t state = S_EOL;
 
-  auto num_rows = 0u;  // number of rows
-  auto num_cols = 0u;  // number of columns
+  size_t num_nz = 0u;    // number of non-zero elements
+  size_t num_rows = 0u;  // number of rows
+  size_t num_cols = 0u;  // number of columns
 
   // read the first line and headers
   // %%MatrixMarket matrix coordinate integer general
@@ -210,15 +211,15 @@ auto read_matrix_market_stream(IFS &ifs) {
   };
 
   num_cols = 0;
-  num_rows = 0;
+  num_nz = 0;
 
   const Index max_row = Dims[0];
   const Index max_col = Dims[1];
   const Index max_elem = Dims[2];
   const Index INTERVAL = 1e6;
-  const Index MAX_PRINT(max_elem / INTERVAL);
+  const Index MAX_PRINT = (max_elem / INTERVAL);
 
-  for (; num_rows < max_elem && it != END; ++it) {
+  for (; num_nz < max_elem && it != END; ++it) {
     char c = *it;
 
     // Skip the comment line. It doesn't count toward the line
@@ -242,7 +243,6 @@ auto read_matrix_market_stream(IFS &ifs) {
       }
 
       state = S_EOL;
-      num_rows++;
 
       if (row < 0 || row > max_row)
         WLOG("Ignore unexpected row" << std::setfill(' ') << std::setw(10)
@@ -254,11 +254,11 @@ auto read_matrix_market_stream(IFS &ifs) {
       Tvec.push_back(Triplet(row - 1, col - 1, weight));
       num_cols = 0;
 
-      if (num_rows % INTERVAL == 0) {
+      if ((++num_nz) % INTERVAL == 0) {
         std::cerr << "\r" << std::left << std::setfill('.');
         std::cerr << std::setw(30) << "Reading ";
         std::cerr << std::right << std::setfill(' ') << std::setw(10)
-                  << (num_rows / INTERVAL) << " x 1M triplets";
+                  << (num_nz / INTERVAL) << " x 1M triplets";
         std::cerr << " (total " << std::setw(10) << MAX_PRINT << ")";
         std::cerr << "\r" << std::flush;
       }

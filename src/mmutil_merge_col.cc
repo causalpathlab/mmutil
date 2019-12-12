@@ -107,6 +107,7 @@ int main(const int argc, const char* argv[]) {
         Tvec_relevant.push_back(_Triplet(new_r, c, w));
       }
     }
+
     TLOG("Trimmed the list of triplets --> " << Tvec_relevant.size());
 
     SpMat X0(univ_max_row, max_col);

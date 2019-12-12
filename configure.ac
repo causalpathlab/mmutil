@@ -1,5 +1,4 @@
 m4_include([aux/ax_check_zlib.m4])
-m4_include([aux/ax_cxx_compile_stdcxx.m4])
 m4_include([aux/ax_openmp.m4])
 m4_include([aux/ax_boost_base.m4])
 
@@ -14,8 +13,8 @@ AC_C_RESTRICT
 AC_TYPE_SIZE_T
 AC_TYPE_UINT32_T
 
-AX_CXX_COMPILE_STDCXX([14], noext, mandatory)
-user_CFLAGS="${user_CFLAGS} -std=c++14"
+user_CFLAGS="${user_CFLAGS} -std=c++17" # to use parallel execution
+user_LDFLAGS="${user_LDFLAGS} -ltbb"
 
 # Checks for programs.
 AC_PROG_CXX
