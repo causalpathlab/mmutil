@@ -11,7 +11,8 @@
 #include <numeric>
 #include <vector>
 
-#include "utils/io.hh"
+#include "io.hh"
+#include "io_visitor.hh"
 #include "utils/util.hh"
 
 #ifndef MMUTIL_HH_

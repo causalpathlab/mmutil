@@ -4,8 +4,8 @@
 #include <numpy/ndarrayobject.h>
 #include <string>
 #include <vector>
-#include "utils/io.hh"
 #include "utils/util.hh"
+#include "io.hh"
 #include "mmutil.hh"
 
 #ifndef MMUTIL_PYTHON_HH_

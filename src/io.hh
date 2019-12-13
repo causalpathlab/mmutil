@@ -11,8 +11,10 @@
 #include <unordered_map>
 #include <vector>
 
+#include "io_visitor.hh"
 #include "utils/gzstream.hh"
 #include "utils/strbuf.hh"
+#include "utils/util.hh"
 
 #ifndef UTIL_IO_HH_
 #define UTIL_IO_HH_
@@ -20,14 +22,13 @@
 /////////////////////////////////
 // common utility for data I/O //
 /////////////////////////////////
-auto is_file_gz(const std::string filename) {
+bool is_file_gz(const std::string filename) {
   if (filename.size() < 3) return false;
   return filename.substr(filename.size() - 3) == ".gz";
 }
 
 std::shared_ptr<std::ifstream> open_ifstream(const std::string filename) {
-  std::shared_ptr<std::ifstream> ret(
-      new std::ifstream(filename.c_str(), std::ios::in));
+  std::shared_ptr<std::ifstream> ret(new std::ifstream(filename.c_str(), std::ios::in));
   return ret;
 }
 
@@ -49,8 +50,7 @@ auto read_pair_stream(IFS &ifs, std::unordered_map<T1, T2> &in) {
 }
 
 template <typename T1, typename T2>
-auto read_pair_file(const std::string filename,
-                    std::unordered_map<T1, T2> &in) {
+auto read_pair_file(const std::string filename, std::unordered_map<T1, T2> &in) {
   auto ret = EXIT_SUCCESS;
 
   if (is_file_gz(filename)) {
@@ -96,217 +96,78 @@ auto read_vector_file(const std::string filename, std::vector<T> &in) {
 // read matrix market triplets and construct sparse matrix //
 /////////////////////////////////////////////////////////////
 
-template <typename IFS>
-inline auto read_matrix_market_stream(IFS &ifs) {
-  ///////////////////////
-  // basic definitions //
-  ///////////////////////
+struct TripletReader {
 
-  using Scalar = float;
-  using Index = long int;
+  using scalar_t = float;
+  using index_t = std::ptrdiff_t;
 
-  //////////////////////////
-  // Finite state machine //
-  //////////////////////////
-
-  typedef enum _state_t { S_COMMENT, S_WORD, S_EOW, S_EOL } state_t;
-  const char eol = '\n';
-  const char comment = '%';
-
-  std::istreambuf_iterator<char> END;
-  std::istreambuf_iterator<char> it(ifs);
-
-  strbuf_t strbuf;
-  state_t state = S_EOL;
-
-  size_t num_nz = 0u;    // number of non-zero elements
-  size_t num_rows = 0u;  // number of rows
-  size_t num_cols = 0u;  // number of columns
-
-  // read the first line and headers
-  // %%MatrixMarket matrix coordinate integer general
-
-  std::vector<Index> Dims(3);
-
-  auto extract_idx_word = [&]() {
-    const Index _idx = strbuf.get<Index>();
-    if (num_cols < Dims.size()) {
-      Dims[num_cols] = _idx;
-    }
-    state = S_EOW;
-    strbuf.clear();
-    return _idx;
-  };
-
-  for (; num_rows < 1 && it != END; ++it) {
-    char c = *it;
-
-    // Skip the comment line. It doesn't count toward the line
-    // count, and we don't bother reading the content.
-    if (state == S_COMMENT) {
-      if (c == eol) state = S_EOL;
-      continue;
-    }
-
-    if (c == comment) {
-      state = S_COMMENT;
-      continue;
-    }
-
-    // Do the regular parsing of a triplet
-
-    if (c == eol) {
-      if (state == S_WORD) {
-        std::ignore = extract_idx_word();
-        num_cols++;
-      }
-
-      state = S_EOL;
-      num_rows++;
-
-    } else if (isspace(c)) {
-      std::ignore = extract_idx_word();
-      num_cols++;
-    } else {
-      strbuf.add(c);
-      state = S_WORD;
-    }
-  }
-
-#ifdef DEBUG
-  for (auto d : Dims) {
-    TLOG(d);
-  }
-  TLOG("debug -- read the header.");
-#endif
-
-  // Read a list of triplets
-  TLOG("Start reading a list of triplets");
-
-  Index row, col;
-  Scalar weight;
-
-  using Triplet = std::tuple<Index, Index, Scalar>;
+  using Triplet = std::tuple<index_t, index_t, scalar_t>;
   using TripletVec = std::vector<Triplet>;
 
-  TripletVec Tvec;
-
-  auto read_triplet = [&]() {
-    switch (num_cols) {
-      case 0:
-        // row = strbuf.get<Index>();
-        row = strbuf.take_int();
-        break;
-      case 1:
-        // col = strbuf.get<Index>();
-        col = strbuf.take_int();
-        break;
-      case 2:
-        // weight = strbuf.get<Scalar>();
-        weight = strbuf.take_float();
-        break;
-    }
-    state = S_EOW;
-    strbuf.clear();
-  };
-
-  num_cols = 0;
-  num_nz = 0;
-
-  const Index max_row = Dims[0];
-  const Index max_col = Dims[1];
-  const Index max_elem = Dims[2];
-  const Index INTERVAL = 1e6;
-  const Index MAX_PRINT = (max_elem / INTERVAL);
-
-  for (; num_nz < max_elem && it != END; ++it) {
-    char c = *it;
-
-    // Skip the comment line. It doesn't count toward the line
-    // count, and we don't bother reading the content.
-    if (state == S_COMMENT) {
-      if (c == eol) state = S_EOL;
-      continue;
-    }
-
-    if (c == comment) {
-      state = S_COMMENT;
-      continue;
-    }
-
-    // Do the regular parsing of a triplet
-
-    if (c == eol) {
-      if (state == S_WORD) {
-        read_triplet();
-        num_cols++;
-      }
-
-      state = S_EOL;
-
-      if (row < 0 || row > max_row)
-        WLOG("Ignore unexpected row" << std::setfill(' ') << std::setw(10)
-                                     << row);
-      if (col < 0 || col > max_col)
-        WLOG("Ignore unexpected column" << std::setfill(' ') << std::setw(10)
-                                        << col);
-
-      Tvec.push_back(Triplet(row - 1, col - 1, weight));
-      num_cols = 0;
-
-      if ((++num_nz) % INTERVAL == 0) {
-        std::cerr << "\r" << std::left << std::setfill('.');
-        std::cerr << std::setw(30) << "Reading ";
-        std::cerr << std::right << std::setfill(' ') << std::setw(10)
-                  << (num_nz / INTERVAL) << " x 1M triplets";
-        std::cerr << " (total " << std::setw(10) << MAX_PRINT << ")";
-        std::cerr << "\r" << std::flush;
-      }
-    } else if (isspace(c) && strbuf.size() > 0) {
-      read_triplet();
-      num_cols++;
-    } else {
-      strbuf.add(c);
-      state = S_WORD;
-    }
+  explicit TripletReader(TripletVec &_tvec) : Tvec(_tvec) {
+    max_row = 0;
+    max_col = 0;
+    max_elem = 0;
+    Tvec.clear();
+    TLOG("Start reading a list of triplets");
   }
-  std::cerr << std::endl;
 
-  TLOG("Finished reading a list of triplets");
-
-  if (Tvec.size() < max_elem) {
-    WLOG("This file may have lost elements : " << Tvec.size() << " vs. "
-                                               << max_elem);
+  void set_dimension(const index_t r, const index_t c, const index_t e) {
+    max_row = r;
+    max_col = c;
+    max_elem = e;
   }
+
+  void eval(const index_t row, const index_t col, const scalar_t weight) {
+    Tvec.push_back(Triplet(row, col, weight));
+  }
+
+  void eval_end() {
+    if (Tvec.size() < max_elem) {
+      WLOG("This file may have lost elements : " << Tvec.size() << " vs. " << max_elem);
+    }
+    TLOG("Finished reading a list of triplets");
+  }
+
+  index_t max_row;
+  index_t max_col;
+  index_t max_elem;
+  TripletVec &Tvec;
+};
+
+template <typename IFS>
+inline auto read_matrix_market_stream(IFS &ifs) {
+  TripletReader::TripletVec Tvec;
+
+  TripletReader reader(Tvec);
+
+  visit_matrix_market_stream(ifs, reader);
+
+  auto max_row = reader.max_row;
+  auto max_col = reader.max_col;
 
   return std::make_tuple(Tvec, max_row, max_col);
 }
 
 auto read_matrix_market_file(const std::string filename) {
-  using Scalar = float;
-  using Index = long int;
-  using Triplet = std::tuple<Index, Index, Scalar>;
-  using TripletVec = std::vector<Triplet>;
 
-  Index max_row, max_col;
-  TripletVec ret;
+  TripletReader::TripletVec Tvec;
+  TripletReader reader(Tvec);
 
-  if (is_file_gz(filename)) {
-    igzstream ifs(filename.c_str(), std::ios::in);
-    std::tie(ret, max_row, max_col) = read_matrix_market_stream(ifs);
-    ifs.close();
-  } else {
-    std::ifstream ifs(filename.c_str(), std::ios::in);
-    std::tie(ret, max_row, max_col) = read_matrix_market_stream(ifs);
-    ifs.close();
-  }
-  // TLOG(max_row << " " << max_col)
-  return std::make_tuple(ret, max_row, max_col);
+  visit_matrix_market_file(filename, reader);
+
+  auto max_row = reader.max_row;
+  auto max_col = reader.max_col;
+
+  return std::make_tuple(Tvec, max_row, max_col);
 }
 
+///////////////////
+// simple writer //
+///////////////////
+
 template <typename OFS, typename Derived>
-void write_matrix_market_stream(OFS &ofs,
-                                const Eigen::SparseMatrixBase<Derived> &out) {
+void write_matrix_market_stream(OFS &ofs, const Eigen::SparseMatrixBase<Derived> &out) {
   ofs.precision(4);
 
   const Derived &M = out.derived();
@@ -328,11 +189,10 @@ void write_matrix_market_stream(OFS &ofs,
       ofs << i << " " << j << " " << v << std::endl;
 
       if (++_num_triples % INTERVAL == 0) {
-        std::cerr << "\r" << std::left << std::setfill('.') << std::setw(30)
-                  << "Writing " << std::right << std::setfill(' ')
-                  << std::setw(10) << (_num_triples / INTERVAL)
-                  << " x 1M triplets (total " << std::setw(10)
-                  << (max_triples / INTERVAL) << ")" << std::flush;
+        std::cerr << "\r" << std::left << std::setfill('.') << std::setw(30) << "Writing "
+                  << std::right << std::setfill(' ') << std::setw(10) << (_num_triples / INTERVAL)
+                  << " x 1M triplets (total " << std::setw(10) << (max_triples / INTERVAL) << ")"
+                  << std::flush;
       }
     }
   }
@@ -494,8 +354,8 @@ auto read_data_stream(IFS &ifs, T &in) {
 #endif
 
   auto mtot = data.size();
-  ERR_RET(mtot != (nr * nc), "# data points: " << mtot << " elements in " << nr
-                                               << " x " << nc << " matrix");
+  ERR_RET(mtot != (nr * nc),
+          "# data points: " << mtot << " elements in " << nr << " x " << nc << " matrix");
   ERR_RET(mtot < 1, "empty file");
   ERR_RET(nr < 1, "zero number of rows; incomplete line?");
   in = Eigen::Map<T>(data.data(), nc, nr);
@@ -576,8 +436,8 @@ void write_data_stream(OFS &ofs, const Eigen::SparseMatrixBase<Derived> &out) {
       ofs << i << " " << j << " " << v << std::endl;
     }
     if ((k + 1) % INTERVAL == 0) {
-      std::cerr << "\rWriting " << std::right << std::setfill(' ')
-                << std::setw(10) << (k / INTERVAL);
+      std::cerr << "\rWriting " << std::right << std::setfill(' ') << std::setw(10)
+                << (k / INTERVAL);
       std::cerr << " x 1k outer-iterations (total ";
       std::cerr << std::setw(10) << MAX_PRINT << ")\r" << std::flush;
     }

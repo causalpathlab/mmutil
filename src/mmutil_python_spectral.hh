@@ -1,6 +1,6 @@
 #include "mmutil_python.hh"
 #include "mmutil_spectral.hh"
-#include "utils/io.hh"
+#include "io.hh"
 
 #ifndef MMUTIL_PYTHON_SPECTRAL_HH_
 #define MMUTIL_PYTHON_SPECTRAL_HH_
