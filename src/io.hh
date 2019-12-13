@@ -96,25 +96,25 @@ auto read_vector_file(const std::string filename, std::vector<T> &in) {
 // read matrix market triplets and construct sparse matrix //
 /////////////////////////////////////////////////////////////
 
-struct TripletReader {
+struct triplet_reader_t {
 
   using scalar_t = float;
-  using index_t = std::ptrdiff_t;
+  using index_t  = std::ptrdiff_t;
 
-  using Triplet = std::tuple<index_t, index_t, scalar_t>;
+  using Triplet    = std::tuple<index_t, index_t, scalar_t>;
   using TripletVec = std::vector<Triplet>;
 
-  explicit TripletReader(TripletVec &_tvec) : Tvec(_tvec) {
-    max_row = 0;
-    max_col = 0;
+  explicit triplet_reader_t(TripletVec &_tvec) : Tvec(_tvec) {
+    max_row  = 0;
+    max_col  = 0;
     max_elem = 0;
     Tvec.clear();
     TLOG("Start reading a list of triplets");
   }
 
   void set_dimension(const index_t r, const index_t c, const index_t e) {
-    max_row = r;
-    max_col = c;
+    max_row  = r;
+    max_col  = c;
     max_elem = e;
   }
 
@@ -137,9 +137,9 @@ struct TripletReader {
 
 template <typename IFS>
 inline auto read_matrix_market_stream(IFS &ifs) {
-  TripletReader::TripletVec Tvec;
+  triplet_reader_t::TripletVec Tvec;
 
-  TripletReader reader(Tvec);
+  triplet_reader_t reader(Tvec);
 
   visit_matrix_market_stream(ifs, reader);
 
@@ -150,9 +150,8 @@ inline auto read_matrix_market_stream(IFS &ifs) {
 }
 
 auto read_matrix_market_file(const std::string filename) {
-
-  TripletReader::TripletVec Tvec;
-  TripletReader reader(Tvec);
+  triplet_reader_t::TripletVec Tvec;
+  triplet_reader_t reader(Tvec);
 
   visit_matrix_market_file(filename, reader);
 
@@ -161,6 +160,147 @@ auto read_matrix_market_file(const std::string filename) {
 
   return std::make_tuple(Tvec, max_row, max_col);
 }
+
+/////////////////////////////////////////
+// read and write triplets selectively //
+/////////////////////////////////////////
+
+template <typename INDEX, typename SCALAR>
+struct triplet_copier_remapped_rows_t {
+
+  using index_t  = INDEX;
+  using scalar_t = SCALAR;
+
+  //////////////////////////
+  // mapping : old -> new //
+  //////////////////////////
+
+  using index_map_t = std::unordered_map<index_t, index_t>;
+
+  explicit triplet_copier_remapped_rows_t(const std::string _filename,  // output filename
+                                          const index_map_t &_remap)    // valid rows
+      : filename(_filename), remap(_remap) {
+    max_row  = 0;
+    max_col  = 0;
+    max_elem = 0;
+    ASSERT(remap.size() > 0, "Empty Remap");
+  }
+
+  void set_dimension(const index_t r, const index_t c, const index_t e) {
+    std::tie(max_row, max_col, max_elem) = std::make_tuple(r, c, e);
+    TLOG("Input size: " << max_row << " x " << max_col);
+
+    const index_t new_max_row = find_new_max_row();
+
+    ofs.open(filename.c_str(), std::ios::out);
+    ofs << "%%MatrixMarket matrix coordinate integer general" << std::endl;
+    ofs << new_max_row << FS << max_col << FS << max_elem << std::endl;
+    TLOG("Start copying data on the selected rows: N = " << remap.size());
+  }
+
+  void eval(const index_t row, const index_t col, const scalar_t weight) {
+    if (remap.count(row) > 0) {
+      const index_t i = remap.at(row) + 1;  // fix zero-based to one-based
+      const index_t j = col + 1;            // fix zero-based to one-based
+      ofs << i << FS << j << FS << weight << std::endl;
+    }
+  }
+
+  void eval_end() {
+    ofs.close();
+    TLOG("Finished copying data");
+  }
+
+  const std::string filename;
+  ogzstream ofs;
+  const index_map_t &remap;
+  static constexpr char FS = ' ';
+
+  index_t max_row;
+  index_t max_col;
+  index_t max_elem;
+
+ private:
+  index_t find_new_max_row() const {
+    index_t ret = 0;
+    std::for_each(std::execution::par, remap.begin(), remap.end(),  //
+                  [&ret](const auto &tt) {
+                    index_t _old, _new;
+                    std::tie(_old, _new) = tt;
+                    index_t _new_size    = _new + 1;
+                    if (_new_size > ret) ret = _new_size;
+                  });
+    return ret;
+  }
+};
+
+template <typename INDEX, typename SCALAR>
+struct triplet_copier_remapped_cols_t {
+
+  using index_t  = INDEX;
+  using scalar_t = SCALAR;
+
+  //////////////////////////
+  // mapping : old -> new //
+  //////////////////////////
+
+  using index_map_t = std::unordered_map<index_t, index_t>;
+
+  explicit triplet_copier_remapped_cols_t(const std::string _filename, const index_map_t &_remap)
+      : filename(_filename), remap(_remap) {
+    max_row  = 0;
+    max_col  = 0;
+    max_elem = 0;
+    ASSERT(remap.size() > 0, "Empty Remap");
+  }
+
+  void set_dimension(const index_t r, const index_t c, const index_t e) {
+    std::tie(max_row, max_col, max_elem) = std::make_tuple(r, c, e);
+    TLOG("Input size: " << max_row << " x " << max_col);
+
+    const index_t new_max_col = find_new_max_col();
+
+    ofs.open(filename.c_str(), std::ios::out);
+    ofs << "%%MatrixMarket matrix coordinate integer general" << std::endl;
+    ofs << max_row << FS << new_max_col << FS << max_elem << std::endl;
+    TLOG("Start copying data on the selected cols: N = " << remap.size());
+  }
+
+  void eval(const index_t row, const index_t col, const scalar_t weight) {
+    if (remap.count(col) > 0) {
+      const index_t i = row + 1;            // fix zero-based to one-based
+      const index_t j = remap.at(col) + 1;  // fix zero-based to one-based
+      ofs << i << FS << j << FS << weight << std::endl;
+    }
+  }
+
+  void eval_end() {
+    ofs.close();
+    TLOG("Finished copying data");
+  }
+
+  const std::string filename;
+  ogzstream ofs;
+  const index_map_t &remap;
+  static constexpr char FS = ' ';
+
+  index_t max_row;
+  index_t max_col;
+  index_t max_elem;
+
+ private:
+  index_t find_new_max_col() const {
+    index_t ret = 0;
+    std::for_each(std::execution::par, remap.begin(), remap.end(),  //
+                  [&ret](const auto &tt) {
+                    index_t _old, _new;
+                    std::tie(_old, _new) = tt;
+                    index_t _new_size    = _new + 1;
+                    if (_new_size > ret) ret = _new_size;
+                  });
+    return ret;
+  }
+};
 
 ///////////////////
 // simple writer //
@@ -175,17 +315,17 @@ void write_matrix_market_stream(OFS &ofs, const Eigen::SparseMatrixBase<Derived>
   ofs << "%%MatrixMarket matrix coordinate integer general" << std::endl;
   ofs << M.rows() << " " << M.cols() << " " << M.nonZeros() << std::endl;
 
-  const typename Derived::Index INTERVAL = 1e6;
+  const typename Derived::Index INTERVAL    = 1e6;
   const typename Derived::Index max_triples = M.nonZeros();
-  using Index = typename Derived::Index;
-  Index _num_triples = 0;
+  using Index                               = typename Derived::Index;
+  Index _num_triples                        = 0;
 
   // column major
   for (auto k = 0; k < M.outerSize(); ++k) {
     for (typename Derived::InnerIterator it(M, k); it; ++it) {
       const Index i = it.row() + 1;  // fix zero-based to one-based
       const Index j = it.col() + 1;  // fix zero-based to one-based
-      const auto v = it.value();
+      const auto v  = it.value();
       ofs << i << " " << j << " " << v << std::endl;
 
       if (++_num_triples % INTERVAL == 0) {
@@ -420,18 +560,18 @@ void write_data_stream(OFS &ofs, const Eigen::SparseMatrixBase<Derived> &out) {
   ofs.precision(4);
 
   const Derived &M = out.derived();
-  using Index = typename Derived::Index;
-  using Scalar = typename Derived::Scalar;
+  using Index      = typename Derived::Index;
+  using Scalar     = typename Derived::Scalar;
 
   // Not necessarily column major
-  const Index INTERVAL = 1000;
+  const Index INTERVAL  = 1000;
   const Index max_outer = M.outerSize();
   const Index MAX_PRINT = (max_outer / INTERVAL);
 
   for (auto k = 0; k < max_outer; ++k) {
     for (typename Derived::InnerIterator it(M, k); it; ++it) {
-      const Index i = it.row();
-      const Index j = it.col();
+      const Index i  = it.row();
+      const Index j  = it.col();
       const Scalar v = it.value();
       ofs << i << " " << j << " " << v << std::endl;
     }

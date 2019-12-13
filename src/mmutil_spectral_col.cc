@@ -19,7 +19,7 @@ int main(const int argc, const char* argv[]) {
   using Str = std::string;
 
   const Scalar tau_scale = boost::lexical_cast<Scalar>(argv[1]);
-  const Index rank = boost::lexical_cast<Index>(argv[2]);
+  const Index rank       = boost::lexical_cast<Index>(argv[2]);
   const Str mtx_file(argv[3]);
   const Str output(argv[4]);
 
@@ -29,7 +29,7 @@ int main(const int argc, const char* argv[]) {
   // Read the data //
   ///////////////////
 
-  using Triplet = std::tuple<Index, Index, Scalar>;
+  using Triplet    = std::tuple<Index, Index, Scalar>;
   using TripletVec = std::vector<Triplet>;
   TripletVec Tvec;
   Index max_row, max_col;

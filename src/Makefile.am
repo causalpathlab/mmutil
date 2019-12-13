@@ -2,16 +2,17 @@ bin_PROGRAMS = mmutil_merge_col mmutil_filter_row mmutil_filter_col mmutil_distr
 
 math = svd.hh
 
-common = io.hh io_visitor.hh \
+common = mmutil.hh mmutil_stat.hh \
+        io.hh io_visitor.hh \
 	utils/gzstream.hh utils/gzstream.cc \
 	utils/util.hh utils/strbuf.hh
 
-mmutil_merge_col_SOURCES = mmutil_merge_col.cc mmutil.hh $(common)
+mmutil_merge_col_SOURCES = mmutil_merge_col.cc $(common)
 
-mmutil_filter_row_SOURCES = mmutil_filter_row.cc mmutil.hh $(common)
+mmutil_filter_row_SOURCES = mmutil_filter_row.cc $(common)
 
-mmutil_filter_col_SOURCES = mmutil_filter_col.cc mmutil.hh $(common)
+mmutil_filter_col_SOURCES = mmutil_filter_col.cc $(common)
 
-mmutil_distribute_col_SOURCES = mmutil_distribute_col.cc mmutil.hh $(common)
+mmutil_distribute_col_SOURCES = mmutil_distribute_col.cc $(common)
 
-mmutil_spectral_col_SOURCES = mmutil_spectral_col.cc mmutil.hh $(common) $(math) mmutil_spectral.hh
+mmutil_spectral_col_SOURCES = mmutil_spectral_col.cc mmutil_spectral.hh $(common) $(math) 

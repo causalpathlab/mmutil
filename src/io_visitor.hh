@@ -19,15 +19,15 @@ void visit_matrix_market_stream(IFS &ifs, FUN &fun);
 
 template <typename IFS, typename FUN>
 void visit_matrix_market_stream(IFS &ifs, FUN &fun) {
-  using Scalar = typename FUN::scalar_t;
-  using Index = typename FUN::index_t;
+  using scalar_t = typename FUN::scalar_t;
+  using index_t  = typename FUN::index_t;
 
   //////////////////////////
   // Finite state machine //
   //////////////////////////
 
   typedef enum _state_t { S_COMMENT, S_WORD, S_EOW, S_EOL } state_t;
-  const char eol = '\n';
+  const char eol     = '\n';
   const char comment = '%';
 
   /////////////////////////
@@ -40,7 +40,7 @@ void visit_matrix_market_stream(IFS &ifs, FUN &fun) {
   strbuf_t strbuf;
   state_t state = S_EOL;
 
-  size_t num_nz = 0u;    // number of non-zero elements
+  size_t num_nz   = 0u;  // number of non-zero elements
   size_t num_rows = 0u;  // number of rows
   size_t num_cols = 0u;  // number of columns
 
@@ -50,10 +50,10 @@ void visit_matrix_market_stream(IFS &ifs, FUN &fun) {
 
   // %%MatrixMarket matrix coordinate integer general
 
-  std::vector<Index> dims(3);
+  std::vector<index_t> dims(3);
 
   auto extract_idx_word = [&]() {
-    const Index _idx = strbuf.get<Index>();
+    const index_t _idx = strbuf.get<index_t>();
     if (num_cols < dims.size()) {
       dims[num_cols] = _idx;
     }
@@ -107,8 +107,8 @@ void visit_matrix_market_stream(IFS &ifs, FUN &fun) {
   // Read a list of triplets //
   /////////////////////////////
 
-  Index row, col;
-  Scalar weight;
+  index_t row, col;
+  scalar_t weight;
 
   auto read_triplet = [&]() {
     switch (num_cols) {
@@ -127,13 +127,13 @@ void visit_matrix_market_stream(IFS &ifs, FUN &fun) {
   };
 
   num_cols = 0;
-  num_nz = 0;
+  num_nz   = 0;
 
-  const Index max_row = dims[0];
-  const Index max_col = dims[1];
-  const Index max_elem = dims[2];
-  const Index INTERVAL = 1e6;
-  const Index MAX_PRINT = (max_elem / INTERVAL);
+  const index_t max_row   = dims[0];
+  const index_t max_col   = dims[1];
+  const index_t max_elem  = dims[2];
+  const index_t INTERVAL  = 1e6;
+  const index_t MAX_PRINT = (max_elem / INTERVAL);
 
   auto show_progress = [&num_nz, &INTERVAL, &MAX_PRINT]() {
     if (num_nz % INTERVAL == 0) {

@@ -7,8 +7,8 @@
 template <typename Derived>
 SpMat normalize_to_median(const Eigen::SparseMatrixBase<Derived>& xx) {
 
-  const Derived& X = xx.derived();
-  const Vec deg = X.transpose() * Mat::Ones(X.cols(), 1);
+  const Derived& X                           = xx.derived();
+  const Vec deg                              = X.transpose() * Mat::Ones(X.cols(), 1);
   std::vector<typename Derived::Scalar> _deg = std_vector(deg);
   TLOG("search the median degree [0, " << _deg.size() << ")");
   std::nth_element(_deg.begin(), _deg.begin() + _deg.size() / 2, _deg.end());
@@ -42,16 +42,16 @@ auto take_spectrum_laplacian(                     //
   const Derived& X0 = _X0.derived();
 
   using Scalar = typename Derived::Scalar;
-  using Index = typename Derived::Index;
-  using Mat = typename Eigen::Matrix<Scalar, Eigen::Dynamic, Eigen::Dynamic>;
+  using Index  = typename Derived::Index;
+  using Mat    = typename Eigen::Matrix<Scalar, Eigen::Dynamic, Eigen::Dynamic>;
 
   const Index max_col = X0.cols();
   const Index max_row = X0.rows();
 
   TLOG("Constructing a reguarlized graph Laplacian ...");
 
-  const SpMat X = normalize_to_median(X0);
-  const Mat Deg = (X.transpose().cwiseProduct(X.transpose()) * Mat::Ones(max_row, 1));
+  const SpMat X    = normalize_to_median(X0);
+  const Mat Deg    = (X.transpose().cwiseProduct(X.transpose()) * Mat::Ones(max_row, 1));
   const Scalar tau = Deg.mean() * tau_scale;
   const Mat degree_tau_sqrt_inverse = Deg.unaryExpr([&tau](const Scalar x) {
     const Scalar _one = 1.0;

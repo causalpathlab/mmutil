@@ -1,4 +1,5 @@
 #include "mmutil.hh"
+#include "mmutil_stat.hh"
 
 void print_help(const char* fname) {
   std::cerr << "Filter in informative features to reduce computational cost" << std::endl;
@@ -9,74 +10,32 @@ void print_help(const char* fname) {
   std::cerr << std::endl;
 }
 
-using Triplet = std::tuple<Index, Index, Scalar>;
-using TripletVec = std::vector<Triplet>;
-
-struct TripletCompare {
-  inline bool operator()(const Triplet& lhs, const Triplet& rhs) {
-    return std::get<0>(lhs) < std::get<0>(rhs);
-  }
-};
-
-struct RowStatCollector {
-  using index_t = Index;
-  using scalar_t = Scalar;
-
-  explicit RowStatCollector() {
-    max_row = 0;
-    max_col = 0;
-    max_elem = 0;
-    TLOG("Start reading a list of triplets");
-  }
-
-  void set_dimension(const index_t r, const index_t c, const index_t e) {
-    max_row = r;
-    max_col = c;
-    max_elem = e;
-
-    Row_S1.resize(max_row);
-    Row_S1.setZero();
-    Row_S2.resize(max_row);
-    Row_S2.setZero();
-    Row_N.resize(max_row);
-    Row_N.setZero();
-  }
-
-  void eval(const index_t row, const index_t col, const scalar_t weight) {
-    if (row < max_row && col < max_col) {
-      Row_S1(row) += weight;
-      Row_S2(row) += (weight * weight);
-      Row_N(row)++;
-    }
-  }
-
-  void eval_end() { TLOG("Finished reading a list of triplets"); }
-
-  Index max_row;
-  Index max_col;
-  Index max_elem;
-  Vec Row_S1;
-  Vec Row_S2;
-  Vec Row_N;
-};
+////////////////////////
+// compute statistics //
+////////////////////////
 
 inline auto compute_mtx_stat_file(const std::string filename) {
-  RowStatCollector collector;
+  row_stat_collector_t collector;
   visit_matrix_market_file(filename, collector);
 
-  ////////////////////////////
-  // MLE standard deviation //
-  ////////////////////////////
+  /////////////////////////////////
+  // Unbiased standard deviation //
+  /////////////////////////////////
 
-  const Vec& s1 = collector.Row_S1;
-  const Vec& s2 = collector.Row_S2;
+  const Vec& s1  = collector.Row_S1;
+  const Vec& s2  = collector.Row_S2;
   const Scalar n = static_cast<Scalar>(collector.max_col);
 
   Vec ret = s2 - s1.cwiseProduct(s1 / n);
-  ret = ret / std::max(n - 1.0, 1.0);
-  ret = ret.cwiseSqrt();
-  return ret;
+  ret     = ret / std::max(n - 1.0, 1.0);
+  ret     = ret.cwiseSqrt();
+
+  return std::make_tuple(ret, collector.max_row, collector.max_col);
 }
+
+//////////
+// main //
+//////////
 
 int main(const int argc, const char* argv[]) {
   if (argc < 5) {
@@ -84,7 +43,9 @@ int main(const int argc, const char* argv[]) {
     return EXIT_FAILURE;
   }
 
-  using Str = std::string;
+  using Str         = std::string;
+  using copier_t    = triplet_copier_remapped_rows_t<Index, Scalar>;
+  using index_map_t = copier_t::index_map_t;
 
   const Index Ntop = boost::lexical_cast<Index>(argv[1]);
   const Str mtx_file(argv[2]);
@@ -95,59 +56,62 @@ int main(const int argc, const char* argv[]) {
   // First calculate row scores //
   ////////////////////////////////
 
-  Vec RowScores = compute_mtx_stat_file(mtx_file);
+  Vec row_scores;
+  Index max_row, max_col;
+  std::tie(row_scores, max_row, max_col) = compute_mtx_stat_file(mtx_file);
 
   /////////////////////
   // Prioritize rows //
   /////////////////////
 
-  auto order = eigen_argsort_descending(RowScores);
+  auto order = eigen_argsort_descending(row_scores);
 
-  TLOG("row scores: " << RowScores(order.at(0)) << " ~ " << RowScores(order.at(order.size() - 1)));
+  TLOG("row scores: " << row_scores(order.at(0)) << " ~ "
+                      << row_scores(order.at(order.size() - 1)));
 
-  // TripletVec Tvec;
-  // Index max_row, max_col;
-  // std::tie(Tvec, max_row, max_col) = read_matrix_market_file(mtx_file);
-  // std::vector<Str> features(0);
-  // CHECK(read_vector_file(feature_file, features));
+  //////////////////////////////
+  // output selected features //
+  //////////////////////////////
 
-  // // Output
-  // const Index Nout = std::min(Ntop, max_row);
+  std::vector<Str> features(0);
+  CHECK(read_vector_file(feature_file, features));
 
-  // std::vector<Str> out_features(Nout);
-  // std::unordered_map<Index, Index> remap;
+  const Index Nout = std::min(Ntop, max_row);
+  std::vector<Str> out_features(Nout);
+  std::vector<Scalar> out_scores(Nout);
+  std::vector<Scalar> out_full_scores(max_row);
+  index_map_t remap;
 
-  // for (Index i = 0; i < Nout; ++i) {
-  //   const Index j = order.at(i);
-  //   out_features[i] = features.at(j);
-  //   remap[j] = i;
-  // }
+  std::vector<Index> index_top(Nout);
+  std::iota(std::begin(index_top), std::end(index_top), 0);
+  std::for_each(index_top.begin(), index_top.end(),  //
+                [&](const Index i) {
+                  const Index j   = order.at(i);
+                  out_features[i] = features.at(j);
+                  out_scores[i]   = row_scores(j);
+                  remap[j]        = i;
+                });
 
-  // TripletVec out_Tvec;
+  std::vector<Index> index_all(max_row);
+  std::iota(std::begin(index_all), std::end(index_all), 0);
 
-  // for (auto tt : Tvec) {
-  //   Index r, c;
-  //   Scalar w;
-  //   std::tie(r, c, w) = tt;
-  //   if (remap.count(r) > 0) {
-  //     const Index new_r = remap.at(r);
-  //     out_Tvec.push_back(Triplet(new_r, c, w));
-  //   }
-  // }
+  std::for_each(index_all.begin(), index_all.end(),  //
+                [&](const Index i) {
+                  const Index j      = order.at(i);
+                  out_full_scores[i] = row_scores(j);
+                });
 
-  // const SpMat out_X = build_eigen_sparse(out_Tvec, Nout, max_col);
-  // auto out_scores = std_vector(row_score_sd(out_X));
-  // auto out_full_scores = std_vector(RowScores);
+  Str output_mtx_file = output + ".mtx.gz";
+  copier_t copier(output_mtx_file, remap);
+  visit_matrix_market_file(mtx_file, copier);
 
-  // Str output_mtx_file = output + ".mtx.gz";
-  // Str output_feature_file = output + ".rows.gz";
-  // Str output_score_file = output + ".scores.gz";
-  // Str output_full_score_file = output + ".full_scores.gz";
+  Str output_feature_file    = output + ".rows.gz";
+  Str output_score_file      = output + ".scores.gz";
+  Str output_full_score_file = output + ".full_scores.gz";
 
-  // write_vector_file(output_feature_file, out_features);
-  // write_vector_file(output_score_file, out_scores);
-  // write_vector_file(output_full_score_file, out_full_scores);
-  // write_matrix_market_file(output_mtx_file, out_X);
+  write_vector_file(output_feature_file, out_features);
+  write_vector_file(output_score_file, out_scores);
+  write_vector_file(output_full_score_file, out_full_scores);
 
   return EXIT_SUCCESS;
 }

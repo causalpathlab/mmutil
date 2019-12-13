@@ -25,15 +25,15 @@ class RandomizedSVD {
 
   template <typename Derived>
   void compute(Eigen::MatrixBase<Derived> const& X) {
-    using Index = typename Derived::Index;
+    using Index    = typename Derived::Index;
     const Index nr = X.rows();
     const Index nc = X.cols();
 
-    int rank = std::min(nr, nc);
+    int rank       = std::min(nr, nc);
     int oversample = 0;
 
     if (max_rank > 0 && max_rank < rank) {
-      rank = max_rank;
+      rank       = max_rank;
       oversample = 5;
     }
 
@@ -76,9 +76,8 @@ class RandomizedSVD {
   bool verbose;
 
   template <typename Derived>
-  void rand_subspace_iteration(Eigen::MatrixBase<Derived> const& X,
-                               const int size) {
-    using Index = typename Derived::Index;
+  void rand_subspace_iteration(Eigen::MatrixBase<Derived> const& X, const int size) {
+    using Index    = typename Derived::Index;
     const Index nr = X.rows();
     const Index nc = X.cols();
 
@@ -97,13 +96,11 @@ class RandomizedSVD {
 
       lu1.compute(X * Q);
       L.setIdentity();
-      L.block(0, 0, nr, size).template triangularView<Eigen::StrictlyLower>() =
-          lu1.matrixLU();
+      L.block(0, 0, nr, size).template triangularView<Eigen::StrictlyLower>() = lu1.matrixLU();
 
       lu2.compute(X.transpose() * L);
       Q.setIdentity();
-      Q.block(0, 0, nc, size).template triangularView<Eigen::StrictlyLower>() =
-          lu2.matrixLU();
+      Q.block(0, 0, nc, size).template triangularView<Eigen::StrictlyLower>() = lu2.matrixLU();
 
       if (verbose) TLOG("Done : LU iteration " << (i + 1));
     }

@@ -1,17 +1,17 @@
 #ifndef UTIL_HH_
 #define UTIL_HH_
 
+#include <algorithm>
+#include <cassert>
+#include <cmath>
+#include <ctime>
+#include <fstream>
 #include <iomanip>
 #include <iostream>
-#include <fstream>
-#include <string>
-#include <sstream>
-#include <ctime>
-#include <cassert>
-#include <vector>
-#include <algorithm>
-#include <cmath>
 #include <numeric>
+#include <sstream>
+#include <string>
+#include <vector>
 
 std::string curr_time();
 
@@ -32,7 +32,7 @@ std::string curr_time();
     }                     \
   }
 
-#define CHECK(cond)   \
+#define CHECK(cond)               \
   {                               \
     if ((cond) != EXIT_SUCCESS) { \
       std::exit(1);               \

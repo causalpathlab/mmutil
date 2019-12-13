@@ -30,9 +30,10 @@
 #define GZSTREAM_H 1
 
 // standard C++ with new header file names and std:: namespace
-#include <iostream>
-#include <fstream>
 #include <zlib.h>
+
+#include <fstream>
+#include <iostream>
 
 #ifdef GZSTREAM_NAMESPACE
 namespace GZSTREAM_NAMESPACE {
@@ -55,7 +56,8 @@ class gzstreambuf : public std::streambuf {
   int flush_buffer();
 
  public:
-  gzstreambuf() : opened(0) {
+  gzstreambuf()
+      : opened(0) {
     setp(buffer, buffer + (bufferSize - 1));
     setg(buffer + 4,   // beginning of putback area
          buffer + 4,   // read position
@@ -93,18 +95,26 @@ class gzstreambase : virtual public std::ios {
 
 class igzstream : public gzstreambase, public std::istream {
  public:
-  igzstream() : std::istream(&buf) {}
-  igzstream(const char *name, int open_mode = std::ios::in) : gzstreambase(name, open_mode), std::istream(&buf) {}
+  igzstream()
+      : std::istream(&buf) {}
+  igzstream(const char *name, int open_mode = std::ios::in)
+      : gzstreambase(name, open_mode)
+      , std::istream(&buf) {}
   gzstreambuf *rdbuf() { return gzstreambase::rdbuf(); }
   void open(const char *name, int open_mode = std::ios::in) { gzstreambase::open(name, open_mode); }
 };
 
 class ogzstream : public gzstreambase, public std::ostream {
  public:
-  ogzstream() : std::ostream(&buf) {}
-  ogzstream(const char *name, int mode = std::ios::out) : gzstreambase(name, mode), std::ostream(&buf) {}
+  ogzstream()
+      : std::ostream(&buf) {}
+  ogzstream(const char *name, int mode = std::ios::out)
+      : gzstreambase(name, mode)
+      , std::ostream(&buf) {}
   gzstreambuf *rdbuf() { return gzstreambase::rdbuf(); }
-  void open(const char *name, int open_mode = std::ios::out) { gzstreambase::open(name, open_mode); }
+  void open(const char *name, int open_mode = std::ios::out) {
+    gzstreambase::open(name, open_mode);
+  }
 };
 
 #ifdef GZSTREAM_NAMESPACE

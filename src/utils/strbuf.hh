@@ -1,6 +1,7 @@
 #include <cctype>
 #include <cstdio>
 #include <cstdlib>
+
 #include "utils/util.hh"
 
 #ifndef STRBUF_T_HH_
@@ -110,8 +111,7 @@ struct strbuf_t {
       r = -r;
     }
 #ifdef DEBUG
-    ASSERT(std::abs(std::atof(data) - r) < 1e-8,
-           data << " : " << std::atof(data) << " vs. " << r);
+    ASSERT(std::abs(std::atof(data) - r) < 1e-8, data << " : " << std::atof(data) << " vs. " << r);
 #endif
     return r;
   }
@@ -134,8 +134,7 @@ struct strbuf_t {
     }
 
 #ifdef DEBUG
-    ASSERT(std::atoi(data) == x,
-           data << " : " << std::atoi(data) << " vs. " << x);
+    ASSERT(std::atoi(data) == x, data << " : " << std::atoi(data) << " vs. " << x);
 #endif
     return x;
   }

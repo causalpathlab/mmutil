@@ -39,7 +39,7 @@ static PyObject* mmutil_read_numpy(PyObject* self, PyObject* args) {
   Index max_row, max_col;
   const std::string mtx_file(_filename);
   std::tie(Tvec, max_row, max_col) = read_matrix_market_file(mtx_file);
-  const Index num_elements = Tvec.size();
+  const Index num_elements         = Tvec.size();
 
   npy_intp dims[2] = {max_row, max_col};
 
@@ -50,17 +50,17 @@ static PyObject* mmutil_read_numpy(PyObject* self, PyObject* args) {
   TLOG("Allocating a numpy matrix");
 
   PyObject* ret = PyArray_ZEROS(2, dims, NPY_FLOAT, NPY_CORDER);
-  float* data = (float*)PyArray_DATA(ret);
+  float* data   = (float*)PyArray_DATA(ret);
 
   const Index INTERVAL = 1e6;
-  Index elem = 0;
+  Index elem           = 0;
 
   for (auto tt : Tvec) {
     Index i, j;
     float w;
     std::tie(i, j, w) = tt;
-    const Index pos = max_col * i + j;
-    data[pos] = w;
+    const Index pos   = max_col * i + j;
+    data[pos]         = w;
     if ((++elem) % INTERVAL == 0) {
       std::cerr << "\r" << std::setw(30) << "Adding " << std::setw(10) << (elem / INTERVAL)
                 << " x 1M triplets (total " << std::setw(10) << (num_elements / INTERVAL) << ")"
@@ -86,12 +86,12 @@ static PyObject* mmutil_read_triplets(PyObject* self, PyObject* args) {
   const std::string mtx_file(_filename);
   TLOG("Reading " << mtx_file);
   std::tie(Tvec, max_row, max_col) = read_matrix_market_file(mtx_file);
-  const Index num_elements = Tvec.size();
+  const Index num_elements         = Tvec.size();
   TLOG("Read    " << max_row << " x " << max_col << " with " << num_elements << " elements");
 
   PyObject* _max_row = PyLong_FromLong(max_row);
   PyObject* _max_col = PyLong_FromLong(max_col);
-  PyObject* _shape = PyList_New(2);
+  PyObject* _shape   = PyList_New(2);
   PyList_SetItem(_shape, 0, _max_row);
   PyList_SetItem(_shape, 1, _max_col);
 
@@ -99,20 +99,20 @@ static PyObject* mmutil_read_triplets(PyObject* self, PyObject* args) {
     throw std::logic_error("unable to read triplets");
   }
 
-  PyObject* rows = PyList_New(num_elements);
-  PyObject* cols = PyList_New(num_elements);
+  PyObject* rows   = PyList_New(num_elements);
+  PyObject* cols   = PyList_New(num_elements);
   PyObject* values = PyList_New(num_elements);
 
   const Index INTERVAL = 1e6;
-  Index elem = 0;
+  Index elem           = 0;
 
   for (auto tt : Tvec) {
     Index i, j;
     Scalar w;
     std::tie(i, j, w) = tt;
 
-    PyObject* ii = PyLong_FromLong(i);
-    PyObject* jj = PyLong_FromLong(j);
+    PyObject* ii  = PyLong_FromLong(i);
+    PyObject* jj  = PyLong_FromLong(j);
     PyObject* val = PyFloat_FromDouble(w);
 
     if (!ii || !jj || !val) {

@@ -2,7 +2,8 @@
 #define NET_UTIL_IMPL_HH_
 
 template <typename Data, typename Str2Int, typename Derived>
-void read_sparse_pairs(const Data& data, const Str2Int& vertex2index, Eigen::SparseMatrixBase<Derived>& Amat) {
+void read_sparse_pairs(const Data& data, const Str2Int& vertex2index,
+                       Eigen::SparseMatrixBase<Derived>& Amat) {
   Derived& out = Amat.derived();
 
   using Scalar = typename Derived::Scalar;
@@ -95,7 +96,8 @@ void build_boost_graph(const Data& data, const Str2Int& vertex2index, Graph& G) 
 template <typename Graph, typename Scalar>
 void prune_uninformative_edges(const Graph& gIn, Graph& gOut, const Scalar snCutoff) {
   // add vertices
-  for (auto u = boost::num_vertices(gOut); u <= boost::num_vertices(gIn); ++u) boost::add_vertex(gOut);
+  for (auto u = boost::num_vertices(gOut); u <= boost::num_vertices(gIn); ++u)
+    boost::add_vertex(gOut);
 
   typename Graph::edge_iterator ei, eEnd;
   for (boost::tie(ei, eEnd) = boost::edges(gIn); ei != eEnd; ++ei) {
@@ -113,7 +115,7 @@ void prune_uninformative_edges(const Graph& gIn, Graph& gOut, const Scalar snCut
         const typename Graph::vertex_descriptor bn = *bni;
 
         if ((an == bn) && (an != b) && (bn != a)) {
-          if(++sn >= snCutoff) break;
+          if (++sn >= snCutoff) break;
         }
       }
       if (sn >= snCutoff) break;
@@ -125,12 +127,11 @@ void prune_uninformative_edges(const Graph& gIn, Graph& gOut, const Scalar snCut
 }
 
 ////////////////////////////////////////////////////////////////
-std::vector<std::shared_ptr<network_component_t> > read_network_data(const std::string data_file,
-                                                                     const std::string color_file = "",
-                                                                     const bool weighted = false,
-                                                                     const double snCutoff = 0.0) {
-  using Graph =
-      boost::adjacency_list<boost::vecS, boost::vecS, boost::undirectedS, boost::no_property, boost::no_property>;
+std::vector<std::shared_ptr<network_component_t> > read_network_data(
+    const std::string data_file, const std::string color_file = "", const bool weighted = false,
+    const double snCutoff = 0.0) {
+  using Graph = boost::adjacency_list<boost::vecS, boost::vecS, boost::undirectedS,
+                                      boost::no_property, boost::no_property>;
 
   using Index = network_component_t::Index;
   using Str2Index = boost::unordered_map<std::string, Index>;
@@ -302,8 +303,8 @@ std::vector<std::shared_ptr<network_component_t> > read_network_data(const std::
     construct_edge_incidence(comp.A, comp.Mleft, comp.Mright, comp.Edges);
     TLOG("constructed " << comp.Mleft.rows() << " x " << comp.Mleft.cols() << " incidence matrix ("
                         << comp.Mleft.nonZeros() << ")");
-    TLOG("constructed " << comp.Mright.rows() << " x " << comp.Mright.cols() << " incidence matrix ("
-                        << comp.Mright.nonZeros() << ")");
+    TLOG("constructed " << comp.Mright.rows() << " x " << comp.Mright.cols()
+                        << " incidence matrix (" << comp.Mright.nonZeros() << ")");
 
     // e. assign colors to edges
     const auto numPairs = data.size();
@@ -340,7 +341,8 @@ std::vector<std::shared_ptr<network_component_t> > read_network_data(const std::
 }
 
 template <typename Derived, typename Pair>
-int construct_edge_incidence(const Eigen::SparseMatrixBase<Derived>& A, Eigen::SparseMatrixBase<Derived>& mleft,
+int construct_edge_incidence(const Eigen::SparseMatrixBase<Derived>& A,
+                             Eigen::SparseMatrixBase<Derived>& mleft,
                              Eigen::SparseMatrixBase<Derived>& mright, std::vector<Pair>& edges) {
   const Derived& Amat = A.derived();
   Derived& Mleft = mleft.derived();

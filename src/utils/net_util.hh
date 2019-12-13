@@ -1,22 +1,20 @@
 #ifndef NET_UTIL_HH_
 #define NET_UTIL_HH_
 
-#include "utils/util.hh"
-#include <eigen3/Eigen/Dense>
-#include <eigen3/Eigen/Sparse>
-#include <iostream>
-#include <random>
-
+#include <algorithm>
 #include <boost/graph/adjacency_list.hpp>
 #include <boost/graph/connected_components.hpp>
 #include <boost/lexical_cast.hpp>
 #include <boost/unordered_map.hpp>
-
-#include <algorithm>
+#include <eigen3/Eigen/Dense>
+#include <eigen3/Eigen/Sparse>
 #include <fstream>
 #include <iostream>
 #include <memory>
+#include <random>
 #include <vector>
+
+#include "utils/util.hh"
 
 struct network_component_t {
   using Scalar = float;
@@ -33,15 +31,16 @@ struct network_component_t {
 
 std::vector<std::shared_ptr<network_component_t> > read_network_data(const std::string data_file,
                                                                      const std::string color_file,
-                                                                     const bool,
-                                                                     const double);
+                                                                     const bool, const double);
 
 template <typename Derived, typename Pair>
-int construct_edge_incidence(const Eigen::SparseMatrixBase<Derived>& A, Eigen::SparseMatrixBase<Derived>& Mleft,
+int construct_edge_incidence(const Eigen::SparseMatrixBase<Derived>& A,
+                             Eigen::SparseMatrixBase<Derived>& Mleft,
                              Eigen::SparseMatrixBase<Derived>& Mright, std::vector<Pair>& edges);
 
 template <typename Data, typename Str2Int, typename Derived>
-void read_sparse_pairs(const Data& data, const Str2Int& vertex2index, Eigen::SparseMatrixBase<Derived>& Amat);
+void read_sparse_pairs(const Data& data, const Str2Int& vertex2index,
+                       Eigen::SparseMatrixBase<Derived>& Amat);
 
 template <typename Data, typename Str2Int, typename Graph>
 void build_boost_graph(const Data& data, const Str2Int& vertex2index, Graph& G);
@@ -55,7 +54,8 @@ void build_vertex2index(const Data& data, Str2Int& vertex2index, Int2Str& index2
 template <typename Derived, typename OtherDerived, typename Pair>
 int construct_incidence_matrices(const Eigen::SparseMatrixBase<Derived>& A,
                                  Eigen::SparseMatrixBase<OtherDerived>& mleft,
-                                 Eigen::SparseMatrixBase<OtherDerived>& mright, std::vector<Pair>& edges);
+                                 Eigen::SparseMatrixBase<OtherDerived>& mright,
+                                 std::vector<Pair>& edges);
 
 #include "utils/net_util_impl.hh"
 

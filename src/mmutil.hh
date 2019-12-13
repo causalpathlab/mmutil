@@ -19,8 +19,8 @@
 #define MMUTIL_HH_
 
 using Scalar = float;
-using SpMat = Eigen::SparseMatrix<Scalar, Eigen::RowMajor, std::ptrdiff_t>;
-using Index = SpMat::Index;
+using SpMat  = Eigen::SparseMatrix<Scalar, Eigen::RowMajor, std::ptrdiff_t>;
+using Index  = SpMat::Index;
 
 using Mat = typename Eigen::Matrix<Scalar, Eigen::Dynamic, Eigen::Dynamic>;
 using Vec = typename Eigen::Matrix<Scalar, Eigen::Dynamic, 1>;
@@ -46,12 +46,12 @@ auto std_argsort(const Vec& data) {
 
 template <typename TVEC>
 inline auto build_eigen_triplets(const TVEC& Tvec) {
-  using _Triplet = Eigen::Triplet<Scalar>;
+  using _Triplet    = Eigen::Triplet<Scalar>;
   using _TripletVec = std::vector<_Triplet>;
 
   _TripletVec ret(Tvec.size());
 
-  const Index INTERVAL = 1e6;
+  const Index INTERVAL      = 1e6;
   const Index max_tvec_size = Tvec.size();
 
   Index j = 0;
@@ -90,8 +90,8 @@ inline auto build_eigen_sparse(const TVEC& Tvec, const INDEX max_row, const INDE
 template <typename Derived>
 auto filter_columns(const Eigen::SparseMatrixBase<Derived>& Amat, const float column_threshold) {
   const Derived& _A = Amat.derived();
-  using Triplet = Eigen::Triplet<Scalar>;
-  using TripletVec = std::vector<Triplet>;
+  using Triplet     = Eigen::Triplet<Scalar>;
+  using TripletVec  = std::vector<Triplet>;
 
   TLOG("Filtering the columns in a matrix [" << _A.rows() << " x " << _A.cols() << "]");
 
@@ -101,7 +101,7 @@ auto filter_columns(const Eigen::SparseMatrixBase<Derived>& Amat, const float co
 
   const SpMat At = _A.transpose();
 
-  Vec onesRow = Mat::Ones(At.rows(), 1);
+  Vec onesRow   = Mat::Ones(At.rows(), 1);
   Vec CountCols = At * onesRow;
 
   // Filter columns with less than some column_threshold
@@ -114,14 +114,14 @@ auto filter_columns(const Eigen::SparseMatrixBase<Derived>& Amat, const float co
 
   TLOG("Found " << valid_cols.size() << "(with the sum >=" << column_threshold << ")");
 
-  using Triplet = Eigen::Triplet<Scalar>;
+  using Triplet    = Eigen::Triplet<Scalar>;
   using TripletVec = std::vector<Triplet>;
 
   TripletVec Tvec;
 
   const Index valid_max_cols = valid_cols.size();
-  const Index INTERVAL = 1000;
-  const Index MAX_PRINT = valid_max_cols / INTERVAL;
+  const Index INTERVAL       = 1000;
+  const Index MAX_PRINT      = valid_max_cols / INTERVAL;
 
   for (Index j = 0; j < valid_max_cols; ++j) {
     const Index k = valid_cols.at(j);  // row of At
@@ -170,12 +170,12 @@ template <typename Derived>
 Mat row_score_sd(const Eigen::SparseMatrixBase<Derived>& _xx) {
   const Derived& xx = _xx.derived();
 
-  Vec s1 = xx * Mat::Ones(xx.cols(), 1);
-  Vec s2 = xx.cwiseProduct(xx) * Mat::Ones(xx.cols(), 1);
+  Vec s1         = xx * Mat::Ones(xx.cols(), 1);
+  Vec s2         = xx.cwiseProduct(xx) * Mat::Ones(xx.cols(), 1);
   const Scalar n = xx.cols();
-  Vec ret = s2 - s1.cwiseProduct(s1 / n);
-  ret = ret / std::max(n - 1.0, 1.0);
-  ret = ret.cwiseSqrt();
+  Vec ret        = s2 - s1.cwiseProduct(s1 / n);
+  ret            = ret / std::max(n - 1.0, 1.0);
+  ret            = ret.cwiseSqrt();
 
   return ret;
 }

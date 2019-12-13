@@ -47,11 +47,11 @@ int main(const int argc, const char* argv[]) {
 
   const Index num_batches = _batch_index.size();
 
-  using Triplet = std::tuple<Index, Index, Scalar>;
-  using TripletVec = std::vector<Triplet>;
-  using StrVec = std::vector<Str>;
+  using Triplet       = std::tuple<Index, Index, Scalar>;
+  using TripletVec    = std::vector<Triplet>;
+  using StrVec        = std::vector<Str>;
   using TripletVecVec = std::vector<TripletVec>;
-  using StrVecVec = std::vector<StrVec>;
+  using StrVecVec     = std::vector<StrVec>;
 
   TripletVecVec data_batches(num_batches, TripletVec{});
   StrVecVec column_batches(num_batches, StrVec{});
@@ -62,9 +62,9 @@ int main(const int argc, const char* argv[]) {
   Index max_row, max_col;
   std::tie(Tvec, max_row, max_col) = read_matrix_market_file(mtx_file);
 
-  const Index INTERVAL = 1e6;
+  const Index INTERVAL      = 1e6;
   const Index max_tvec_size = Tvec.size();
-  Index _num_triples = 0;
+  Index _num_triples        = 0;
 
   for (auto tt : Tvec) {
     Index i, j;
@@ -94,7 +94,7 @@ int main(const int argc, const char* argv[]) {
 
   for (auto pp : _batch_index) {
     const Str batch_name(pp.first);
-    const Index _index = pp.second;
+    const Index _index     = pp.second;
     const TripletVec& data = data_batches.at(_index);
 
     const SpMat X = build_eigen_sparse(data, max_row, max_col);
@@ -111,7 +111,7 @@ int main(const int argc, const char* argv[]) {
       subset_columns.push_back(columns.at(j));
     }
 
-    Str output_mtx_file = output + "_" + batch_name + ".mtx.gz";
+    Str output_mtx_file    = output + "_" + batch_name + ".mtx.gz";
     Str output_column_file = output + "_" + batch_name + ".columns.gz";
 
     write_vector_file(output_column_file, subset_columns);

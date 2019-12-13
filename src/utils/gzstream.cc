@@ -26,9 +26,9 @@
 // Standard C++ Library".
 // ============================================================================
 
-#include <utils/gzstream.hh>
-#include <iostream>
 #include <cstring>  // for memcpy
+#include <iostream>
+#include <utils/gzstream.hh>
 
 #ifdef GZSTREAM_NAMESPACE
 namespace GZSTREAM_NAMESPACE {
@@ -46,7 +46,8 @@ gzstreambuf *gzstreambuf::open(const char *name, int open_mode) {
   if (is_open()) return (gzstreambuf *)0;
   mode = open_mode;
   // no append nor read/write mode
-  if ((mode & std::ios::ate) || (mode & std::ios::app) || ((mode & std::ios::in) && (mode & std::ios::out)))
+  if ((mode & std::ios::ate) || (mode & std::ios::app) ||
+      ((mode & std::ios::in) && (mode & std::ios::out)))
     return (gzstreambuf *)0;
   char fmode[10];
   char *fmodeptr = fmode;
