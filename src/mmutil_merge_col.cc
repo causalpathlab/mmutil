@@ -148,7 +148,7 @@ int main(const int argc, const char* argv[]) {
 
   std::vector<index_map_ptr_t> remap_to_glob_row_vec;
   std::vector<index_map_ptr_t> remap_to_glob_col_vec;
-  std::vector<index_map_ptr_t> remap_to_local_col_vec;
+  // std::vector<index_map_ptr_t> remap_to_local_col_vec;
 
   Index glob_max_col  = 0;
   Index glob_max_elem = 0;
@@ -208,9 +208,9 @@ int main(const int argc, const char* argv[]) {
     ////////////////////////////////
 
     remap_to_glob_col_vec.push_back(std::make_shared<index_map_t>());
-    remap_to_local_col_vec.push_back(std::make_shared<index_map_t>());
     index_map_t& remap_to_glob_col  = *(remap_to_glob_col_vec.back().get());
-    index_map_t& remap_to_local_col = *(remap_to_local_col_vec.back().get());
+    // remap_to_local_col_vec.push_back(std::make_shared<index_map_t>());
+    // index_map_t& remap_to_local_col = *(remap_to_local_col_vec.back().get());
 
     {
       col_counter_on_valid_rows_t counter(remap_to_glob_row);
@@ -244,18 +244,17 @@ int main(const int argc, const char* argv[]) {
       auto fun_local2glob = [&](const Index i) {
         return std::make_pair(valid_cols.at(i), glob_cols.at(i));
       };
-      auto fun_glob2local = [&](const Index i) {
-        return std::make_pair(glob_cols.at(i), valid_cols.at(i));
-      };
 
       std::vector<index_pair_t> local2glob;
-      std::vector<index_pair_t> glob2local;
-
       std::transform(idx.begin(), idx.end(), std::back_inserter(local2glob), fun_local2glob);
-      std::transform(idx.begin(), idx.end(), std::back_inserter(glob2local), fun_glob2local);
-
       remap_to_glob_col.insert(local2glob.begin(), local2glob.end());
-      remap_to_local_col.insert(glob2local.begin(), glob2local.end());
+
+      // auto fun_glob2local = [&](const Index i) {
+      //   return std::make_pair(glob_cols.at(i), valid_cols.at(i));
+      // };
+      // std::vector<index_pair_t> glob2local;
+      // std::transform(idx.begin(), idx.end(), std::back_inserter(glob2local), fun_glob2local);
+      // remap_to_local_col.insert(glob2local.begin(), glob2local.end());
 
       glob_max_col += glob_cols.size();  // cumulative
 
