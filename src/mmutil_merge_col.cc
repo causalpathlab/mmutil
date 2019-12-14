@@ -307,57 +307,8 @@ int main(const int argc, const char* argv[]) {
 
   ofs.close();
 
-  //   TLOG("Imported all the data files");
-
-  //   Str output_mtx    = output + ".mtx.gz";
-  //
-
-  //   TLOG("Output the columns --> " << output_column);
-  //   write_pair_file(output_column, univ_column_names);
-
-  //   TLOG("Number of non-zero elements = " << univ_Tvec.size());
-  //   {
-  //     ogzstream ofs(output_mtx.c_str(), std::ios::out);
-
-  //     ofs.precision(4);
-
-  //     ofs << "%%MatrixMarket matrix coordinate integer general" << std::endl;
-  //     ofs << univ_max_row << " ";
-  //     ofs << univ_max_col << " ";
-  //     ofs << univ_Tvec.size() << std::endl;
-
-  //     ///////////////////////////////////////////////
-  //     // note: matrix market uses 1-based indexing //
-  //     ///////////////////////////////////////////////
-
-  //     Index i, j;
-  //     Scalar v;
-
-  //     const Index INTERVAL    = 1e6;
-  //     const Index max_triples = univ_Tvec.size();
-  //     const Index MAX_PRINT   = (max_triples / INTERVAL);
-  //     Index _num_triples      = 0;
-
-  //     for (auto tt : univ_Tvec) {
-  //       std::tie(i, j, v) = tt;
-  //       ofs << (i + 1) << " " << (j + 1) << " " << v << std::endl;
-
-  //       if (++_num_triples % INTERVAL == 0) {
-  //         const Index _wrote = (_num_triples / INTERVAL);
-  //         std::cerr << "\r";
-  //         std::cerr << std::left << std::setfill('.') << std::setw(30) << "Writing ";
-  //         std::cerr << std::setfill(' ') << std::setw(10) << _wrote;
-  //         std::cerr << " x 1M (total " << std::setw(10) << MAX_PRINT << ")\r";
-  //         std::cerr << std::flush;
-  //       }
-  //     }
-
-  //     ofs.close();
-  //   }
-  //   TLOG("Wrote " << output_mtx << " file");
-
-  //   Str output_row = output + ".rows.gz";
-  //   write_vector_file(output_row, univ_rows);
+  const Str output_row = output + ".rows.gz";
+  write_vector_file(output_row, glob_rows);
 
   TLOG("Successfully finished");
   return EXIT_SUCCESS;
