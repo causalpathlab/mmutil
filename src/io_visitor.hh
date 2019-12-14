@@ -176,7 +176,8 @@ void visit_matrix_market_stream(IFS &ifs, FUN &fun) {
       if (col < 0 || col > max_col)
         WLOG("Ignore unexpected column" << std::setfill(' ') << std::setw(10) << col);
 
-      fun.eval(row, col, weight);
+      // convert 1-based to 0-based
+      fun.eval(row - 1, col - 1, weight);
 
       ++num_nz;
       show_progress();

@@ -30,12 +30,12 @@ struct col_counter_on_valid_rows_t {
   void set_dimension(const index_t r, const index_t c, const index_t e) {
     std::tie(max_row, max_col, max_elem) = std::make_tuple(r, c, e);
     Col_N.resize(max_col);
-    Col_N.setZero();
+    std::fill(Col_N.begin(), Col_N.end(), 0);
   }
 
   void eval(const index_t row, const index_t col, const scalar_t weight) {
     if (row < max_row && col < max_col && is_valid(row)) {
-      Col_N(col)++;
+      Col_N[col]++;
     }
   }
 
@@ -49,10 +49,14 @@ struct col_counter_on_valid_rows_t {
   Index max_col;
   Index max_elem;
 
-  Vec Col_N;
+  std::vector<index_t> Col_N;
 
   inline bool is_valid(const index_t row) { return valid_rows.count(row) > 0; }
 };
+
+///////////////////
+// global copier //
+///////////////////
 
 struct triplet_copier_t {
 
@@ -60,10 +64,10 @@ struct triplet_copier_t {
   using scalar_t    = Scalar;
   using index_map_t = std::unordered_map<index_t, index_t>;
 
-  explicit triplet_copier_t(const std::string _filename,   // output file name
-			    const index_map_t& _remap_row, // row mapper
-                            const index_map_t& _remap_col) // column mapper
-      : filename(_filename), remap_row(_remap_row), remap_col(_remap_col) {
+  explicit triplet_copier_t(ogzstream& _ofs,                // output stream
+                            const index_map_t& _remap_row,  // row mapper
+                            const index_map_t& _remap_col)  // column mapper
+      : ofs(_ofs), remap_row(_remap_row), remap_col(_remap_col) {
     max_row  = 0;
     max_col  = 0;
     max_elem = 0;
@@ -72,15 +76,7 @@ struct triplet_copier_t {
   }
 
   void set_dimension(const index_t r, const index_t c, const index_t e) {
-    // just bypass this.. since we read & write multiple times
-  }
-
-  void set_global_dimension(const index_t r, const index_t c, const index_t e) {
-    std::tie(max_row, max_col, max_elem) = std::make_tuple(r, c, e);
-
-    ofs.open(filename.c_str(), std::ios::out);
-    ofs << "%%MatrixMarket matrix coordinate integer general" << std::endl;
-    ofs << max_row << FS << max_col << FS << max_elem << std::endl;
+    // nothing
   }
 
   void eval(const index_t row, const index_t col, const scalar_t weight) {
@@ -92,23 +88,18 @@ struct triplet_copier_t {
   }
 
   void eval_end() {
-    // just bypass this..
+    // nothing
   }
 
-  void eval_global_end() { ofs.close(); }
-
-  const std::string filename;
   static constexpr char FS = ' ';
 
+  ogzstream& ofs;
   const index_map_t& remap_row;
   const index_map_t& remap_col;
 
- private:
   Index max_row;
   Index max_col;
   Index max_elem;
-
-  ogzstream ofs;
 };
 
 //////////
@@ -121,16 +112,9 @@ int main(const int argc, const char* argv[]) {
     return EXIT_FAILURE;
   }
 
-  using Str         = std::string;
-  using Str2Index   = std::unordered_map<Str, Index>;
-  using Index2Str   = std::vector<Str>;
-  using Index2Index = std::vector<Index>;
-
-  const Index NA    = -1;
-  using Triplet     = std::tuple<Index, Index, Scalar>;
-  using TripletVec  = std::vector<Triplet>;
-  using _Triplet    = Eigen::Triplet<Scalar>;
-  using _TripletVec = std::vector<_Triplet>;
+  using Str       = std::string;
+  using Str2Index = std::unordered_map<Str, Index>;
+  using Index2Str = std::vector<Str>;
 
   ////////////////////////////
   // first read global rows //
@@ -166,9 +150,19 @@ int main(const int argc, const char* argv[]) {
   std::vector<index_map_ptr_t> remap_to_glob_col_vec;
   std::vector<index_map_ptr_t> remap_to_local_col_vec;
 
-  Index glob_max_col = 0;
+  Index glob_max_col  = 0;
+  Index glob_max_elem = 0;
 
-  for (int b = 4; b < argc; b += 3) {
+  const int num_batches = (argc - 4) / 3;
+
+  TLOG("Number of batches to merge: " << num_batches << " (argc: " << argc << ")");
+
+  const Str output_column = output + ".columns.gz";
+  TLOG("Output columns first: " << output_column);
+  ogzstream ofs_columns(output_column.c_str(), std::ios::out);
+
+  for (int batch_index = 0; batch_index < num_batches; ++batch_index) {
+    const int b = 4 + batch_index * 3;
     const Str mtx_file(argv[b]);
     const Str row_file(argv[b + 1]);
     const Str col_file(argv[b + 2]);
@@ -205,18 +199,23 @@ int main(const int argc, const char* argv[]) {
       remap_to_glob_row.insert(local_glob.begin(), local_glob.end());
     }
 
+    // for (auto pp : remap_to_glob_row) {
+    //   std::cout << pp.first << " " << pp.second << std::endl;
+    // }
+
     ////////////////////////////////
     // What are relevant columns? //
     ////////////////////////////////
 
     remap_to_glob_col_vec.push_back(std::make_shared<index_map_t>());
+    remap_to_local_col_vec.push_back(std::make_shared<index_map_t>());
     index_map_t& remap_to_glob_col  = *(remap_to_glob_col_vec.back().get());
     index_map_t& remap_to_local_col = *(remap_to_local_col_vec.back().get());
 
     {
       col_counter_on_valid_rows_t counter(remap_to_glob_row);
       visit_matrix_market_file(mtx_file, counter);
-      const Vec& nnz_col = counter.Col_N;
+      const std::vector<Index>& nnz_col = counter.Col_N;
 
       std::vector<Str> column_names(0);
       CHECK(read_vector_file(col_file, column_names));
@@ -227,59 +226,91 @@ int main(const int argc, const char* argv[]) {
       std::iota(std::begin(cols), std::end(cols), 0);
       std::vector<Index> valid_cols;
       std::copy_if(cols.begin(), cols.end(), std::back_inserter(valid_cols),
-                   [&](const Index j) { return nnz_col(j) >= column_threshold; });
+                   [&](const Index j) { return nnz_col.at(j) >= column_threshold; });
 
-      TLOG("Found " << valid_cols.size() << " (with the sum >=" << column_threshold << ")");
+      TLOG("Found " << valid_cols.size() << " (with the nnz >=" << column_threshold << ")");
+
+      std::vector<Index> nnz_col_valid;
+      std::transform(valid_cols.begin(), valid_cols.end(), std::back_inserter(nnz_col_valid),
+                     [&](const Index j) { return nnz_col.at(j); });
+
+      glob_max_elem += std::accumulate(nnz_col_valid.begin(), nnz_col_valid.end(), 0);
 
       std::vector<Index> idx(valid_cols.size());
+      std::iota(idx.begin(), idx.end(), 0);
       std::vector<Index> glob_cols(valid_cols.size());
       std::iota(glob_cols.begin(), glob_cols.end(), glob_max_col);
 
-      auto fun_local2glob = [&](const Index j) {
-        return std::make_pair(valid_cols.at(j), glob_cols.at(j));
+      auto fun_local2glob = [&](const Index i) {
+        return std::make_pair(valid_cols.at(i), glob_cols.at(i));
       };
-      auto fun_glob2local = [&](const Index j) {
-        return std::make_pair(glob_cols.at(j), valid_cols.at(j));
+      auto fun_glob2local = [&](const Index i) {
+        return std::make_pair(glob_cols.at(i), valid_cols.at(i));
       };
+
       std::vector<index_pair_t> local2glob;
       std::vector<index_pair_t> glob2local;
 
       std::transform(idx.begin(), idx.end(), std::back_inserter(local2glob), fun_local2glob);
-      std::transform(idx.begin(), idx.end(), std::back_inserter(local2glob), fun_glob2local);
+      std::transform(idx.begin(), idx.end(), std::back_inserter(glob2local), fun_glob2local);
 
       remap_to_glob_col.insert(local2glob.begin(), local2glob.end());
       remap_to_local_col.insert(glob2local.begin(), glob2local.end());
 
       glob_max_col += glob_cols.size();  // cumulative
+
+      for (Index v : valid_cols) {
+        ofs_columns << column_names.at(v) << " " << (batch_index + 1) << std::endl;
+      }
     }
 
     TLOG("Created valid column names");
   }
+
+  ofs_columns.close();
+
+  TLOG("[" << std::setw(10) << glob_max_row                  //
+           << " x " << std::setw(10) << glob_max_col << "]"  //
+           << std::setw(20) << glob_max_elem);
+
+  // TLOG(remap_to_glob_col.size());
 
   //////////////////////////////
   // create merged data files //
   //////////////////////////////
 
   TLOG("Start writing the merged data set");
+  const Str output_mtx = output + ".mtx.gz";
 
-  for (int b = 4; b < argc; b += 3) {
+  TLOG("Output matrix market file: " << output_mtx);
+  ogzstream ofs(output_mtx.c_str(), std::ios::out);
+
+  // write the header
+  {
+    ofs << "%%MatrixMarket matrix coordinate integer general" << std::endl;
+    ofs << glob_max_row << " " << glob_max_col << " " << glob_max_elem << std::endl;
+  }
+
+  for (int batch_index = 0; batch_index < num_batches; ++batch_index) {
+    const int b = 4 + batch_index * 3;
     const Str mtx_file(argv[b]);
-    const Str row_file(argv[b + 1]);
-    const Str col_file(argv[b + 2]);
 
     TLOG("MTX : " << mtx_file);
-    TLOG("ROW : " << row_file);
-    TLOG("COL : " << col_file);
 
-    const Index batch_index              = (b - 4);
     const index_map_t& remap_to_glob_row = *(remap_to_glob_row_vec.at(batch_index).get());
     const index_map_t& remap_to_glob_col = *(remap_to_glob_col_vec.at(batch_index).get());
+    // const index_map_t& remap_to_local_col = *(remap_to_local_col_vec.at(batch_index).get());
+
+    triplet_copier_t copier(ofs, remap_to_glob_row, remap_to_glob_col);
+    visit_matrix_market_file(mtx_file, copier);
   }
+
+  ofs.close();
 
   //   TLOG("Imported all the data files");
 
   //   Str output_mtx    = output + ".mtx.gz";
-  //   Str output_column = output + ".columns.gz";
+  //
 
   //   TLOG("Output the columns --> " << output_column);
   //   write_pair_file(output_column, univ_column_names);
