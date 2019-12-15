@@ -19,6 +19,9 @@ int main(const int argc, const char* argv[]) {
   const Str membership_file(argv[2]);
   const Str output(argv[3]);
 
+  ERR_RET(!file_exists(mtx_file), "missing the mtx file");
+  ERR_RET(!file_exists(membership_file), "missing the mtx file");
+
   std::vector<Str> membership;
   std::vector<Str> columns;
   std::unordered_map<Str, Str> _column_membership;

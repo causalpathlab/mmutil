@@ -14,6 +14,7 @@ _compile_args = [
     '-DNDEBUG',
     '-DNPY_NO_DEPRECATED_API',
     '-Wno-sign-compare',
+    '-Wno-maybe-uninitialized',
     '-Wno-unused-variable'
 ]
 
@@ -29,7 +30,7 @@ mmutil_module = Extension(
 
 
 with open("README.md", "r") as fh:
-    long_description = fh.read()
+    _description = fh.read()
 
 setup(
     name="mmutil",
@@ -37,7 +38,7 @@ setup(
     author="Yongjin Park",
     author_email="yongjin.peter.park@gmail.com",
     description='matrix market utility',
-    long_description=long_description,
+    long_description=_description,
     long_description_content_type="text/markdown",
     python_requires='>=3.5',
     ext_modules=[mmutil_module],

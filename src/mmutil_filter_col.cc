@@ -39,6 +39,9 @@ int main(const int argc, const char* argv[]) {
   const Str column_file(argv[3]);
   const Str output(argv[4]);
 
+  ERR_RET(!file_exists(mtx_file), "missing the mtx file");
+  ERR_RET(!file_exists(column_file), "missing the column file");
+
   std::vector<Str> column_names(0);
   CHECK(read_vector_file(column_file, column_names));
 

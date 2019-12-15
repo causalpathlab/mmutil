@@ -1,4 +1,8 @@
-bin_PROGRAMS = mmutil_merge_col mmutil_filter_row mmutil_filter_col mmutil_distribute_col mmutil_spectral_col
+bin_PROGRAMS = mmutil_merge_col \
+	mmutil_filter_row \
+	mmutil_filter_col \
+	mmutil_distribute_col \
+	mmutil_spectral_col
 
 math = svd.hh
 
@@ -7,7 +11,7 @@ common = mmutil.hh mmutil_stat.hh \
 	utils/gzstream.hh utils/gzstream.cc \
 	utils/util.hh utils/strbuf.hh
 
-mmutil_merge_col_SOURCES = mmutil_merge_col.cc $(common)
+mmutil_merge_col_SOURCES = mmutil_run_merge_col.cc mmutil_merge_col.hh $(common)
 
 mmutil_filter_row_SOURCES = mmutil_filter_row.cc $(common)
 

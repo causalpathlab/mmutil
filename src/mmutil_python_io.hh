@@ -38,6 +38,12 @@ static PyObject* mmutil_read_numpy(PyObject* self, PyObject* args) {
   TripletVec Tvec;
   Index max_row, max_col;
   const std::string mtx_file(_filename);
+
+  if(!file_exists(mtx_file)) {
+    PyErr_SetString(PyExc_TypeError, "file does not exist");
+    return NULL;
+  }
+
   std::tie(Tvec, max_row, max_col) = read_matrix_market_file(mtx_file);
   const Index num_elements         = Tvec.size();
 
@@ -148,14 +154,6 @@ static PyObject* mmutil_read_triplets(PyObject* self, PyObject* args) {
   PyDict_SetItem(ret, _col_key, cols);
   PyDict_SetItem(ret, _val_key, values);
   PyDict_SetItem(ret, _dim_key, _shape);
-
-  // PyObject* ret = PyList_New(5);
-  // PyList_SetItem(ret, 0, rows);
-  // PyList_SetItem(ret, 1, cols);
-  // PyList_SetItem(ret, 2, values);
-  // PyList_SetItem(ret, 3, _max_row);
-  // PyList_SetItem(ret, 4, _max_col);
-  // TLOG("Return 3 lists (N=" << num_elements << ") with sizes: " << max_row << " x " << max_col);
 
   return ret;
 }

@@ -3,6 +3,7 @@
 #include <cctype>
 #include <eigen3/Eigen/Core>
 #include <eigen3/Eigen/Sparse>
+#include <filesystem>
 #include <fstream>
 #include <iomanip>
 #include <iostream>
@@ -19,9 +20,26 @@
 #ifndef UTIL_IO_HH_
 #define UTIL_IO_HH_
 
+bool file_exists(std::string filename) {
+  return std::filesystem::exists(std::filesystem::path(filename));
+}
+
+bool all_files_exist(std::vector<std::string> filenames) {
+  bool ret = true;
+  for (auto f : filenames) {
+    if (!file_exists(f)) {
+      TLOG(std::left << std::setw(10) << "Missing: " << std::setw(30) << f);
+      ret = false;
+    }
+    TLOG(std::left << std::setw(10) << "Found: " << std::setw(30) << f);
+  }
+  return ret;
+}
+
 /////////////////////////////////
 // common utility for data I/O //
 /////////////////////////////////
+
 bool is_file_gz(const std::string filename) {
   if (filename.size() < 3) return false;
   return filename.substr(filename.size() - 3) == ".gz";
@@ -36,6 +54,10 @@ std::shared_ptr<igzstream> open_igzstream(const std::string filename) {
   std::shared_ptr<igzstream> ret(new igzstream(filename.c_str(), std::ios::in));
   return ret;
 }
+
+///////////////
+// I/O pairs //
+///////////////
 
 template <typename IFS, typename T1, typename T2>
 auto read_pair_stream(IFS &ifs, std::unordered_map<T1, T2> &in) {
@@ -96,15 +118,15 @@ auto read_vector_file(const std::string filename, std::vector<T> &in) {
 // read matrix market triplets and construct sparse matrix //
 /////////////////////////////////////////////////////////////
 
-struct triplet_reader_t {
+template <typename T>
+struct _triplet_reader_t {
 
-  using scalar_t = float;
-  using index_t  = std::ptrdiff_t;
+  using scalar_t   = float;
+  using index_t    = std::ptrdiff_t;
+  using Triplet    = T;
+  using TripletVec = std::vector<T>;
 
-  using Triplet    = std::tuple<index_t, index_t, scalar_t>;
-  using TripletVec = std::vector<Triplet>;
-
-  explicit triplet_reader_t(TripletVec &_tvec) : Tvec(_tvec) {
+  explicit _triplet_reader_t(TripletVec &_tvec) : Tvec(_tvec) {
     max_row  = 0;
     max_col  = 0;
     max_elem = 0;
@@ -119,7 +141,7 @@ struct triplet_reader_t {
   }
 
   void eval(const index_t row, const index_t col, const scalar_t weight) {
-    Tvec.push_back(Triplet(row, col, weight));
+    Tvec.push_back(T(row, col, weight));
   }
 
   void eval_end() {
@@ -135,11 +157,14 @@ struct triplet_reader_t {
   TripletVec &Tvec;
 };
 
-template <typename IFS>
-inline auto read_matrix_market_stream(IFS &ifs) {
-  triplet_reader_t::TripletVec Tvec;
+using std_triplet_t          = std::tuple<std::ptrdiff_t, std::ptrdiff_t, float>;
+using std_triplet_reader_t   = _triplet_reader_t<std_triplet_t>;
+using eigen_triplet_reader_t = _triplet_reader_t<Eigen::Triplet<float> >;
 
-  triplet_reader_t reader(Tvec);
+template <typename IFS, typename READER>
+inline auto _read_matrix_market_stream(IFS &ifs) {
+  typename READER::TripletVec Tvec;
+  READER reader(Tvec);
 
   visit_matrix_market_stream(ifs, reader);
 
@@ -149,9 +174,10 @@ inline auto read_matrix_market_stream(IFS &ifs) {
   return std::make_tuple(Tvec, max_row, max_col);
 }
 
-auto read_matrix_market_file(const std::string filename) {
-  triplet_reader_t::TripletVec Tvec;
-  triplet_reader_t reader(Tvec);
+template <typename READER>
+inline auto _read_matrix_market_file(const std::string filename) {
+  typename READER::TripletVec Tvec;
+  READER reader(Tvec);
 
   visit_matrix_market_file(filename, reader);
 
@@ -159,6 +185,24 @@ auto read_matrix_market_file(const std::string filename) {
   auto max_col = reader.max_col;
 
   return std::make_tuple(Tvec, max_row, max_col);
+}
+
+inline auto read_matrix_market_file(const std::string filename) {
+  return _read_matrix_market_file<std_triplet_reader_t>(filename);
+}
+
+inline auto read_eigen_matrix_market_file(const std::string filename) {
+  return _read_matrix_market_file<eigen_triplet_reader_t>(filename);
+}
+
+template <typename IFS>
+inline auto read_matrix_market_stream(IFS& ifs) {
+  return _read_matrix_market_stream<IFS, std_triplet_reader_t>(ifs);
+}
+
+template <typename IFS>
+inline auto read_eigen_matrix_market_stream(IFS& ifs) {
+  return _read_matrix_market_stream<IFS, eigen_triplet_reader_t>(ifs);
 }
 
 /////////////////////////////////////////
@@ -223,7 +267,7 @@ struct triplet_copier_remapped_rows_t {
  private:
   index_t find_new_max_row() const {
     index_t ret = 0;
-    std::for_each(std::execution::par, remap.begin(), remap.end(),  //
+    std::for_each(remap.begin(), remap.end(),  //
                   [&ret](const auto &tt) {
                     index_t _old, _new;
                     std::tie(_old, _new) = tt;
@@ -291,7 +335,7 @@ struct triplet_copier_remapped_cols_t {
  private:
   index_t find_new_max_col() const {
     index_t ret = 0;
-    std::for_each(std::execution::par, remap.begin(), remap.end(),  //
+    std::for_each(remap.begin(), remap.end(),  //
                   [&ret](const auto &tt) {
                     index_t _old, _new;
                     std::tie(_old, _new) = tt;

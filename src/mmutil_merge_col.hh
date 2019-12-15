@@ -1,20 +1,18 @@
 #include "mmutil.hh"
-#include "mmutil_spectral.hh"
 
-void print_help(const char* fname) {
-  std::cerr << "Merge the columns of sparse matrices matching rows" << std::endl;
-  std::cerr << std::endl;
-  std::cerr << fname << " master_row count_threshold output" << std::endl;
-  std::cerr << " { mtx[1] row[1] column[1] mtx[2] row[2] column[2] ... }" << std::endl;
-  std::cerr << std::endl;
-  std::cerr << "master_row  : A file that contains the names of rows." << std::endl;
-  std::cerr << "count_threshold : Set the minimum sum of rows per column" << std::endl;
-  std::cerr << "output          : Header string for the output fileset." << std::endl;
-  std::cerr << "mtx[i]          : i-th matrix market format file" << std::endl;
-  std::cerr << "row[i]          : i-th row file" << std::endl;
-  std::cerr << "column[i]       : i-th column file" << std::endl;
-  std::cerr << std::endl;
-}
+#ifndef MMUTIL_MERGE_COL_HH_
+#define MMUTIL_MERGE_COL_HH_
+
+int run_merge_col(const std::string glob_row_file,           //
+                  const Index column_threshold,              //
+                  const std::string output,                  //
+                  const std::vector<std::string> mtx_files,  //
+                  const std::vector<std::string> row_files,  //
+                  const std::vector<std::string> col_files);
+
+////////////////////////////////
+// lightweight column counter //
+////////////////////////////////
 
 struct col_counter_on_valid_rows_t {
   using index_t     = Index;
@@ -34,7 +32,7 @@ struct col_counter_on_valid_rows_t {
   }
 
   void eval(const index_t row, const index_t col, const scalar_t weight) {
-    if (row < max_row && col < max_col && is_valid(row)) {
+    if (row < max_row && col < max_col && is_valid(row) && std::abs(weight) > EPS) {
       Col_N[col]++;
     }
   }
@@ -43,6 +41,7 @@ struct col_counter_on_valid_rows_t {
     // TLOG("Found " << Col_N.sum() << std::endl);
   }
 
+  static constexpr scalar_t EPS = 1e-8;
   const index_map_t& valid_rows;
 
   Index max_row;
@@ -58,15 +57,15 @@ struct col_counter_on_valid_rows_t {
 // global copier //
 ///////////////////
 
-struct triplet_copier_t {
+struct glob_triplet_copier_t {
 
   using index_t     = Index;
   using scalar_t    = Scalar;
   using index_map_t = std::unordered_map<index_t, index_t>;
 
-  explicit triplet_copier_t(ogzstream& _ofs,                // output stream
-                            const index_map_t& _remap_row,  // row mapper
-                            const index_map_t& _remap_col)  // column mapper
+  explicit glob_triplet_copier_t(ogzstream& _ofs,                // output stream
+                                 const index_map_t& _remap_row,  // row mapper
+                                 const index_map_t& _remap_col)  // column mapper
       : ofs(_ofs), remap_row(_remap_row), remap_col(_remap_col) {
     max_row  = 0;
     max_col  = 0;
@@ -102,30 +101,32 @@ struct triplet_copier_t {
   Index max_elem;
 };
 
-//////////
-// main //
-//////////
+#include "mmutil_merge_col.hh"
 
-int main(const int argc, const char* argv[]) {
-  if (argc < 7) {
-    print_help(argv[0]);
-    return EXIT_FAILURE;
-  }
+int run_merge_col(const std::string glob_row_file, const Index column_threshold,
+                  const std::string output, const std::vector<std::string> mtx_files,
+                  const std::vector<std::string> row_files,
+                  const std::vector<std::string> col_files) {
 
   using Str       = std::string;
   using Str2Index = std::unordered_map<Str, Index>;
   using Index2Str = std::vector<Str>;
 
+  const Index num_batches = mtx_files.size();
+  ASSERT(row_files.size() == num_batches, "different # of row files");
+  ASSERT(col_files.size() == num_batches, "different # of col files");
+
+  ERR_RET(!file_exists(glob_row_file), "missing the global row file");
+  ERR_RET(!all_files_exist(mtx_files), "missing in the mtx files");
+  ERR_RET(!all_files_exist(row_files), "missing in the row files");
+  ERR_RET(!all_files_exist(col_files), "missing in the col files");
+
   ////////////////////////////
   // first read global rows //
   ////////////////////////////
 
-  const Str glob_row_file(argv[1]);
-  const Scalar column_threshold = boost::lexical_cast<Scalar>(argv[2]);
-  const Str output(argv[3]);
-
   Index2Str glob_rows(0);
-  CHECK(read_vector_file(glob_row_file, glob_rows));
+  CHK_ERR_RET(read_vector_file(glob_row_file, glob_rows), "unable to read the rows");
   TLOG("Read the global row names: " << glob_row_file << " " << glob_rows.size() << " rows");
 
   Str2Index glob_positions;
@@ -153,19 +154,15 @@ int main(const int argc, const char* argv[]) {
   Index glob_max_col  = 0;
   Index glob_max_elem = 0;
 
-  const int num_batches = (argc - 4) / 3;
-
-  TLOG("Number of batches to merge: " << num_batches << " (argc: " << argc << ")");
-
   const Str output_column = output + ".columns.gz";
   TLOG("Output columns first: " << output_column);
   ogzstream ofs_columns(output_column.c_str(), std::ios::out);
 
   for (int batch_index = 0; batch_index < num_batches; ++batch_index) {
-    const int b = 4 + batch_index * 3;
-    const Str mtx_file(argv[b]);
-    const Str row_file(argv[b + 1]);
-    const Str col_file(argv[b + 2]);
+
+    const Str mtx_file = mtx_files.at(batch_index);
+    const Str row_file = row_files.at(batch_index);
+    const Str col_file = col_files.at(batch_index);
 
     TLOG("MTX : " << mtx_file);
     TLOG("ROW : " << row_file);
@@ -208,7 +205,7 @@ int main(const int argc, const char* argv[]) {
     ////////////////////////////////
 
     remap_to_glob_col_vec.push_back(std::make_shared<index_map_t>());
-    index_map_t& remap_to_glob_col  = *(remap_to_glob_col_vec.back().get());
+    index_map_t& remap_to_glob_col = *(remap_to_glob_col_vec.back().get());
     // remap_to_local_col_vec.push_back(std::make_shared<index_map_t>());
     // index_map_t& remap_to_local_col = *(remap_to_local_col_vec.back().get());
 
@@ -291,16 +288,15 @@ int main(const int argc, const char* argv[]) {
   }
 
   for (int batch_index = 0; batch_index < num_batches; ++batch_index) {
-    const int b = 4 + batch_index * 3;
-    const Str mtx_file(argv[b]);
 
+    const Str mtx_file = mtx_files.at(batch_index);
     TLOG("MTX : " << mtx_file);
 
     const index_map_t& remap_to_glob_row = *(remap_to_glob_row_vec.at(batch_index).get());
     const index_map_t& remap_to_glob_col = *(remap_to_glob_col_vec.at(batch_index).get());
     // const index_map_t& remap_to_local_col = *(remap_to_local_col_vec.at(batch_index).get());
 
-    triplet_copier_t copier(ofs, remap_to_glob_row, remap_to_glob_col);
+    glob_triplet_copier_t copier(ofs, remap_to_glob_row, remap_to_glob_col);
     visit_matrix_market_file(mtx_file, copier);
   }
 
@@ -312,3 +308,5 @@ int main(const int argc, const char* argv[]) {
   TLOG("Successfully finished");
   return EXIT_SUCCESS;
 }
+
+#endif

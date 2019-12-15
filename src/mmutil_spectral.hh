@@ -12,7 +12,7 @@ SpMat normalize_to_median(const Eigen::SparseMatrixBase<Derived>& xx) {
   std::vector<typename Derived::Scalar> _deg = std_vector(deg);
   TLOG("search the median degree [0, " << _deg.size() << ")");
   std::nth_element(_deg.begin(), _deg.begin() + _deg.size() / 2, _deg.end());
-  const Scalar median = _deg[_deg.size() / 2];
+  const Scalar median = std::max(_deg[_deg.size() / 2], static_cast<Scalar>(1.0));
 
   TLOG("Targeting the median degree " << median);
 
@@ -44,6 +44,11 @@ auto take_spectrum_laplacian(                     //
   using Scalar = typename Derived::Scalar;
   using Index  = typename Derived::Index;
   using Mat    = typename Eigen::Matrix<Scalar, Eigen::Dynamic, Eigen::Dynamic>;
+
+  {
+    Mat xx = Mat(X0);
+    std::cout << xx.cwiseProduct(xx).sum() << std::endl;
+  }
 
   const Index max_col = X0.cols();
   const Index max_row = X0.rows();

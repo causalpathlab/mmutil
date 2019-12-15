@@ -1,12 +1,15 @@
 #include "mmutil_python.hh"
 
 #include "mmutil_python_io.hh"
+#include "mmutil_python_merge.hh"
 #include "mmutil_python_spectral.hh"
 
 static PyMethodDef mmutil_methods[] = {
     {"read_triplets", (PyCFunction)mmutil_read_triplets, METH_VARARGS, _read_triplets_desc},
     {"read_numpy", (PyCFunction)mmutil_read_numpy, METH_VARARGS, _read_numpy_desc},
     {"take_svd", (PyCFunction)mmutil_take_svd, METH_VARARGS | METH_KEYWORDS, _take_svd_desc},
+    {"merge_files", (PyCFunction)mmutil_merge_files, METH_VARARGS | METH_KEYWORDS,
+     _merge_files_desc},
     {NULL, NULL, 0, NULL},
 };
 

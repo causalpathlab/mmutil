@@ -30,4 +30,17 @@ auto make_argv(const PyObject* args) {
   return argv;
 }
 
+inline std::string pyobj_string(PyObject* obj) {
+  return PyBytes_AsString(PyUnicode_AsEncodedString(obj, "UTF-8", "strict"));
+}
+
+std::vector<std::string> pyobj_string_vector(PyObject* listObj) {
+  const int _sz = PyList_Size(listObj);
+  std::vector<std::string> ret;
+  for (int i = 0; i < _sz; ++i) {
+    ret.push_back(pyobj_string(PyList_GetItem(listObj, i)));
+  }
+  return ret;
+}
+
 #endif

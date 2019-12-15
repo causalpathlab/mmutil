@@ -29,17 +29,17 @@ int main(const int argc, const char* argv[]) {
   // Read the data //
   ///////////////////
 
-  using Triplet    = std::tuple<Index, Index, Scalar>;
-  using TripletVec = std::vector<Triplet>;
-  TripletVec Tvec;
+  eigen_triplet_reader_t::TripletVec Tvec;
   Index max_row, max_col;
-  std::tie(Tvec, max_row, max_col) = read_matrix_market_file(mtx_file);
+  std::tie(Tvec, max_row, max_col) = read_eigen_matrix_market_file(mtx_file);
 
-  TLOG(max_row << " x " << max_col);
+  TLOG(max_row << " x " << max_col << ", M = " << Tvec.size());
 
-  const SpMat X0 = build_eigen_sparse(Tvec, max_row, max_col);
+  SpMat X0(max_row, max_col);
+  X0.reserve(Tvec.size());
+  X0.setFromTriplets(Tvec.begin(), Tvec.end());
+
   TLOG("Normalize columns ...");
-
   Mat U, V, D;
   std::tie(U, V, D) = take_spectrum_laplacian(X0, tau_scale, rank, iter);
 

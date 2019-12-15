@@ -52,6 +52,9 @@ int main(const int argc, const char* argv[]) {
   const Str feature_file(argv[3]);
   const Str output(argv[4]);
 
+  ERR_RET(!file_exists(mtx_file), "missing the mtx file");
+  ERR_RET(!file_exists(feature_file), "missing the feature file");
+
   ////////////////////////////////
   // First calculate row scores //
   ////////////////////////////////

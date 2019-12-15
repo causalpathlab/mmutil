@@ -31,6 +31,10 @@ const char* _take_svd_desc =
 
 static PyObject* mmutil_take_svd(PyObject* self, PyObject* args, PyObject* keywords);
 
+////////////////////
+// implementation //
+////////////////////
+
 static PyObject* mmutil_take_svd(PyObject* self, PyObject* args, PyObject* keywords) {
   static const char* kwlist[] = {"file", "rank", "tau", "iter", NULL};
 
@@ -56,11 +60,9 @@ static PyObject* mmutil_take_svd(PyObject* self, PyObject* args, PyObject* keywo
   TLOG("Rank:              " << rank);
   TLOG("RandAlg iteration: " << iterations);
 
-  using Triplet    = std::tuple<Index, Index, Scalar>;
-  using TripletVec = std::vector<Triplet>;
-  TripletVec Tvec;
+  eigen_triplet_reader_t::TripletVec Tvec;
   Index max_row, max_col;
-  std::tie(Tvec, max_row, max_col) = read_matrix_market_file(mtx_file);
+  std::tie(Tvec, max_row, max_col) = read_eigen_matrix_market_file(mtx_file);
 
   TLOG(max_row << " x " << max_col);
 
@@ -69,7 +71,9 @@ static PyObject* mmutil_take_svd(PyObject* self, PyObject* args, PyObject* keywo
     return NULL;
   }
 
-  const SpMat X0 = build_eigen_sparse(Tvec, max_row, max_col);
+  SpMat X0(max_row, max_col);
+  X0.reserve(Tvec.size());
+  X0.setFromTriplets(Tvec.begin(), Tvec.end());
 
   Mat _U, _V, _D;
   std::tie(_U, _V, _D) = take_spectrum_laplacian(X0, tau_scale, rank, iterations);
@@ -93,10 +97,11 @@ static PyObject* mmutil_take_svd(PyObject* self, PyObject* args, PyObject* keywo
 
   PyObject* ret    = PyDict_New();
   PyObject* _u_key = PyUnicode_FromString("u");
-  PyDict_SetItem(ret, _u_key, U);
   PyObject* _v_key = PyUnicode_FromString("v");
-  PyDict_SetItem(ret, _v_key, V);
   PyObject* _d_key = PyUnicode_FromString("d");
+
+  PyDict_SetItem(ret, _u_key, U);
+  PyDict_SetItem(ret, _v_key, V);
   PyDict_SetItem(ret, _d_key, D);
 
   return ret;
