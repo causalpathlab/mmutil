@@ -171,17 +171,19 @@ void visit_matrix_market_stream(IFS &ifs, FUN &fun) {
 
       state = S_EOL;
 
-      if (row < 0 || row > max_row)
+      if (row <= 0 || row >= max_row) {
         WLOG("Ignore unexpected row" << std::setfill(' ') << std::setw(10) << row);
-      if (col < 0 || col > max_col)
+        continue;
+      } else if (col <= 0 || col >= max_col) {
         WLOG("Ignore unexpected column" << std::setfill(' ') << std::setw(10) << col);
+        continue;
+      } else {
+        // convert 1-based to 0-based
+        fun.eval(row - 1, col - 1, weight);
+        ++num_nz;
+      }
 
-      // convert 1-based to 0-based
-      fun.eval(row - 1, col - 1, weight);
-
-      ++num_nz;
       show_progress();
-
       num_cols = 0;
 
     } else if (isspace(c) && strbuf.size() > 0) {
