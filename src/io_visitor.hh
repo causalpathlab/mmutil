@@ -171,10 +171,10 @@ void visit_matrix_market_stream(IFS &ifs, FUN &fun) {
 
       state = S_EOL;
 
-      if (row <= 0 || row >= max_row) {
+      if (row <= 0 || row > max_row) {
         WLOG("Ignore unexpected row" << std::setfill(' ') << std::setw(10) << row);
         continue;
-      } else if (col <= 0 || col >= max_col) {
+      } else if (col <= 0 || col > max_col) {
         WLOG("Ignore unexpected column" << std::setfill(' ') << std::setw(10) << col);
         continue;
       } else {
