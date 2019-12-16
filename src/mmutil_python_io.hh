@@ -20,6 +20,14 @@ const char* _read_triplets_desc =
     "Output: A dictionary with the following keys:\n"
     "       `rows`, `columns`, `values`, `shape`\n";
 
+const char* _write_numpy_desc =
+    "Write triplets from a numpy array.\n"
+    "\n"
+    "Input: A numpy matrix (C-ordered, row-major)\n"
+    "\n"
+    "Output: A matrix market file name.  The function treats it gzipped\n"
+    "       if the file name ends with `.gz`\n";
+
 static PyObject* mmutil_read_numpy(PyObject* self, PyObject* args);
 
 static PyObject* mmutil_read_triplets(PyObject* self, PyObject* args);
@@ -27,6 +35,21 @@ static PyObject* mmutil_read_triplets(PyObject* self, PyObject* args);
 /////////////////////
 // implementations //
 /////////////////////
+
+static PyObject* mmutil_write_numpy(PyObject* self, PyObject* args) {
+  PyArrayObject* array = NULL;
+  char* _filename;
+
+  if (!PyArg_ParseTuple(args, "O!s",
+			&PyArray_Type,
+			&array,
+			&_filename)) {
+    return NULL;
+  }
+
+  // TODO
+
+}
 
 static PyObject* mmutil_read_numpy(PyObject* self, PyObject* args) {
   char* _filename;
@@ -39,7 +62,7 @@ static PyObject* mmutil_read_numpy(PyObject* self, PyObject* args) {
   Index max_row, max_col;
   const std::string mtx_file(_filename);
 
-  if(!file_exists(mtx_file)) {
+  if (!file_exists(mtx_file)) {
     PyErr_SetString(PyExc_TypeError, "file does not exist");
     return NULL;
   }

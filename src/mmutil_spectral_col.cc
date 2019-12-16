@@ -39,7 +39,6 @@ int main(const int argc, const char* argv[]) {
   X0.reserve(Tvec.size());
   X0.setFromTriplets(Tvec.begin(), Tvec.end());
 
-  TLOG("Normalize columns ...");
   Mat U, V, D;
   std::tie(U, V, D) = take_spectrum_laplacian(X0, tau_scale, rank, iter);
 

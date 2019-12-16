@@ -39,18 +39,17 @@ class RandomizedSVD {
 
     ASSERT(rank > 0, "Must be at least rank = 1");
 
-    qq.resize(nr, rank);
-    U.resize(nr, rank);
-    V.resize(nc, rank);
-    D.resize(rank, 1);
-
+    qq.resize(nr, rank + oversample);
     qq.setZero();
     rand_subspace_iteration(X, rank + oversample);
-    qq = qq.leftCols(rank);
 
-    T B = qq.transpose() * X;
+    qq.conservativeResize(Eigen::NoChange, rank);
 
-    if (verbose) TLOG("Final svd on [" << B.rows() << "x" << B.cols() << "]");
+    T B(rank, nc);
+
+    if (verbose) TLOG("Final svd on [" << B.rows() << " x " << B.cols() << "]");
+
+    B = qq.transpose() * X;
 
     // Eigen::JacobiSVD<T> svd;
     Eigen::BDCSVD<T> svd;
@@ -58,9 +57,15 @@ class RandomizedSVD {
 
     if (verbose) TLOG("Construct U, D, V");
 
+    U.resize(nr, rank);
+    V.resize(nc, rank);
+    D.resize(rank, 1);
+
     U = (qq * svd.matrixU()).block(0, 0, nr, rank);
     V = svd.matrixV().block(0, 0, nc, rank);
     D = svd.singularValues().head(rank);
+
+    if (verbose) TLOG("Done: RandomizedSVD.compute()");
   }
 
   void set_verbose() { verbose = true; }
@@ -76,17 +81,17 @@ class RandomizedSVD {
   bool verbose;
 
   template <typename Derived>
-  void rand_subspace_iteration(Eigen::MatrixBase<Derived> const& X, const int size) {
+  void rand_subspace_iteration(Eigen::MatrixBase<Derived> const& X, const int rank_and_oversample) {
     using Index    = typename Derived::Index;
     const Index nr = X.rows();
     const Index nc = X.cols();
 
-    T L(nr, size);
-    T Q = T::Random(nc, size);
+    T L(nr, rank_and_oversample);
+    T Q = T::Random(nc, rank_and_oversample);
 
     // Use LU normalization since QR is too slow in Eigen
 
-    Eigen::FullPivLU<T> lu1(nr, size);
+    Eigen::FullPivLU<T> lu1(nr, rank_and_oversample);
     Eigen::FullPivLU<T> lu2(nc, nr);
 
     if (verbose) TLOG("Find Q in randomized svd...");
@@ -96,18 +101,20 @@ class RandomizedSVD {
 
       lu1.compute(X * Q);
       L.setIdentity();
-      L.block(0, 0, nr, size).template triangularView<Eigen::StrictlyLower>() = lu1.matrixLU();
+      L.block(0, 0, nr, rank_and_oversample).template triangularView<Eigen::StrictlyLower>() =
+          lu1.matrixLU();
 
       lu2.compute(X.transpose() * L);
       Q.setIdentity();
-      Q.block(0, 0, nc, size).template triangularView<Eigen::StrictlyLower>() = lu2.matrixLU();
+      Q.block(0, 0, nc, rank_and_oversample).template triangularView<Eigen::StrictlyLower>() =
+          lu2.matrixLU();
 
       if (verbose) TLOG("Done : LU iteration " << (i + 1));
     }
 
     Eigen::ColPivHouseholderQR<T> qr(X * Q);
-    qq = qr.householderQ() * T::Identity(nr, size);
-    if (verbose) TLOG("Found Q");
+    qq = qr.householderQ() * T::Identity(nr, rank_and_oversample);
+    if (verbose) TLOG("Found Q [" << qq.rows() << " x " << qq.cols() << "]");
   }
 };
 

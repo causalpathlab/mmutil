@@ -28,11 +28,11 @@ SpMat normalize_to_median(const Eigen::SparseMatrixBase<Derived>& xx) {
 }
 
 template <typename Derived>
-auto take_spectrum_laplacian(                     //
-    const Eigen::SparseMatrixBase<Derived>& _X0,  // sparse data
-    const float tau_scale,                        // regularization
-    const int rank,                               // desired rank
-    const int iter = 5                            // should be enough
+std::tuple<Mat, Mat, Mat> take_spectrum_laplacian(  //
+    const Eigen::SparseMatrixBase<Derived>& _X0,    // sparse data
+    const float tau_scale,                          // regularization
+    const int rank,                                 // desired rank
+    const int iter = 5                              // should be enough
 ) {
   /////////////////////////////////////////////
   // 1. construct normalized scaled data     //
@@ -44,11 +44,6 @@ auto take_spectrum_laplacian(                     //
   using Scalar = typename Derived::Scalar;
   using Index  = typename Derived::Index;
   using Mat    = typename Eigen::Matrix<Scalar, Eigen::Dynamic, Eigen::Dynamic>;
-
-  {
-    Mat xx = Mat(X0);
-    std::cout << xx.cwiseProduct(xx).sum() << std::endl;
-  }
 
   const Index max_col = X0.cols();
   const Index max_row = X0.rows();
@@ -68,11 +63,14 @@ auto take_spectrum_laplacian(                     //
   TLOG("Running SVD on X [" << XtTau.rows() << " x " << XtTau.cols() << "]");
 
   RandomizedSVD<Mat> svd(rank, iter);
+  svd.set_verbose();
   svd.compute(XtTau);
 
-  const Mat U = svd.matrixU();
-  const Mat V = svd.matrixV();
-  const Vec D = svd.singularValues();
+  TLOG("Done SVD");
+
+  Mat U = svd.matrixU();
+  Mat V = svd.matrixV();
+  Vec D = svd.singularValues();
 
   return std::make_tuple(U, V, D);
 }
