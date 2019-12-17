@@ -265,7 +265,7 @@ static PyObject* mmutil_write_numpy(PyObject* self, PyObject* args) {
 
   TLOG("Finished");
 
-  Py_DECREF((PyObject*)input_contig);
+  Py_XDECREF((PyObject*)input_contig);
 
   PyObject* ret = PyDict_New();
   return ret;
