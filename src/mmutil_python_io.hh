@@ -189,13 +189,13 @@ void _write_numpy_array_stream(OFS& ofs, const T* data, const Index nrow, const 
 #endif
       ofs << SEP << data[pos];
 
-      if ((++elem) % INTERVAL == 0) {
-        std::cerr << "\r" << std::setw(30) << "Writing " << std::setw(10) << (elem / INTERVAL)
-                  << " x 1M elements (total " << std::setw(10) << (num_elements / INTERVAL) << ")"
-                  << std::flush;
-      }
+      // if ((++elem) % INTERVAL == 0) {
+      //   std::cerr << "\r" << std::setw(30) << "Writing " << std::setw(10) << (elem / INTERVAL)
+      //             << " x 1M elements (total " << std::setw(10) << (num_elements / INTERVAL) << ")"
+      //             << std::flush;
+      // }
     }
-    std::cerr << std::endl;
+    // std::cerr << std::endl;
     ofs << std::endl;
   }
 }
