@@ -3,7 +3,7 @@
 #ifndef MMUTIL_PYTHON_IO_HH_
 #define MMUTIL_PYTHON_IO_HH_
 
-const char* _read_numpy_desc =
+const char* _read_triplets_numpy_desc =
     "Read triplets from a matrix market file and save to a numpy array.\n"
     "\n"
     "Input: A matrix market file name.  The function treats it gzipped\n"
@@ -28,7 +28,7 @@ const char* _write_numpy_desc =
     "Output: A matrix market file name.  The function treats it gzipped\n"
     "       if the file name ends with `.gz`\n";
 
-static PyObject* mmutil_read_numpy(PyObject* self, PyObject* args);
+static PyObject* mmutil_read_triplets_numpy(PyObject* self, PyObject* args);
 
 static PyObject* mmutil_read_triplets(PyObject* self, PyObject* args);
 
@@ -36,22 +36,7 @@ static PyObject* mmutil_read_triplets(PyObject* self, PyObject* args);
 // implementations //
 /////////////////////
 
-static PyObject* mmutil_write_numpy(PyObject* self, PyObject* args) {
-  PyArrayObject* array = NULL;
-  char* _filename;
-
-  if (!PyArg_ParseTuple(args, "O!s",
-			&PyArray_Type,
-			&array,
-			&_filename)) {
-    return NULL;
-  }
-
-  // TODO
-
-}
-
-static PyObject* mmutil_read_numpy(PyObject* self, PyObject* args) {
+static PyObject* mmutil_read_triplets_numpy(PyObject* self, PyObject* args) {
   char* _filename;
 
   if (!PyArg_ParseTuple(args, "s", &_filename)) {
@@ -178,6 +163,111 @@ static PyObject* mmutil_read_triplets(PyObject* self, PyObject* args) {
   PyDict_SetItem(ret, _val_key, values);
   PyDict_SetItem(ret, _dim_key, _shape);
 
+  return ret;
+}
+
+template <typename OFS, typename T>
+void _write_numpy_array_stream(OFS& ofs, const T* data, const Index nrow, const Index ncol,
+                               const Index num_elements) {
+
+  const std::string SEP(" ");
+  const Index INTERVAL = 1e6;
+  Index elem           = 0;
+
+  for (Index r = 0; r < nrow; ++r) {
+    {
+      const Index pos = r * ncol;
+#ifdef DEBUG
+      ASSERT(pos >= 0 && pos < num_elements, "miscalculated #rows and #cols");
+#endif
+      ofs << data[r * ncol];
+    }
+    for (Index c = 1; c < ncol; ++c) {
+      const Index pos = r * ncol + c;
+#ifdef DEBUG
+      ASSERT(pos >= 0 && pos < num_elements, "miscalculated #rows and #cols");
+#endif
+      ofs << SEP << data[pos];
+
+      if ((++elem) % INTERVAL == 0) {
+        std::cerr << "\r" << std::setw(30) << "Writing " << std::setw(10) << (elem / INTERVAL)
+                  << " x 1M elements (total " << std::setw(10) << (num_elements / INTERVAL) << ")"
+                  << std::flush;
+      }
+    }
+    std::cerr << std::endl;
+    ofs << std::endl;
+  }
+}
+
+template <typename T>
+void _write_numpy_array_file(const std::string _filename, const T* data, const Index nrow,
+                             const Index ncol, const Index num_elements) {
+
+  if (file_exists(_filename)) {
+    WLOG("File exists: " << _filename);
+  }
+
+  if (is_file_gz(_filename)) {
+    ogzstream ofs(_filename.c_str(), std::ios::out);
+    _write_numpy_array_stream(ofs, data, nrow, ncol, num_elements);
+    ofs.close();
+
+  } else {
+    std::ofstream ofs(_filename.c_str(), std::ios::out);
+    _write_numpy_array_stream(ofs, data, nrow, ncol, num_elements);
+    ofs.close();
+  }
+}
+
+static PyObject* mmutil_write_numpy(PyObject* self, PyObject* args) {
+  PyArrayObject* input = NULL;
+  char* _filename      = NULL;
+
+  if (!PyArg_ParseTuple(args, "O!s", &PyArray_Type, &input, &_filename)) {
+    return NULL;
+  }
+
+  if (PyArray_NDIM(input) != 2) {
+    PyErr_SetString(PyExc_TypeError, "This only supports 2d arrays");
+    return NULL;
+  }
+
+  npy_intp* dims           = PyArray_DIMS(input);
+  const Index nrow         = dims[0];
+  const Index ncol         = dims[1];
+  const Index num_elements = PyArray_SIZE(input);
+
+  PyArrayObject* input_contig = PyArray_GETCONTIGUOUS((PyArrayObject*)input);
+
+  TLOG("number of elements = " << num_elements);
+
+  const int _npy_type = input->descr->type_num;
+
+  switch (_npy_type) {
+    case NPY_DOUBLE:
+      _write_numpy_array_file(std::string(_filename),               //
+                              (double*)PyArray_DATA(input_contig),  //
+                              nrow, ncol,                           //
+                              num_elements);                        //
+      break;
+    case NPY_FLOAT:
+      _write_numpy_array_file(std::string(_filename),              //
+                              (float*)PyArray_DATA(input_contig),  //
+                              nrow, ncol,                          //
+                              num_elements);                       //
+      break;
+    default:
+      TLOG("need to implement other data types: \'" <<  //
+           input->descr->type << "'");
+      break;
+  }
+
+  TLOG("Finished");
+
+  Py_DECREF((PyObject*)input_contig);
+
+  PyObject* ret = PyDict_New();
   return ret;
 }
 
