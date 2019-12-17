@@ -21,12 +21,12 @@ const char* _read_triplets_desc =
     "       `rows`, `columns`, `values`, `shape`\n";
 
 const char* _write_numpy_desc =
-    "Write triplets from a numpy array.\n"
+    "Write a numpy array to a file.\n"
     "\n"
     "Input: A numpy matrix (C-ordered, row-major)\n"
     "\n"
-    "Output: A matrix market file name.  The function treats it gzipped\n"
-    "       if the file name ends with `.gz`\n";
+    "Output: A (dense) matrix file name.\n"
+    "The function treats it gzipped if the name ends with `.gz`\n";
 
 static PyObject* mmutil_read_triplets_numpy(PyObject* self, PyObject* args);
 
