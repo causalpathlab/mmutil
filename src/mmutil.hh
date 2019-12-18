@@ -32,6 +32,14 @@ inline auto std_vector(const EigenVec& eigen_vec) {
   return ret;
 }
 
+template <typename EigenVec, typename StdVec>
+inline void std_vector(const EigenVec& eigen_vec, StdVec& ret) {
+  ret.resize(eigen_vec.size());
+  using T = typename StdVec::value_type;
+  for (typename EigenVec::Index j = 0; j < eigen_vec.size(); ++j)
+    ret[j] = static_cast<T>(eigen_vec(j));
+}
+
 template <typename Vec>
 auto std_argsort(const Vec& data) {
   using Index = std::ptrdiff_t;

@@ -196,12 +196,12 @@ inline auto read_eigen_matrix_market_file(const std::string filename) {
 }
 
 template <typename IFS>
-inline auto read_matrix_market_stream(IFS& ifs) {
+inline auto read_matrix_market_stream(IFS &ifs) {
   return _read_matrix_market_stream<IFS, std_triplet_reader_t>(ifs);
 }
 
 template <typename IFS>
-inline auto read_eigen_matrix_market_stream(IFS& ifs) {
+inline auto read_eigen_matrix_market_stream(IFS &ifs) {
   return _read_matrix_market_stream<IFS, eigen_triplet_reader_t>(ifs);
 }
 
@@ -222,8 +222,9 @@ struct triplet_copier_remapped_rows_t {
   using index_map_t = std::unordered_map<index_t, index_t>;
 
   explicit triplet_copier_remapped_rows_t(const std::string _filename,  // output filename
-                                          const index_map_t &_remap)    // valid rows
-      : filename(_filename), remap(_remap) {
+                                          const index_map_t &_remap,    // valid rows
+                                          const index_t _nnz)
+      : filename(_filename), remap(_remap), NNZ(_nnz) {
     max_row  = 0;
     max_col  = 0;
     max_elem = 0;
@@ -234,11 +235,14 @@ struct triplet_copier_remapped_rows_t {
     std::tie(max_row, max_col, max_elem) = std::make_tuple(r, c, e);
     TLOG("Input size: " << max_row << " x " << max_col);
 
-    const index_t new_max_row = find_new_max_row();
+    const index_t new_max_row  = find_new_max_row();
+    const index_t new_max_elem = NNZ;
+    TLOG("Reducing " << max_elem << " -> " << new_max_elem);
+    elem_check = 0;
 
     ofs.open(filename.c_str(), std::ios::out);
     ofs << "%%MatrixMarket matrix coordinate integer general" << std::endl;
-    ofs << new_max_row << FS << max_col << FS << max_elem << std::endl;
+    ofs << new_max_row << FS << max_col << FS << new_max_elem << std::endl;
     TLOG("Start copying data on the selected rows: N = " << remap.size());
   }
 
@@ -247,17 +251,26 @@ struct triplet_copier_remapped_rows_t {
       const index_t i = remap.at(row) + 1;  // fix zero-based to one-based
       const index_t j = col + 1;            // fix zero-based to one-based
       ofs << i << FS << j << FS << weight << std::endl;
+      elem_check++;
     }
   }
 
   void eval_end() {
     ofs.close();
+    if (elem_check != NNZ) {
+      WLOG("The number of non-zero elements is different:");
+      WLOG(elem_check << " vs. " << NNZ);
+    }
     TLOG("Finished copying data");
   }
 
   const std::string filename;
-  ogzstream ofs;
   const index_map_t &remap;
+  const index_t NNZ;
+
+  index_t elem_check;
+
+  ogzstream ofs;
   static constexpr char FS = ' ';
 
   index_t max_row;
@@ -290,8 +303,10 @@ struct triplet_copier_remapped_cols_t {
 
   using index_map_t = std::unordered_map<index_t, index_t>;
 
-  explicit triplet_copier_remapped_cols_t(const std::string _filename, const index_map_t &_remap)
-      : filename(_filename), remap(_remap) {
+  explicit triplet_copier_remapped_cols_t(const std::string _filename,  //
+                                          const index_map_t &_remap,    //
+                                          const index_t _nnz)
+      : filename(_filename), remap(_remap), NNZ(_nnz) {
     max_row  = 0;
     max_col  = 0;
     max_elem = 0;
@@ -302,11 +317,16 @@ struct triplet_copier_remapped_cols_t {
     std::tie(max_row, max_col, max_elem) = std::make_tuple(r, c, e);
     TLOG("Input size: " << max_row << " x " << max_col);
 
-    const index_t new_max_col = find_new_max_col();
+    const index_t new_max_col  = find_new_max_col();
+    const index_t new_max_elem = NNZ;
+
+    TLOG("Reducing " << max_elem << " -> " << new_max_elem);
+
+    elem_check = 0;
 
     ofs.open(filename.c_str(), std::ios::out);
     ofs << "%%MatrixMarket matrix coordinate integer general" << std::endl;
-    ofs << max_row << FS << new_max_col << FS << max_elem << std::endl;
+    ofs << max_row << FS << new_max_col << FS << new_max_elem << std::endl;
     TLOG("Start copying data on the selected cols: N = " << remap.size());
   }
 
@@ -315,17 +335,26 @@ struct triplet_copier_remapped_cols_t {
       const index_t i = row + 1;            // fix zero-based to one-based
       const index_t j = remap.at(col) + 1;  // fix zero-based to one-based
       ofs << i << FS << j << FS << weight << std::endl;
+      elem_check++;
     }
   }
 
   void eval_end() {
     ofs.close();
+    if (elem_check != NNZ) {
+      WLOG("The number of non-zero elements is different:");
+      WLOG(elem_check << " vs. " << NNZ);
+    }
     TLOG("Finished copying data");
   }
 
   const std::string filename;
-  ogzstream ofs;
   const index_map_t &remap;
+  const index_t NNZ;
+
+  index_t elem_check;
+
+  ogzstream ofs;
   static constexpr char FS = ' ';
 
   index_t max_row;

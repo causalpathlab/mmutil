@@ -30,7 +30,9 @@ inline auto compute_mtx_stat_file(const std::string filename) {
   ret     = ret / std::max(n - 1.0, 1.0);
   ret     = ret.cwiseSqrt();
 
-  return std::make_tuple(ret, collector.max_row, collector.max_col);
+  std::vector<Index> Nvec;
+  std_vector(collector.Row_N, Nvec);
+  return std::make_tuple(ret, Nvec, collector.max_row, collector.max_col);
 }
 
 //////////
@@ -61,7 +63,8 @@ int main(const int argc, const char* argv[]) {
 
   Vec row_scores;
   Index max_row, max_col;
-  std::tie(row_scores, max_row, max_col) = compute_mtx_stat_file(mtx_file);
+  std::vector<Index> Nvec;
+  std::tie(row_scores, Nvec, max_row, max_col) = compute_mtx_stat_file(mtx_file);
 
   /////////////////////
   // Prioritize rows //
@@ -87,12 +90,14 @@ int main(const int argc, const char* argv[]) {
 
   std::vector<Index> index_top(Nout);
   std::iota(std::begin(index_top), std::end(index_top), 0);
+  Index NNZ = 0;
   std::for_each(index_top.begin(), index_top.end(),  //
                 [&](const Index i) {
                   const Index j   = order.at(i);
                   out_features[i] = features.at(j);
                   out_scores[i]   = row_scores(j);
                   remap[j]        = i;
+                  NNZ += Nvec.at(j);
                 });
 
   std::vector<Index> index_all(max_row);
@@ -105,7 +110,7 @@ int main(const int argc, const char* argv[]) {
                 });
 
   Str output_mtx_file = output + ".mtx.gz";
-  copier_t copier(output_mtx_file, remap);
+  copier_t copier(output_mtx_file, remap, NNZ);
   visit_matrix_market_file(mtx_file, copier);
 
   Str output_feature_file    = output + ".rows.gz";

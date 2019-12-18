@@ -22,7 +22,9 @@ struct row_stat_collector_t {
   void set_dimension(const index_t r, const index_t c, const index_t e) {
     std::tie(max_row, max_col, max_elem) = std::make_tuple(r, c, e);
 
+#ifdef DEBUG
     TLOG("Start reading a list of triplets");
+#endif
 
     Row_S1.resize(max_row);
     Row_S1.setZero();
@@ -40,7 +42,11 @@ struct row_stat_collector_t {
     }
   }
 
-  void eval_end() { TLOG("Finished reading a list of triplets"); }
+  void eval_end() {
+#ifdef DEBUG
+    TLOG("Finished reading a list of triplets");
+#endif
+  }
 
   Index max_row;
   Index max_col;
@@ -81,7 +87,11 @@ struct col_stat_collector_t {
     }
   }
 
-  void eval_end() { TLOG("Finished reading a list of triplets"); }
+  void eval_end() {
+#ifdef DEBUG
+    TLOG("Finished reading a list of triplets");
+#endif
+  }
 
   Index max_row;
   Index max_col;
@@ -104,7 +114,9 @@ struct row_col_stat_collector_t {
   void set_dimension(const index_t r, const index_t c, const index_t e) {
     std::tie(max_row, max_col, max_elem) = std::make_tuple(r, c, e);
 
+#ifdef DEBUG
     TLOG("Start reading a list of triplets");
+#endif
 
     Row_S1.resize(max_row);
     Row_S1.setZero();
@@ -133,7 +145,11 @@ struct row_col_stat_collector_t {
     }
   }
 
-  void eval_end() { TLOG("Finished reading a list of triplets"); }
+  void eval_end() {
+#ifdef DEBUG
+    TLOG("Finished reading a list of triplets");
+#endif
+  }
 
   Index max_row;
   Index max_col;

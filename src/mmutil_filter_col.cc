@@ -67,11 +67,13 @@ int main(const int argc, const char* argv[]) {
   std::vector<Str> out_column_names;
   std::vector<Index> index_out(valid_cols.size());
   std::vector<Scalar> out_scores;
-  Index i = 0;
+  Index i   = 0;
+  Index NNZ = 0;
   for (Index old_index : valid_cols) {
     remap[old_index] = i;
     out_column_names.push_back(column_names.at(old_index));
     out_scores.push_back(nnz_col(old_index));
+    NNZ += nnz_col(old_index);
     ++i;
   }
 
@@ -89,7 +91,7 @@ int main(const int argc, const char* argv[]) {
 
   write_vector_file(output_score_file, out_scores);
 
-  copier_t copier(output_mtx_file, remap);
+  copier_t copier(output_mtx_file, remap, NNZ);
   visit_matrix_market_file(mtx_file, copier);
 
   return EXIT_SUCCESS;
