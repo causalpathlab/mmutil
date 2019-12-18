@@ -1,6 +1,7 @@
 m4_include([aux/ax_check_zlib.m4])
 m4_include([aux/ax_openmp.m4])
 m4_include([aux/ax_boost_base.m4])
+m4_include([aux/ax_cxx_compile_stdcxx.m4])
 
 AC_INIT([mmutil],[0.1],[ypp@csail.mit.edu])
 AC_CONFIG_SRCDIR([config.h.in])
@@ -13,8 +14,8 @@ AC_C_RESTRICT
 AC_TYPE_SIZE_T
 AC_TYPE_UINT32_T
 
-user_CFLAGS="${user_CFLAGS} -std=c++17" # to use parallel execution
-user_LDFLAGS="${user_LDFLAGS} -ltbb"
+AX_CXX_COMPILE_STDCXX([17], noext, mandatory)
+user_LDFLAGS="${user_LDFLAGS} -ltbb" # to use intel TBB
 
 # Checks for programs.
 AC_PROG_CXX

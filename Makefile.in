@@ -89,7 +89,9 @@ subdir = .
 ACLOCAL_M4 = $(top_srcdir)/aclocal.m4
 am__aclocal_m4_deps = $(top_srcdir)/aux/ax_check_zlib.m4 \
 	$(top_srcdir)/aux/ax_openmp.m4 \
-	$(top_srcdir)/aux/ax_boost_base.m4 $(top_srcdir)/configure.ac
+	$(top_srcdir)/aux/ax_boost_base.m4 \
+	$(top_srcdir)/aux/ax_cxx_compile_stdcxx.m4 \
+	$(top_srcdir)/configure.ac
 am__configure_deps = $(am__aclocal_m4_deps) $(CONFIGURE_DEPENDENCIES) \
 	$(ACLOCAL_M4)
 DIST_COMMON = $(srcdir)/Makefile.am $(top_srcdir)/configure \
@@ -227,6 +229,7 @@ ECHO_T = @ECHO_T@
 EGREP = @EGREP@
 EXEEXT = @EXEEXT@
 GREP = @GREP@
+HAVE_CXX17 = @HAVE_CXX17@
 INSTALL = @INSTALL@
 INSTALL_DATA = @INSTALL_DATA@
 INSTALL_PROGRAM = @INSTALL_PROGRAM@
