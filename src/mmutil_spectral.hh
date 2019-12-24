@@ -1,31 +1,9 @@
 #include "mmutil.hh"
 #include "svd.hh"
+#include "mmutil_normalize.hh"
 
 #ifndef MMUTIL_SPECTRAL_HH_
 #define MMUTIL_SPECTRAL_HH_
-
-template <typename Derived>
-SpMat normalize_to_median(const Eigen::SparseMatrixBase<Derived>& xx) {
-
-  const Derived& X                           = xx.derived();
-  const Vec deg                              = X.transpose() * Mat::Ones(X.cols(), 1);
-  std::vector<typename Derived::Scalar> _deg = std_vector(deg);
-  TLOG("search the median degree [0, " << _deg.size() << ")");
-  std::nth_element(_deg.begin(), _deg.begin() + _deg.size() / 2, _deg.end());
-  const Scalar median = std::max(_deg[_deg.size() / 2], static_cast<Scalar>(1.0));
-
-  TLOG("Targeting the median degree " << median);
-
-  const Vec degInverse = deg.unaryExpr([&median](const Scalar x) {
-    const Scalar _one = 1.0;
-    return median / std::max(x, _one);
-  });
-
-  SpMat ret(X.rows(), X.cols());
-  ret = X * degInverse.asDiagonal();
-
-  return ret;
-}
 
 template <typename Derived>
 std::tuple<Mat, Mat, Mat> take_spectrum_laplacian(  //
