@@ -1,6 +1,6 @@
 m4_include([aux/ax_check_zlib.m4])
 m4_include([aux/ax_openmp.m4])
-m4_include([aux/ax_boost_base.m4])
+# m4_include([aux/ax_boost_base.m4])
 m4_include([aux/ax_cxx_compile_stdcxx.m4])
 
 AC_INIT([mmutil],[0.1],[yongjin.peter.park@gmail.com])
@@ -35,7 +35,7 @@ AC_CHECK_HEADERS([zlib.h])
 # Checks for library functions.
 AC_CHECK_LIB([m],[exp])
 AX_CHECK_ZLIB([],[])
-AX_BOOST_BASE([1.45.0])
+# AX_BOOST_BASE([1.45.0])
 
 AM_INIT_AUTOMAKE([-Wall foreign subdir-objects])
 

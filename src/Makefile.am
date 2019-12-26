@@ -11,12 +11,17 @@ bin_PROGRAMS = mmutil_merge_col \
 
 math = svd.hh
 
-common = mmutil.hh mmutil_stat.hh \
+common = mmutil.hh \
+    mmutil_stat.hh \
     eigen_util.hh \
     std_util.hh \
     io.hh io_visitor.hh \
-    utils/gzstream.hh utils/gzstream.cc \
-    utils/util.hh utils/strbuf.hh
+    utils/gzstream.hh \
+    utils/gzstream.cc \
+    utils/util.hh \
+    utils/tuple_util.hh \
+    utils/progress.hh \
+    utils/strbuf.hh
 
 hnswlib = ext/hnswlib/bruteforce.h \
     ext/hnswlib/hnswalg.h \

@@ -16,6 +16,7 @@
 #include "io_visitor.hh"
 #include "utils/gzstream.hh"
 #include "utils/strbuf.hh"
+#include "utils/tuple_util.hh"
 #include "utils/util.hh"
 
 #ifndef UTIL_IO_HH_
@@ -447,6 +448,39 @@ void write_matrix_market_file(const std::string filename, T &out) {
 /////////////////////////////////////
 // frequently used output routines //
 /////////////////////////////////////
+
+template <typename OFS, typename Vec>
+void write_tuple_stream(OFS &ofs, const Vec &vec) {
+
+  int i = 0;
+
+  auto _print = [&ofs, &i](const auto x) {
+    if (i > 0) ofs << " ";
+    ofs << x;
+    i++;
+  };
+
+  ofs.precision(4);
+
+  for (auto pp : vec) {
+    i = 0;
+    func_apply(_print, std::move(pp));
+    ofs << std::endl;
+  }
+}
+
+template <typename Vec>
+void write_tuple_file(const std::string filename, const Vec &out) {
+  if (is_file_gz(filename)) {
+    ogzstream ofs(filename.c_str(), std::ios::out);
+    write_tuple_stream(ofs, out);
+    ofs.close();
+  } else {
+    std::ofstream ofs(filename.c_str(), std::ios::out);
+    write_tuple_stream(ofs, out);
+    ofs.close();
+  }
+}
 
 template <typename OFS, typename Vec>
 void write_pair_stream(OFS &ofs, const Vec &vec) {

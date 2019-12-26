@@ -26,8 +26,8 @@ const char* module_desc =
 static struct PyModuleDef mmutil_module = {
     PyModuleDef_HEAD_INIT,
     "mmutil",     // name of module
-    NULL,         // module documentation
-    module_desc,  // size of per-interpreter
+    module_desc,  // module documentation
+    -1,           // size of per-interpreter
     mmutil_methods,
 };
 
