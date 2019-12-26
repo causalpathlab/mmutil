@@ -25,8 +25,9 @@
 
 #include <queue>
 #include <vector>
-
-#include <string.h>
+#include <cstring>
+#include <iostream>
+#include <fstream>
 
 namespace hnswlib {
     typedef size_t labeltype;

@@ -15,11 +15,19 @@ static PyMethodDef mmutil_methods[] = {
     {NULL, NULL, 0, NULL},
 };
 
+const char* module_desc =
+    "* read_triplets\n"
+    "* read_triplets_numpy\n"
+    "* write_numpy\n"
+    "* take_svd\n"
+    "* merge_files\n"
+    "\n";
+
 static struct PyModuleDef mmutil_module = {
     PyModuleDef_HEAD_INIT,
-    "mmutil",  // name of module
-    NULL,      // module documentation
-    -1,        // size of per-interpreter
+    "mmutil",     // name of module
+    NULL,         // module documentation
+    module_desc,  // size of per-interpreter
     mmutil_methods,
 };
 

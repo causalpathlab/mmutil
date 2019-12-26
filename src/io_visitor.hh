@@ -194,9 +194,9 @@ void visit_matrix_market_stream(IFS &ifs, FUN &fun) {
       state = S_WORD;
     }
   }
-  std::cerr << std::endl;
+  if (num_nz >= INTERVAL) std::cerr << std::endl;
   fun.eval_end();
-}
+} // End of the visit
 
 template <typename FUN>
 void visit_matrix_market_file(const std::string filename, FUN &fun) {

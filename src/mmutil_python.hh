@@ -4,6 +4,7 @@
 
 #include <string>
 #include <vector>
+#include <cstdlib>
 
 #include "io.hh"
 #include "mmutil.hh"

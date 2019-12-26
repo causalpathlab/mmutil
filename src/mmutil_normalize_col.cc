@@ -32,7 +32,7 @@ int main(const int argc, const char* argv[]) {
 
   using Str = std::string;
 
-  const Scalar tau_scale = boost::lexical_cast<Scalar>(argv[1]);
+  const Scalar tau_scale = std::stof(argv[1]);
   const Str mtx_file(argv[2]);
   const Str out_file(argv[3]);
 

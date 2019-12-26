@@ -18,8 +18,8 @@ int main(const int argc, const char* argv[]) {
 
   using Str = std::string;
 
-  const Scalar tau_scale = boost::lexical_cast<Scalar>(argv[1]);
-  const Index rank       = boost::lexical_cast<Index>(argv[2]);
+  const Scalar tau_scale = std::stof(argv[1]);
+  const Index rank       = std::stoi(argv[2]);
   const Str mtx_file(argv[3]);
   const Str output(argv[4]);
 
@@ -29,15 +29,7 @@ int main(const int argc, const char* argv[]) {
   // Read the data //
   ///////////////////
 
-  eigen_triplet_reader_t::TripletVec Tvec;
-  Index max_row, max_col;
-  std::tie(Tvec, max_row, max_col) = read_eigen_matrix_market_file(mtx_file);
-
-  TLOG(max_row << " x " << max_col << ", M = " << Tvec.size());
-
-  SpMat X0(max_row, max_col);
-  X0.reserve(Tvec.size());
-  X0.setFromTriplets(Tvec.begin(), Tvec.end());
+  SpMat X0 = build_eigen_sparse(mtx_file);
 
   Mat U, V, D;
   std::tie(U, V, D) = take_spectrum_laplacian(X0, tau_scale, rank, iter);

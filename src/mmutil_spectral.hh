@@ -1,6 +1,6 @@
 #include "mmutil.hh"
-#include "svd.hh"
 #include "mmutil_normalize.hh"
+#include "svd.hh"
 
 #ifndef MMUTIL_SPECTRAL_HH_
 #define MMUTIL_SPECTRAL_HH_

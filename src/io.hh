@@ -12,6 +12,7 @@
 #include <unordered_map>
 #include <vector>
 
+#include "eigen_util.hh"
 #include "io_visitor.hh"
 #include "utils/gzstream.hh"
 #include "utils/strbuf.hh"
@@ -203,6 +204,24 @@ inline auto read_matrix_market_stream(IFS &ifs) {
 template <typename IFS>
 inline auto read_eigen_matrix_market_stream(IFS &ifs) {
   return _read_matrix_market_stream<IFS, eigen_triplet_reader_t>(ifs);
+}
+
+//////////////////////////////////////////////////
+// a convenient wrapper for eigen sparse matrix //
+//////////////////////////////////////////////////
+
+using SpMat = Eigen::SparseMatrix<eigen_triplet_reader_t::scalar_t,  //
+                                  Eigen::RowMajor,                   //
+                                  std::ptrdiff_t>;
+
+SpMat build_eigen_sparse(const std::string mtx_file) {
+
+  eigen_triplet_reader_t::TripletVec Tvec;
+  SpMat::Index max_row, max_col;
+  std::tie(Tvec, max_row, max_col) = read_eigen_matrix_market_file(mtx_file);
+
+  TLOG(max_row << " x " << max_col << ", M = " << Tvec.size());
+  return build_eigen_sparse(Tvec, max_row, max_col);
 }
 
 /////////////////////////////////////////

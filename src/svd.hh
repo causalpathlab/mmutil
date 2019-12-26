@@ -81,7 +81,9 @@ class RandomizedSVD {
   bool verbose;
 
   template <typename Derived>
-  void rand_subspace_iteration(Eigen::MatrixBase<Derived> const& X, const int rank_and_oversample) {
+  void rand_subspace_iteration(Eigen::MatrixBase<Derived> const& X,  // data matrix
+                               const int rank_and_oversample) {      // rank + alpha
+
     using Index    = typename Derived::Index;
     const Index nr = X.rows();
     const Index nc = X.cols();

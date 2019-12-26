@@ -27,8 +27,8 @@ int main(const int argc, const char* argv[]) {
     return EXIT_FAILURE;
   }
 
-  using Str                     = std::string;
-  const Scalar column_threshold = boost::lexical_cast<Scalar>(argv[1]);
+  using Str                    = std::string;
+  const Index column_threshold = std::stoi(argv[1]);
   const Str mtx_file(argv[2]);
   const Str column_file(argv[3]);
   const Str output(argv[4]);

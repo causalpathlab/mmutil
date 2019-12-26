@@ -4,7 +4,7 @@
 #ifndef MMUTIL_FILTER_COL_HH_
 #define MMUTIL_FILTER_COL_HH_
 
-void filter_col_by_nnz(const Scalar column_threshold,  //
+void filter_col_by_nnz(const Index column_threshold,   //
                        const std::string mtx_file,     //
                        const std::string column_file,  //
                        const std::string output) {
@@ -28,8 +28,10 @@ void filter_col_by_nnz(const Scalar column_threshold,  //
   std::vector<Index> cols(max_col);
   std::iota(std::begin(cols), std::end(cols), 0);
   std::vector<Index> valid_cols;
+  const Scalar _cutoff = static_cast<Scalar>(column_threshold);
+
   std::copy_if(cols.begin(), cols.end(), std::back_inserter(valid_cols),
-               [&](const Index j) { return nnz_col(j) >= column_threshold; });
+               [&](const Index j) { return nnz_col(j) >= _cutoff; });
 
   TLOG("Found " << valid_cols.size() << " (with the nnz >=" << column_threshold << ")");
   copier_t::index_map_t remap;

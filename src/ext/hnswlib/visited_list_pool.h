@@ -1,7 +1,7 @@
 #pragma once
 
 #include <mutex>
-#include <string.h>
+#include <cstring>
 
 namespace hnswlib {
     typedef unsigned short int vl_type;

@@ -26,7 +26,7 @@ int main(const int argc, const char* argv[]) {
   using Str = std::string;
 
   const Str glob_row_file(argv[1]);
-  const Index column_threshold = boost::lexical_cast<Scalar>(argv[2]);
+  const Index column_threshold = std::stoi(argv[2]);
   const Str output(argv[3]);
   const int num_batches = (argc - 4) / 3;
 

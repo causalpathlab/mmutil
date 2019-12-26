@@ -20,6 +20,7 @@ struct row_stat_collector_t {
   }
 
   void set_dimension(const index_t r, const index_t c, const index_t e) {
+
     std::tie(max_row, max_col, max_elem) = std::make_tuple(r, c, e);
 
 #ifdef DEBUG
@@ -67,9 +68,12 @@ struct col_stat_collector_t {
   }
 
   void set_dimension(const index_t r, const index_t c, const index_t e) {
+
     std::tie(max_row, max_col, max_elem) = std::make_tuple(r, c, e);
 
+#ifdef DEBUG
     TLOG("Start reading a list of triplets");
+#endif
 
     Col_S1.resize(max_col);
     Col_S1.setZero();

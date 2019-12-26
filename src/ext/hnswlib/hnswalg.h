@@ -3,7 +3,7 @@
 #include "visited_list_pool.h"
 #include "hnswlib.h"
 #include <random>
-#include <stdlib.h>
+#include <cstdlib>
 #include <unordered_set>
 #include <list>
 

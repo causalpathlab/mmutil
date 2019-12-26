@@ -23,7 +23,7 @@ int main(const int argc, const char* argv[]) {
 
   using Str           = std::string;
   using copier_t      = triplet_copier_remapped_cols_t<Index, Scalar>;
-  const Index Nsample = boost::lexical_cast<Index>(argv[1]);
+  const Index Nsample = std::stoi(argv[1]);
 
   const Str mtx_file(argv[2]);
   const Str column_file(argv[3]);

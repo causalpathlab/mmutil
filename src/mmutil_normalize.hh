@@ -63,8 +63,8 @@ struct col_data_normalizer_t {
   static constexpr char FS = ' ';
 };
 
-void write_normalized(const std::string mtx_file, // input file
-		      const std::string out_file, // output file
+void write_normalized(const std::string mtx_file,  // input file
+                      const std::string out_file,  // output file
                       const Scalar tau_scale) {
 
   col_stat_collector_t collector;
