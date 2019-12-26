@@ -49,9 +49,14 @@ int main(const int argc, const char* argv[]) {
 
   const std::string mtx_src_file(argv[1]);
   const std::string col_src_file(argv[2]);
-
   const std::string mtx_tgt_file(argv[3]);
-  const std::string col_rgt_file(argv[4]);
+  const std::string col_tgt_file(argv[4]);
+
+  std::vector<std::string> col_src_names;
+  CHECK(read_vector_file(col_src_file, col_src_names));
+
+  std::vector<std::string> col_tgt_names;
+  CHECK(read_vector_file(col_tgt_file, col_tgt_names));
 
   std::vector<std::tuple<Index, Index, Scalar> > out_index;
 
@@ -66,7 +71,16 @@ int main(const int argc, const char* argv[]) {
 
   const std::string out_file(argv[8]);
 
-  write_tuple_file(out_file, out_index);
+  std::vector<std::tuple<std::string, std::string, Scalar> > out_named;
+
+  for (auto tt : out_index) {
+    Index i, j;
+    Scalar d;
+    std::tie(i, j, d) = tt;
+    out_named.push_back(std::make_tuple(col_src_names.at(i), col_tgt_names.at(j), d));
+  }
+
+  write_tuple_file(out_file, out_named);
 
   return EXIT_SUCCESS;
 }
