@@ -1,6 +1,9 @@
+#include <unordered_set>
+
 #include "eigen_util.hh"
 #include "ext/hnswlib/hnswlib.h"
 #include "mmutil.hh"
+#include "mmutil_stat.hh"
 #include "utils/progress.hh"
 
 #ifndef MMUTIL_MATCH_HH_
@@ -12,14 +15,14 @@
 
 using KnnAlg = hnswlib::HierarchicalNSW<Scalar>;
 
-struct SrcRowsT {
-  explicit SrcRowsT(const SpMat _data) : data(_data){};
-  const SpMat data;
+struct SrcSparseRowsT {
+  explicit SrcSparseRowsT(const SpMat& _data) : data(_data){};
+  const SpMat& data;
 };
 
-struct TgtRowsT {
-  explicit TgtRowsT(const SpMat _data) : data(_data){};
-  const SpMat data;
+struct TgtSparseRowsT {
+  explicit TgtSparseRowsT(const SpMat& _data) : data(_data){};
+  const SpMat& data;
 };
 
 struct KNN {
@@ -39,11 +42,51 @@ struct NNLIST {
 
 using index_triplet_vec = std::vector<std::tuple<Index, Index, Scalar> >;
 
-int search_knn(SrcRowsT _SrcRows,  //
-               TgtRowsT _TgtRows,  //
-               KNN _knn,           //
-               BILINKS _bilinks,   //
-               NNLIST _nnlist,     //
+///////////////////////////////////////////
+// search over the rows of sparse matrix //
+///////////////////////////////////////////
+
+int search_knn(const SrcSparseRowsT _SrcRows,  //
+               const TgtSparseRowsT _TgtRows,  //
+               const KNN _knn,                 //
+               const BILINKS _bilinks,         //
+               const NNLIST _nnlist,           //
+               index_triplet_vec& out);
+
+////////////////////////////////
+// search over the dense data //
+////////////////////////////////
+
+struct SrcDataT {
+  explicit SrcDataT(const float* _data, const Index d, const Index s)
+      : data(_data), vecdim(d), vecsize(s) {}
+  const float* data;
+  const Index vecdim;
+  const Index vecsize;
+};
+
+struct TgtDataT {
+  explicit TgtDataT(const float* _data, const Index d, const Index s)
+      : data(_data), vecdim(d), vecsize(s) {}
+  const float* data;
+  const Index vecdim;
+  const Index vecsize;
+};
+
+int search_knn(const SrcDataT _SrcData,  //
+               const TgtDataT _TgtData,  //
+               const KNN _knn,           //
+               const BILINKS _bilinks,   //
+               const NNLIST _nnlist,     //
+               index_triplet_vec& out);
+
+////////////////////////////////////////////////////////////////
+
+int search_knn(const SrcSparseRowsT _SrcRows,  //
+               const TgtSparseRowsT _TgtRows,  //
+               const KNN _knn,                 //
+               const BILINKS _bilinks,         //
+               const NNLIST _nnlist,           //
                index_triplet_vec& out) {
 
   const SpMat& SrcRows = _SrcRows.data;
@@ -123,6 +166,73 @@ int search_knn(SrcRowsT _SrcRows,  //
       }
 
       auto pq = alg.searchKnn((void*)lookup.data(), knn);
+      float d = 0;
+      std::size_t j;
+      while (!pq.empty()) {
+        std::tie(d, j) = pq.top();
+        out.push_back(std::make_tuple(i, j, d));
+        pq.pop();
+      }
+      prog.update();
+      prog(std::cerr);
+    }
+  }
+  TLOG("Done kNN searches");
+  return EXIT_SUCCESS;
+}
+
+int search_knn(const SrcDataT _SrcData,  //
+               const TgtDataT _TgtData,  //
+               const KNN _knn,           //
+               const BILINKS _bilinks,   //
+               const NNLIST _nnlist,     //
+               index_triplet_vec& out) {
+
+  ERR_RET(_SrcData.vecdim == _TgtData.vecdim,
+          "source and target must have the same dimensionality");
+
+  const std::size_t knn           = _knn.val;
+  const std::size_t param_bilinks = _bilinks.val;
+  const std::size_t param_nnlist  = _nnlist.val;
+
+  const std::size_t vecdim  = _TgtData.vecdim;
+  const std::size_t vecsize = _TgtData.vecsize;
+
+  ERR_RET(param_bilinks >= vecdim, "too big M value");
+  ERR_RET(param_bilinks < 2, "too small M value");
+  ERR_RET(param_nnlist < knn, "too small N value");
+
+  // Construct KnnAlg interface
+  hnswlib::InnerProductSpace vecspace(vecdim);
+  KnnAlg alg(&vecspace, vecsize, param_bilinks, param_nnlist);
+  alg.ef_ = param_nnlist;
+
+  TLOG("Initializing kNN algorithm");
+
+  {
+    const float* mass = _TgtData.data;
+
+    progress_bar_t<Index> prog(vecsize, 1e3);
+
+    for (Index i = 0; i < vecsize; ++i) {
+      alg.addPoint((void*)(mass + vecdim * i), static_cast<std::size_t>(i));
+      prog.update();
+      prog(std::cerr);
+    }
+  }
+
+  ////////////
+  // recall //
+  ////////////
+
+  TLOG("Finding " << knn << " nearest neighbors");
+
+  {
+    const float* mass = _SrcData.data;
+    progress_bar_t<Index> prog(_SrcData.vecsize, 1e3);
+
+    for (Index i = 0; i < _SrcData.vecsize; ++i) {
+      auto pq = alg.searchKnn((void*)(mass + vecdim * i), knn);
       float d = 0;
       std::size_t j;
       while (!pq.empty()) {

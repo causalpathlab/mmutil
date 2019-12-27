@@ -40,6 +40,17 @@ void print_help(const char* fname) {
   std::cerr << _desc << std::endl;
 }
 
+inline std::unordered_set<Index> find_nz_cols(const std::string mtx_file) {
+  col_stat_collector_t collector;
+  visit_matrix_market_file(mtx_file, collector);
+  std::unordered_set<Index> valid;
+  const Vec& nn = collector.Col_N;
+  for (Index j = 0; j < nn.size(); ++j) {
+    if (nn(j) > 0.0) valid.insert(j);
+  }
+  return valid;  // RVO
+}
+
 int main(const int argc, const char* argv[]) {
 
   if (argc < 9) {
@@ -60,14 +71,30 @@ int main(const int argc, const char* argv[]) {
 
   std::vector<std::tuple<Index, Index, Scalar> > out_index;
 
-  const int knn = search_knn(SrcRowsT(build_eigen_sparse(mtx_src_file).transpose().eval()),  //
-                             TgtRowsT(build_eigen_sparse(mtx_tgt_file).transpose().eval()),  //
-                             KNN(argv[5]),                                                   //
-                             BILINKS(argv[6]),                                               //
-                             NNLIST(argv[7]),                                                //
+  const SpMat Src = build_eigen_sparse(mtx_src_file).transpose().eval();
+  const SpMat Tgt = build_eigen_sparse(mtx_tgt_file).transpose().eval();
+
+  const int knn = search_knn(SrcSparseRowsT(Src),  //
+                             TgtSparseRowsT(Tgt),  //
+                             KNN(argv[5]),         //
+                             BILINKS(argv[6]),     //
+                             NNLIST(argv[7]),      //
                              out_index);
 
   CHK_ERR_RET(knn, "Failed to search kNN");
+
+  /////////////////////////////
+  // fliter out zero columns //
+  /////////////////////////////
+
+  auto valid_src = find_nz_cols(mtx_src_file);
+  auto valid_tgt = find_nz_cols(mtx_tgt_file);
+
+  TLOG("Filter out total zero columns");
+
+  ///////////////////////////////
+  // give names to the columns //
+  ///////////////////////////////
 
   const std::string out_file(argv[8]);
 
@@ -77,10 +104,14 @@ int main(const int argc, const char* argv[]) {
     Index i, j;
     Scalar d;
     std::tie(i, j, d) = tt;
-    out_named.push_back(std::make_tuple(col_src_names.at(i), col_tgt_names.at(j), d));
+    if (valid_src.count(i) > 0 && valid_tgt.count(j) > 0) {
+      out_named.push_back(std::make_tuple(col_src_names.at(i), col_tgt_names.at(j), d));
+    }
   }
 
   write_tuple_file(out_file, out_named);
+
+  TLOG("Wrote the matching file: " << out_file);
 
   return EXIT_SUCCESS;
 }

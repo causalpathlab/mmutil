@@ -1,4 +1,5 @@
 #include <iostream>
+#include <iomanip>
 
 #ifndef PROGRESS_HH_
 #define PROGRESS_HH_
