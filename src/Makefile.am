@@ -8,7 +8,8 @@ bin_PROGRAMS = mmutil_merge_col \
     mmutil_rand_conv_col \
     mmutil_normalize_col \
     mmutil_spectral_col \
-    mmutil_match_col
+    mmutil_match_col \
+    mmutil_spectral_match_col
 
 math = svd.hh
 
@@ -66,4 +67,7 @@ mmutil_normalize_col_SOURCES = mmutil_normalize_col.cc \
     mmutil_normalize.hh $(common)
 
 mmutil_match_col_SOURCES = mmutil_match_col.cc \
+    mmutil_match.hh $(common) $(hnslib)
+
+mmutil_spectral_match_col_SOURCES = mmutil_spectral_match_col.cc \
     mmutil_match.hh $(common) $(hnslib)

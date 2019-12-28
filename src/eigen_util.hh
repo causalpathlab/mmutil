@@ -4,6 +4,7 @@
 #include <execution>
 #include <functional>
 #include <vector>
+#include "utils/util.hh"
 
 #ifndef EIGEN_UTIL_HH_
 #define EIGEN_UTIL_HH_
@@ -33,10 +34,11 @@ inline auto eigen_triplets(const std::vector<T>& Tvec) {
   using _Triplet    = Eigen::Triplet<Scalar>;
   using _TripletVec = std::vector<_Triplet>;
 
-  _TripletVec ret(Tvec.size());
+  _TripletVec ret;
+  ret.reserve(Tvec.size());
 
   for (auto tt : Tvec) {
-    ret.push_back(_Triplet(std::get<0>(tt), std::get<1>(tt), std::get<2>(tt)));
+    ret.emplace_back(_Triplet(std::get<0>(tt), std::get<1>(tt), std::get<2>(tt)));
   }
 
   return ret;
@@ -108,6 +110,79 @@ Eigen::Matrix<typename Derived::Scalar, Eigen::Dynamic, Eigen::Dynamic> row_scor
   ret            = ret.cwiseSqrt();
 
   return ret;
+}
+
+template <typename Derived>
+Eigen::SparseMatrix<typename Derived::Scalar, Eigen::RowMajor, std::ptrdiff_t> vcat(
+    const Eigen::SparseMatrixBase<Derived>& _upper,
+    const Eigen::SparseMatrixBase<Derived>& _lower) {
+
+  using Scalar         = typename Derived::Scalar;
+  using Index          = typename Derived::Index;
+  const Derived& upper = _upper.derived();
+  const Derived& lower = _lower.derived();
+
+  ASSERT(upper.cols() == lower.cols(), "mismatching columns in vcat");
+
+  using _Triplet = Eigen::Triplet<Scalar>;
+
+  std::vector<_Triplet> triplets;
+  triplets.reserve(upper.nonZeros() + lower.nonZeros());
+
+  using SpMat =
+      typename Eigen::SparseMatrix<typename Derived::Scalar, Eigen::RowMajor, std::ptrdiff_t>;
+
+  for (Index k = 0; k < upper.outerSize(); ++k) {
+    for (typename SpMat::InnerIterator it(upper, k); it; ++it) {
+      triplets.emplace_back(it.row(), it.col(), it.value());
+    }
+  }
+
+  for (Index k = 0; k < lower.outerSize(); ++k) {
+    for (typename SpMat::InnerIterator it(lower, k); it; ++it) {
+      triplets.emplace_back(upper.rows() + it.row(), it.col(), it.value());
+    }
+  }
+
+  SpMat result(lower.rows() + upper.rows(), upper.cols());
+  result.setFromTriplets(triplets.begin(), triplets.end());
+  return result;
+}
+
+template <typename Derived>
+Eigen::SparseMatrix<typename Derived::Scalar, Eigen::RowMajor, std::ptrdiff_t> hcat(
+    const Eigen::SparseMatrixBase<Derived>& _left, const Eigen::SparseMatrixBase<Derived>& _right) {
+
+  using Scalar         = typename Derived::Scalar;
+  using Index          = typename Derived::Index;
+  const Derived& left  = _left.derived();
+  const Derived& right = _right.derived();
+
+  ASSERT(left.rows() == right.rows(), "mismatching rows in hcat");
+
+  using _Triplet = Eigen::Triplet<Scalar>;
+
+  std::vector<_Triplet> triplets;
+  triplets.reserve(left.nonZeros() + right.nonZeros());
+
+  using SpMat =
+      typename Eigen::SparseMatrix<typename Derived::Scalar, Eigen::RowMajor, std::ptrdiff_t>;
+
+  for (Index k = 0; k < left.outerSize(); ++k) {
+    for (typename SpMat::InnerIterator it(left, k); it; ++it) {
+      triplets.emplace_back(it.row(), it.col(), it.value());
+    }
+  }
+
+  for (Index k = 0; k < right.outerSize(); ++k) {
+    for (typename SpMat::InnerIterator it(right, k); it; ++it) {
+      triplets.emplace_back(it.row(), left.cols() + it.col(), it.value());
+    }
+  }
+
+  SpMat result(left.rows(), left.cols() + right.cols());
+  result.setFromTriplets(triplets.begin(), triplets.end());
+  return result;
 }
 
 #endif

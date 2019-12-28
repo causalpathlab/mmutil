@@ -5,17 +5,15 @@
 #ifndef MMUTIL_SPECTRAL_HH_
 #define MMUTIL_SPECTRAL_HH_
 
+/////////////////////////////////////////////
+// 1. construct normalized scaled data     //
+// 2. identify eigen spectrum by using SVD //
+/////////////////////////////////////////////
+
 template <typename Derived>
-std::tuple<Mat, Mat, Mat> take_spectrum_laplacian(  //
-    const Eigen::SparseMatrixBase<Derived>& _X0,    // sparse data
-    const float tau_scale,                          // regularization
-    const int rank,                                 // desired rank
-    const int iter = 5                              // should be enough
+inline Mat make_scaled_regularized(const Eigen::SparseMatrixBase<Derived>& _X0,  // sparse data
+                                   const float tau_scale                         // regularization
 ) {
-  /////////////////////////////////////////////
-  // 1. construct normalized scaled data     //
-  // 2. identify eigen spectrum by using SVD //
-  /////////////////////////////////////////////
 
   const Derived& X0 = _X0.derived();
 
@@ -36,7 +34,19 @@ std::tuple<Mat, Mat, Mat> take_spectrum_laplacian(  //
     return _one / std::max(_one, std::sqrt(x + tau));
   });
 
-  const Mat XtTau = degree_tau_sqrt_inverse.asDiagonal() * (X.transpose());
+  Mat ret = degree_tau_sqrt_inverse.asDiagonal() * (X.transpose());
+  return ret;  // RVO
+}
+
+template <typename Derived>
+std::tuple<Mat, Mat, Mat> take_spectrum_laplacian(  //
+    const Eigen::SparseMatrixBase<Derived>& _X0,    // sparse data
+    const float tau_scale,                          // regularization
+    const int rank,                                 // desired rank
+    const int iter = 5                              // should be enough
+) {
+
+  const Mat XtTau = make_scaled_regularized(_X0, tau_scale);
 
   TLOG("Running SVD on X [" << XtTau.rows() << " x " << XtTau.cols() << "]");
 

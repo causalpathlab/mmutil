@@ -1,22 +1,44 @@
 #include "mmutil_match.hh"
+#include "mmutil_spectral.hh"
 
 int main(const int argc, const char* argv[]) {
 
   match_options_t mopt;
 
-  CHECK(parse_match_options(argc, argv, mopt));
+  CHK_ERR_RET(parse_match_options(argc, argv, mopt), "");
 
   const std::string mtx_src_file(mopt.src_mtx);
   const std::string mtx_tgt_file(mopt.tgt_mtx);
+
+  const float tau  = mopt.tau;
+  const Index iter = mopt.iter;
+  const Index rank = mopt.rank;
   const std::string out_file(mopt.out);
 
   std::vector<std::tuple<Index, Index, Scalar> > out_index;
 
-  const SpMat Src = build_eigen_sparse(mtx_src_file).transpose().eval();
-  const SpMat Tgt = build_eigen_sparse(mtx_tgt_file).transpose().eval();
+  const SpMat Src = build_eigen_sparse(mtx_src_file);
+  const SpMat Tgt = build_eigen_sparse(mtx_tgt_file);
 
-  const int knn = search_knn(SrcSparseRowsT(Src),  //
-                             TgtSparseRowsT(Tgt),  //
+  const Index Nsrc = Src.cols();
+  const Index Ntgt = Tgt.cols();
+
+  ERR_RET(Src.rows() != Tgt.rows(),
+          "Found different number of rows between the source & target data.");
+
+  const SpMat SrcTgt = hcat(Src, Tgt);
+
+  Mat U, V, D;
+  std::tie(U, V, D) = take_spectrum_laplacian(SrcTgt, tau, rank, iter);
+
+  // must normalize before the search
+  U = U.rowwise().normalized().eval();
+
+  Mat src_u = U.topRows(Nsrc).transpose().eval();     // col = data point
+  Mat tgt_u = U.bottomRows(Ntgt).transpose().eval();  // col = data point
+
+  const int knn = search_knn(SrcDataT(src_u.data(), src_u.rows(), src_u.cols()),
+                             TgtDataT(tgt_u.data(), tgt_u.rows(), tgt_u.cols()),
                              KNN(mopt.knn),        //
                              BILINK(mopt.bilink),  //
                              NNLIST(mopt.nlist),   //

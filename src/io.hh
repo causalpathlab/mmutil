@@ -140,10 +140,11 @@ struct _triplet_reader_t {
     max_row  = r;
     max_col  = c;
     max_elem = e;
+    Tvec.reserve(max_elem);
   }
 
   void eval(const index_t row, const index_t col, const scalar_t weight) {
-    Tvec.push_back(T(row, col, weight));
+    Tvec.emplace_back(T(row, col, weight));
   }
 
   void eval_end() {

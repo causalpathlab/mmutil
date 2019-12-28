@@ -16,10 +16,10 @@
 
 * `mmutil_rand_col`: Randomly select the columns.
 
+* `mmutil_match_col`:
+
+* `mmutil_spectral_match_col`:
+
 ## TODO
-
-* KNN graph
-
-* Maximal spanning tree
 
 * Python and R wrapper
