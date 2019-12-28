@@ -673,10 +673,11 @@ void write_data_stream(OFS &ofs, const Eigen::MatrixBase<Derived> &out) {
   ofs.precision(4);
 
   const Derived &M = out.derived();
+  using Index      = typename Derived::Index;
 
-  for (auto r = 0u; r < M.rows(); ++r) {
+  for (Index r = 0u; r < M.rows(); ++r) {
     ofs << M.coeff(r, 0);
-    for (auto c = 1u; c < M.cols(); ++c) ofs << " " << M.coeff(r, c);
+    for (Index c = 1u; c < M.cols(); ++c) ofs << " " << M.coeff(r, c);
     ofs << std::endl;
   }
 }
@@ -690,25 +691,14 @@ void write_data_stream(OFS &ofs, const Eigen::SparseMatrixBase<Derived> &out) {
   using Scalar     = typename Derived::Scalar;
 
   // Not necessarily column major
-  const Index INTERVAL  = 1000;
-  const Index max_outer = M.outerSize();
-  const Index MAX_PRINT = (max_outer / INTERVAL);
-
-  for (auto k = 0; k < max_outer; ++k) {
+  for (Index k = 0; k < M.outerSize(); ++k) {
     for (typename Derived::InnerIterator it(M, k); it; ++it) {
       const Index i  = it.row();
       const Index j  = it.col();
       const Scalar v = it.value();
       ofs << i << " " << j << " " << v << std::endl;
     }
-    if ((k + 1) % INTERVAL == 0) {
-      std::cerr << "\rWriting " << std::right << std::setfill(' ') << std::setw(10)
-                << (k / INTERVAL);
-      std::cerr << " x 1k outer-iterations (total ";
-      std::cerr << std::setw(10) << MAX_PRINT << ")\r" << std::flush;
-    }
   }
-  std::cerr << std::endl;
 }
 
 ////////////////////////////////////////////////////////////////
