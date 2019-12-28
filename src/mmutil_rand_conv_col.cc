@@ -38,7 +38,7 @@ int main(const int argc, const char* argv[]) {
                                     RefPerSampleT(D));
 
   Mat Y(RefMat.rows(), N);
-  Y = Mat(RefMat * Y);
+  Y = Mat(RefMat * C);
 
   Str out_data_file = output + ".conv.gz";
   write_data_file(out_data_file, Y);
