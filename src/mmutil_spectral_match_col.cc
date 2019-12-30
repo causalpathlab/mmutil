@@ -7,6 +7,10 @@ int main(const int argc, const char* argv[]) {
 
   CHK_ERR_RET(parse_match_options(argc, argv, mopt), "");
 
+  if (!file_exists(mopt.src_mtx) || !file_exists(mopt.tgt_mtx)) {
+    return EXIT_FAILURE;
+  }
+
   const std::string mtx_src_file(mopt.src_mtx);
   const std::string mtx_tgt_file(mopt.tgt_mtx);
 
