@@ -25,7 +25,6 @@ template <typename T>
 struct trunc_dpm_t {
   using Scalar = typename T::Scalar;
   using Index  = typename T::Index;
-  using Dense  = Eigen::Matrix<Scalar, Eigen::Dynamic, Eigen::Dynamic>;
 
   struct dpm_alpha_t : public check_positive_t<Scalar> {
     explicit dpm_alpha_t(const Scalar v) : check_positive_t<Scalar>(v) {}
@@ -35,7 +34,7 @@ struct trunc_dpm_t {
     explicit num_clust_t(const Index v) : check_positive_t<Index>(v) {}
   };
 
-  explicit trunc_dpm_t(const dpm_alpha_t& dpm_alpha, const num_clust_t& num_clust)
+  explicit trunc_dpm_t(const dpm_alpha_t dpm_alpha, const num_clust_t num_clust)
       : a0(dpm_alpha.val),
         K(num_clust.val),
         logPr(K, 1),
@@ -65,40 +64,13 @@ struct trunc_dpm_t {
       sizeVec = sizeVec * (1.0 - rate) + Z * rate;
     }
 
-    _update(rate);
+    posterior_update(rate);
   }
-
-  ////////////////////////////////////////////////////////////////
-  // ln pi(k) = ln u(k) - ln [u(k) + v(k)]
-  //            + sum[1, K) [ln u(l) - ln(u(l) + v(l))]
-  const T& eval() {
-    auto comparator = [this](Index lhs, Index rhs) { return u(rhs) < u(lhs); };
-    std::sort(sortedIndexes.begin(), sortedIndexes.end(), comparator);
-
-    Scalar cum = 0.0;
-    for (auto k : sortedIndexes) {
-      Scalar log_denom = std::log(u(k) + v(k));
-      logPr(k)         = std::log(u(k)) - log_denom + cum;
-      cum += std::log(v(k)) - log_denom;
-    }
-
-    return logPr;
-  }
-
-  const Scalar a0;
-  const Index K;
-
- private:
-  T logPr;
-  T u;
-  T v;
-  T sizeVec;
-  Dense onesN;
 
   ////////////////////////////////////////////////////////////////
   // u(k) = 1 + sum Z(:,k) = 1 + dpmstat(k)
   // v(k) = a + sum_{l=k+1} u(k) = a + sum_{l=k+1}
-  void _update(const Scalar rate) {
+  void posterior_update(const Scalar rate) {
     auto comparator = [this](Index lhs, Index rhs) { return sizeVec(rhs) < sizeVec(lhs); };
     std::sort(sortedIndexes.begin(), sortedIndexes.end(), comparator);
 
@@ -113,6 +85,35 @@ struct trunc_dpm_t {
       v(k) = (1.0 - rate) * v(k) + rate * (a0 + ntot - cumsum);
     }
   }
+
+  ////////////////////////////////////////////////////////////////
+  // ln pi(k) = ln u(k) - ln [u(k) + v(k)]
+  //            + sum[1, K) [ln u(l) - ln(u(l) + v(l))]
+  const T& log_mf() {
+    auto comparator = [this](Index lhs, Index rhs) { return u(rhs) < u(lhs); };
+    std::sort(sortedIndexes.begin(), sortedIndexes.end(), comparator);
+
+    Scalar cum = 0.0;
+    for (auto k : sortedIndexes) {
+      Scalar log_denom = std::log(u(k) + v(k));
+      logPr(k)         = std::log(u(k)) - log_denom + cum;
+      cum += std::log(v(k)) - log_denom;
+    }
+
+    return logPr;
+  }
+
+  const T& log_lcvi() { return log_mf(); }
+
+  const Scalar a0;
+  const Index K;
+
+ private:
+  T logPr;
+  T u;
+  T v;
+  T sizeVec;
+  T onesN;
 
   std::vector<Index> sortedIndexes;
 };

@@ -23,7 +23,7 @@ struct check_positive_t {
   }
 
   const T val;
-  static constexpr T zero_val = 0.0;
+  static constexpr T zero_val = 0;
 };
 
 template <typename T>
