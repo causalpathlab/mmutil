@@ -12,16 +12,17 @@ bin_PROGRAMS = mmutil_merge_col \
     mmutil_spectral_match_col \
     mmutil_spectral_cluster_col
 
-math = svd.hh \
-    utils/sse.h \
-    utils/cast.h \
-    utils/fastexp.h \
-    utils/fastlog.h \
-    utils/fastgamma.h
+math = svd.hh
 
 common = mmutil.hh \
     mmutil_stat.hh \
     eigen_util.hh \
+    utils/sse.h \
+    utils/cast.h \
+    utils/math.hh \
+    utils/fastexp.h \
+    utils/fastlog.h \
+    utils/fastgamma.h \
     std_util.hh \
     io.hh io_visitor.hh \
     utils/gzstream.hh \
@@ -80,6 +81,10 @@ mmutil_spectral_match_col_SOURCES = mmutil_spectral_match_col.cc \
     mmutil_match.hh $(common) $(hnslib)
 
 mmutil_spectral_cluster_col_SOURCES = mmutil_spectral_cluster_col.cc \
-    dpm.hh sampler.hh component_gaussian.hh mmutil_cluster.hh \
+    mmutil_cluster.hh \
+    inference/dpm.hh \
+    inference/sampler.hh \
+    inference/component_gaussian.hh \
+    inference/representation_gaussian.hh \
     $(common) \
     $(math)

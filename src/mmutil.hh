@@ -14,6 +14,7 @@
 #include "io_visitor.hh"
 #include "std_util.hh"
 #include "utils/util.hh"
+#include "utils/math.hh"
 
 #ifndef MMUTIL_HH_
 #define MMUTIL_HH_

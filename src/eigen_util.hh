@@ -4,6 +4,8 @@
 #include <execution>
 #include <functional>
 #include <vector>
+
+#include "utils/math.hh"
 #include "utils/util.hh"
 
 #ifndef EIGEN_UTIL_HH_
@@ -183,6 +185,26 @@ Eigen::SparseMatrix<typename Derived::Scalar, Eigen::RowMajor, std::ptrdiff_t> h
   SpMat result(left.rows(), left.cols() + right.cols());
   result.setFromTriplets(triplets.begin(), triplets.end());
   return result;
+}
+
+template <typename Derived>
+inline typename Derived::Scalar log_sum_exp(const Eigen::MatrixBase<Derived>& log_vec) {
+
+  using Scalar = typename Derived::Scalar;
+  using Index  = typename Derived::Index;
+
+  const Derived& xx = log_vec.derived();
+
+  Scalar maxlogval = xx(0);
+  for (Index j = 1; j < xx.size(); ++j) {
+    if (xx(j) > maxlogval) maxlogval = xx(j);
+  }
+
+  Scalar ret = 0;
+  for (Index j = 0; j < xx.size(); ++j) {
+    ret += fasterexp(xx(j) - maxlogval);
+  }
+  return fasterlog(ret) + maxlogval;
 }
 
 #endif

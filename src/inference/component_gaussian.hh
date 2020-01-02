@@ -35,8 +35,8 @@ struct multi_gaussian_component_t {
         s1(p),                            // 1st moment sum
         s2(0.),                           // 2nd moment sum
         scale(1e-2),                      // hyper for mean prior
-        a0(1e-2),                         // hyper for precision prior
-        b0(1e-2),                         // hyper for precision prior
+        a0(1.0),                          // hyper for precision prior
+        b0(1.0),                          // hyper for precision prior
         mu(p),                            // variational (posterior) mean
         mu_prec(a0 / b0 / scale),         // prec of vari-mean
         tau(a0 / b0),                     // precision
@@ -58,11 +58,14 @@ struct multi_gaussian_component_t {
     const Derived& x = xx.derived();
 
 #ifdef DEBUG
-    ASSERT(x.rows() == s1.rows());
+    ASSERT(x.rows() == s1.rows(), "x1.rows() != s1.rows()");
 #endif
 
+    n *= (1.0 - rate);
     n += rate;
+    s1 *= (1.0 - rate);
     s1 += x * rate;
+    s2 *= (1.0 - rate);
     s2 += x.cwiseProduct(x).sum() * rate;
 
     posterior_update();
@@ -78,7 +81,7 @@ struct multi_gaussian_component_t {
     const Derived& x = xx.derived();
 
 #ifdef DEBUG
-    ASSERT(x.rows() == s1.rows());
+    ASSERT(x.rows() == s1.rows(), "x1.rows() != s1.rows()");
 #endif
 
     n += 1.0;
@@ -96,7 +99,7 @@ struct multi_gaussian_component_t {
     const Derived& x = xx.derived();
 
 #ifdef DEBUG
-    ASSERT(x.rows() == s1.rows());
+    ASSERT(x.rows() == s1.rows(), "x.rows() != s1.rows()");
     ASSERT(n >= (1.0 - 1e-8), "Must have at least one element");
 #endif
 
@@ -132,7 +135,7 @@ struct multi_gaussian_component_t {
     mu      = s1 / (scale + n);  // posterior mean
     mu_prec = tau * (scale + n);
     musq    = mu.cwiseProduct(mu).sum();
-    musq += 1.0 / mu_prec;
+    musq += d / mu_prec;
 
     // The expected residual sums of squares
     const Scalar R = s2 - 2.0 * (s1.transpose() * mu).sum() + (n + scale) * musq;
@@ -147,6 +150,27 @@ struct multi_gaussian_component_t {
   // scores //
   ////////////
 
+  /////////////////////////////
+  // variational lower-bound //
+  /////////////////////////////
+
+  template <typename Derived>
+  Scalar elbo(const Eigen::MatrixBase<Derived>& xx) const {  // dim x 1
+
+    const Derived& x = xx.derived();
+#ifdef DEBUG
+    ASSERT(x.cols() == 1, "only support dim x 1 in elbo()");
+#endif
+
+    const Scalar x2  = x.cwiseProduct(x).sum();
+    const Scalar mux = mu.cwiseProduct(x).sum();
+
+    Scalar ret = -0.5 * d * ln2pi;
+    ret += 0.5 * d * lntau;
+    ret -= 0.5 * tau * (x2 - 2.0 * mux + musq);
+    return ret;
+  }
+
   /////////////////////////////////////////////
   // locally collapsed variational inference //
   /////////////////////////////////////////////
@@ -156,22 +180,29 @@ struct multi_gaussian_component_t {
   Scalar log_lcvi(const Eigen::MatrixBase<Derived>& xx) const {  // dim x 1
 
     const Derived& x = xx.derived();
+#ifdef DEBUG
+    ASSERT(x.cols() == 1, "only support dim x 1 in log_lcvi()");
+#endif
 
     const Scalar rss = (x - mu).cwiseProduct(x - mu).sum();
     const Scalar var = 1.0 / mu_prec + 1.0 / tau;
 
     Scalar ret = -rss / var * 0.5;
     ret -= 0.5 * d * fasterlog(var);
-    ret -= 0.5 * d * fasterlog(2.0 * M_PI);
+    ret -= 0.5 * d * ln2pi;
     return ret;
   }
+
+  /////////////////////////
+  // marginal likelihood //
+  /////////////////////////
 
   Scalar log_marginal() const {
 
     // mu = s1 / (scale + n);  // posterior mean
     const Scalar C = s2 + (s1 / (scale + n)).cwiseProduct(s1).sum();
 
-    Scalar ret = -0.5 * n * d * fasterlog(2.0 * M_PI);
+    Scalar ret = -0.5 * n * d * ln2pi;
     ret += 0.5 * d * fasterlog(scale);
     ret -= 0.5 * d * fasterlog(n + scale);
     ret += fasterlgamma(a0 + n * d * 0.5);
@@ -182,35 +213,15 @@ struct multi_gaussian_component_t {
     return ret;
   }
 
-  template <typename Derived>
-  Scalar log_marginal_ratio(const Eigen::MatrixBase<Derived>& new_xx) const {  // dim x 1
-
-    const Derived& x = new_xx.derived();
-
-    const Scalar n_new = n + 1.0;
-    // mu_new = (s1 + x) / (scale + n_new);  // posterior mean
-    const Scalar s2_new = s2 + x.cwiseProduct(x).sum();
-    const Scalar _denom = scale + n_new;
-    const Scalar C_new  = s2_new + (s1 + x).cwiseProduct(s1 + x).sum() / _denom;
-
-    Scalar ret = -0.5 * n_new * d * fasterlog(2.0 * M_PI);
-    ret += 0.5 * d * fasterlog(scale);
-    ret -= 0.5 * d * fasterlog(n_new + scale);
-    ret += fasterlgamma(a0 + n_new * d * 0.5);
-    ret -= fasterlgamma(a0);
-    ret += a0 * fasterlog(b0);
-    ret -= (a0 + n_new * d * 0.5) * fasterlog(b0 + C_new * 0.5);
-
-    return ret - log_marginal();
-  }
+  const vec_type& posterior_mean() const { return mu; }
 
  private:
   const size_t p;  // dimensionality
   const Scalar d;  // dimensionality
+  Scalar n;        // sum_i z_i
   vec_type s1;     // sum_i z_i x_i
   Scalar s2;       // sum_i z_i <x_i,x_i>
   Scalar scale;    // hyper-parameter
-  Scalar n;        // sum_i z_i
   Scalar a0;       // hyper for precision
   Scalar b0;       // hyper for precision
   vec_type mu;     // variational mu
@@ -218,6 +229,8 @@ struct multi_gaussian_component_t {
   Scalar tau;      // variational precision
   Scalar lntau;    // log variational precision
   Scalar musq;     // E[mu^T mu]
+
+  const Scalar ln2pi = fasterlog(2.0 * M_PI);
 };
 
 #endif
