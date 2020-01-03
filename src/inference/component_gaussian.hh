@@ -53,97 +53,47 @@ struct multi_gaussian_component_t {
   /////////////////////
 
   template <typename Derived>
-  inline void update(const Eigen::MatrixBase<Derived>& xx, const Scalar rate) {
+  inline void update(const Eigen::MatrixBase<Derived>& xx,  //
+                     const Scalar z_old,                    //
+                     const Scalar z_new) {
 
-    const Derived& x = xx.derived();
-
-#ifdef DEBUG
-    ASSERT(x.rows() == s1.rows(), "x1.rows() != s1.rows()");
-#endif
-
-    n *= (1.0 - rate);
-    n += rate;
-    s1 *= (1.0 - rate);
-    s1 += x * rate;
-    s2 *= (1.0 - rate);
-    s2 += x.cwiseProduct(x).sum() * rate;
-
-    posterior_update();
-
-#ifdef DEBUG
-    ASSERT(n > (-1e-8), "Cannot have negative");
-#endif
-  }
-
-  template <typename Derived>
-  inline multi_gaussian_component_t& _add(const Eigen::MatrixBase<Derived>& xx) {
-
-    const Derived& x = xx.derived();
+    const Derived& x = xx.derived();  // d x 1
 
 #ifdef DEBUG
     ASSERT(x.rows() == s1.rows(), "x1.rows() != s1.rows()");
+    ASSERT(z_old >= 0 && z_old <= 1, "z_old in [0, 1] : " << z_old);
+    ASSERT(z_new >= 0 && z_new <= 1, "z_new in [0, 1] : " << z_new);
 #endif
 
-    n += 1.0;
-    s1 += x;
-    s2 += x.cwiseProduct(x).sum();
+    const Scalar x2 = x.cwiseProduct(x).sum();
+
+    n -= z_old;
+    s1 -= x * z_old;
+    s2 -= x2 * z_old;
+
+#ifdef DEBUG
+    ASSERT(n > (-1e-8), "Cannot have negative n");
+#endif
+
+    n += z_new;
+    s1 += x * z_new;
+    s2 += x2 * z_new;
+
+#ifdef DEBUG
+    ASSERT(n > (-1e-8), "Cannot have negative n");
+#endif
 
     posterior_update();
-
-    return *this;
   }
 
   template <typename Derived>
-  inline multi_gaussian_component_t& _subtract(const Eigen::MatrixBase<Derived>& xx) {
-
-    const Derived& x = xx.derived();
-
-#ifdef DEBUG
-    ASSERT(x.rows() == s1.rows(), "x.rows() != s1.rows()");
-    ASSERT(n >= (1.0 - 1e-8), "Must have at least one element");
-#endif
-
-    n -= 1.0;
-    s1 -= x;
-    s2 -= x.cwiseProduct(x).sum();
-
-    posterior_update();
-
-#ifdef DEBUG
-    ASSERT(n > (-1e-8), "Cannot have negative");
-#endif
-
-    return *this;
-  }
-
-  template <typename Derived>
-  multi_gaussian_component_t& operator+=(const Eigen::MatrixBase<Derived>& xx) {
+  inline multi_gaussian_component_t& operator+=(const Eigen::MatrixBase<Derived>& xx) {
     return _add(xx);
   }
 
   template <typename Derived>
-  multi_gaussian_component_t& operator-=(const Eigen::MatrixBase<Derived>& xx) {
+  inline multi_gaussian_component_t& operator-=(const Eigen::MatrixBase<Derived>& xx) {
     return _subtract(xx);
-  }
-
-  ///////////////////////////////////
-  // Update variational parameters //
-  ///////////////////////////////////
-
-  void posterior_update() {
-    // prior mean = 0
-    mu      = s1 / (scale + n);  // posterior mean
-    mu_prec = tau * (scale + n);
-    musq    = mu.cwiseProduct(mu).sum();
-    musq += d / mu_prec;
-
-    // The expected residual sums of squares
-    const Scalar R = s2 - 2.0 * (s1.transpose() * mu).sum() + (n + scale) * musq;
-    const Scalar a = a0 + (n + 1.0) * d * 0.5;
-    const Scalar b = b0 + R * 0.5;
-
-    tau   = a / b;  // posterior precision
-    lntau = fasterdigamma(a) - fasterlog(b);
   }
 
   ////////////
@@ -214,6 +164,68 @@ struct multi_gaussian_component_t {
   }
 
   const vec_type& posterior_mean() const { return mu; }
+
+ private:
+  template <typename Derived>
+  inline multi_gaussian_component_t& _add(const Eigen::MatrixBase<Derived>& xx) {
+
+    const Derived& x = xx.derived();
+
+#ifdef DEBUG
+    ASSERT(x.rows() == s1.rows(), "x1.rows() != s1.rows()");
+#endif
+
+    n += 1.0;
+    s1 += x;
+    s2 += x.cwiseProduct(x).sum();
+
+    posterior_update();
+
+    return *this;
+  }
+
+  template <typename Derived>
+  inline multi_gaussian_component_t& _subtract(const Eigen::MatrixBase<Derived>& xx) {
+
+    const Derived& x = xx.derived();
+
+#ifdef DEBUG
+    ASSERT(x.rows() == s1.rows(), "x.rows() != s1.rows()");
+    ASSERT(n >= (1.0 - 1e-8), "Must have at least one element");
+#endif
+
+    n -= 1.0;
+    s1 -= x;
+    s2 -= x.cwiseProduct(x).sum();
+
+    posterior_update();
+
+#ifdef DEBUG
+    ASSERT(n > (-1e-8), "Cannot have negative");
+#endif
+
+    return *this;
+  }
+
+  ///////////////////////////////////
+  // Update variational parameters //
+  ///////////////////////////////////
+
+  void posterior_update() {
+    // prior mean = 0
+    mu      = s1 / (scale + n);  // posterior mean
+    mu_prec = tau * (scale + n);
+    musq    = mu.cwiseProduct(mu).sum();
+    musq += d / mu_prec;
+
+    // The expected residual sums of squares
+    const Scalar R = s2 - 2.0 * (s1.transpose() * mu).sum() + (n + scale) * musq;
+    const Scalar a = a0 + (n + 1.0) * d * 0.5;
+    const Scalar b = b0 + R * 0.5;
+
+    tau   = a / b;  // posterior precision
+    lntau = fasterdigamma(a) - fasterlog(b);
+  }
 
  private:
   const size_t p;  // dimensionality

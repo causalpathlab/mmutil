@@ -21,7 +21,6 @@ inline Mat make_scaled_regularized(const Eigen::SparseMatrixBase<Derived>& _X0, 
   using Index  = typename Derived::Index;
   using Mat    = typename Eigen::Matrix<Scalar, Eigen::Dynamic, Eigen::Dynamic>;
 
-  const Index max_col = X0.cols();
   const Index max_row = X0.rows();
 
   TLOG("Constructing a reguarlized graph Laplacian ...");

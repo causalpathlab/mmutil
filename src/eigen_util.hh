@@ -204,7 +204,31 @@ inline typename Derived::Scalar log_sum_exp(const Eigen::MatrixBase<Derived>& lo
   for (Index j = 0; j < xx.size(); ++j) {
     ret += fasterexp(xx(j) - maxlogval);
   }
-  return fasterlog(ret) + maxlogval;
+  ret = fasterlog(ret) + maxlogval;
+  return ret;
+}
+
+template <typename Derived, typename Derived2>
+inline typename Derived::Scalar normalized_exp(const Eigen::MatrixBase<Derived>& _log_vec,
+                                               Eigen::MatrixBase<Derived2>& _ret) {
+
+  using Scalar = typename Derived::Scalar;
+  using Index  = typename Derived::Index;
+
+  const Derived& log_vec = _log_vec.derived();
+  Derived& ret           = _ret.derived();
+
+  Index argmax;
+  const Scalar log_denom = log_vec.maxCoeff(&argmax);
+
+  auto _exp = [&log_denom](const Scalar log_z) { return fasterexp(log_z - log_denom); };
+
+  ret                = log_vec.unaryExpr(_exp).eval();
+  const Scalar denom = ret.sum();
+  ret /= denom;
+
+  const Scalar log_normalizer = fasterlog(denom) + log_denom;
+  return log_normalizer;
 }
 
 #endif

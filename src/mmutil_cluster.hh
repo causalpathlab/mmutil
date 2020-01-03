@@ -5,6 +5,7 @@
 #include "inference/dpm.hh"
 #include "inference/sampler.hh"
 #include "mmutil.hh"
+#include "utils/progress.hh"
 
 #ifndef MMUTIL_CLUSTER_HH_
 #define MMUTIL_CLUSTER_HH_
@@ -16,6 +17,7 @@ struct clustering_options_t {
     Alpha       = 1.0;
     burnin_iter = 10;
     max_iter    = 100;
+    min_iter    = 5;
     Tol         = 1e-4;
   }
 
@@ -23,8 +25,18 @@ struct clustering_options_t {
   Scalar Alpha;       // Truncated DPM prior
   Index burnin_iter;  // burn-in iterations
   Index max_iter;     // maximum number of iterations
+  Index min_iter;     // minimum number of iterations
   Scalar Tol;         // tolerance to check convergence
 };
+
+template <typename F0, typename F>
+inline std::tuple<Mat,                 //
+                  std::vector<F>,      //
+                  F0,                  //
+                  std::vector<Scalar>  //
+                  >
+estimate_mixture_of_columns(const Mat& X,  //
+                            const clustering_options_t& options);
 
 struct num_clust_t : public check_positive_t<Index> {
   explicit num_clust_t(const Index n) : check_positive_t<Index>(n) {}
@@ -34,29 +46,21 @@ struct num_sample_t : public check_positive_t<Index> {
   explicit num_sample_t(const Index n) : check_positive_t<Index>(n) {}
 };
 
-auto random_membership(const num_clust_t num_clust,  //
-                       const num_sample_t num_sample) {
+inline std::vector<Index> random_membership(const num_clust_t num_clust,  //
+                                            const num_sample_t num_sample);
 
-  std::random_device rd{};
-  std::mt19937 gen{rd()};
-  const Index k = num_clust.val;
-  const Index n = num_sample.val;
-
-  std::uniform_int_distribution<Index> runifK{0, k - 1};
-  std::vector<Index> idx(n);
-  std::iota(idx.begin(), idx.end(), 0);
-
-  std::vector<Index> ret(n);
-  ret.reserve(n);
-
-  std::transform(idx.begin(), idx.end(), std::back_inserter(ret),
-                 [&](const Index i) { return runifK(gen); });
-
-  return ret;
-}
+/////////////////////
+// implementations //
+/////////////////////
 
 template <typename F0, typename F>
-void estimate_mixture_of_columns(const Mat& X, const clustering_options_t& options) {
+inline std::tuple<Mat,                 //
+                  std::vector<F>,      //
+                  F0,                  //
+                  std::vector<Scalar>  //
+                  >
+estimate_mixture_of_columns(const Mat& X,  //
+                            const clustering_options_t& options) {
 
   const Index K = options.K;
   const Index D = X.rows();
@@ -85,6 +89,7 @@ void estimate_mixture_of_columns(const Mat& X, const clustering_options_t& optio
   ////////////////////////////////////////////////////////
 
   std::vector<Index> membership(X.cols());
+  std::fill(membership.begin(), membership.end(), -1);
   {
     Vec x(D);
     x.setZero();
@@ -95,7 +100,7 @@ void estimate_mixture_of_columns(const Mat& X, const clustering_options_t& optio
       dist          = (X.colwise() - x).cwiseProduct(X.colwise() - x).colwise().sum().transpose();
       dist          = dist.unaryExpr([](const Scalar _x) { return fasterlog(_x + 1e-8); });
       const Index j = sampler_n(dist);
-      TLOG("Assigning " << j << " -> " << k);
+      // TLOG("Assigning " << j << " -> " << k);
       x = X.col(j).eval();
       components[k] += x;
       membership[j] = k;
@@ -121,13 +126,9 @@ void estimate_mixture_of_columns(const Mat& X, const clustering_options_t& optio
   // burn-in to initialize again //
   /////////////////////////////////
   {
-    // progress_bar_t prog(options.burnin_iter, 1);
+    progress_bar_t<Index> prog(options.burnin_iter, 1);
 
     for (Index b = 0; b < options.burnin_iter; ++b) {
-
-      const Scalar temperature = options.burnin_iter - b;
-
-      Scalar score = 0;
       for (Index i = 0; i < N; ++i) {
         Index k_old = membership.at(i);
         components[k_old] -= X.col(i);
@@ -139,27 +140,15 @@ void estimate_mixture_of_columns(const Mat& X, const clustering_options_t& optio
           mass(k) += components.at(k).log_lcvi(X.col(i));
         }
 
-        Index k_new   = sampler_k(mass / temperature);
+        Index k_new   = sampler_k(mass);
         membership[i] = k_new;
 
         prior.add_to(k_new);
         components[k_new] += X.col(i);
-
-        score += components.at(k_new).log_marginal();
       }
-      score /= static_cast<Scalar>(X.cols());
-      // prog.update();
-      // prog(std::cerr);
+      prog.update();
+      prog(std::cerr);
     }
-  }
-
-  for (auto k : membership) {
-    std::cout << " " << k;
-  }
-  std::cout << std::endl;
-
-  for (Index k = 0; k < K; ++k) {
-    std::cout << components.at(k).posterior_mean().transpose() << std::endl;
   }
 
   ////////////////////////
@@ -167,49 +156,74 @@ void estimate_mixture_of_columns(const Mat& X, const clustering_options_t& optio
   ////////////////////////
 
   Mat Z(K, N);
+  Z.setZero();
   for (Index i = 0; i < N; ++i) {
     const Index k = membership.at(i);
     Z(k, i)       = 1.0;
   }
 
   const Scalar rate_discount = 0.55;
+  Vec z_i(K);
+  std::vector<Scalar> elbo;
+  elbo.reserve(options.max_iter);
 
-  Index t = 0;
+  for (Index t = 0; t < options.max_iter; ++t) {
 
-  Scalar rate = std::pow(static_cast<Scalar>(t + 1), -rate_discount);
+    Scalar _elbo = 0;
 
-  ////////////////
-  // Local step //
-  ////////////////
+    for (Index i = 0; i < N; ++i) {
 
-  for (Index i = 0; i < N; ++i) {
-    mass = prior.elbo();
+      ////////////////
+      // Local step //
+      ////////////////
 
-    for (Index k = 0; k < K; ++k) {
-      mass(k) += components.at(k).elbo(X.col(i));
+      mass = prior.log_lcvi();
+      for (Index k = 0; k < K; ++k) {
+        mass(k) += components.at(k).log_lcvi(X.col(i));
+      }
+
+      normalized_exp(mass, z_i);
+
+      /////////////////
+      // Global step //
+      /////////////////
+
+      for (Index k = 0; k < K; ++k) {
+        const Scalar z_old = Z(k, i);
+        const Scalar z_new = z_i(k);
+
+        components[k].update(X.col(i), z_old, z_new);
+
+        _elbo += z_new * components[k].elbo(X.col(i));
+      }
+
+      Z.col(i) = z_i;
     }
 
-    const Scalar denom = log_sum_exp(mass);
-    Z.col(i) = (mass.array() - denom).unaryExpr([](const Scalar x) { return fasterexp(x); });
+    const Scalar rate = std::pow(static_cast<Scalar>(t + 1), -rate_discount);
+    prior.update(Z, rate);
+    elbo.push_back(_elbo);
+
+    if (t >= options.min_iter) {
+      const Scalar diff = (elbo.at(t) - elbo.at(t - 1)) / elbo.at(t - 1);
+      if (diff < options.Tol) break;
+    }
+
+    TLOG("VB Iter [" << std::setw(5) << t << "] [" << std::setw(10) << _elbo << "]");
   }
 
-  /////////////////
-  // Global step //
-  /////////////////
-
-  prior.update(Z, rate);
-
-  //
+  return std::make_tuple(Z, components, prior, elbo);
 }
 
 //////////////////////////////////////////////////////
 // A data-simulation routine for debugging purposes //
 //////////////////////////////////////////////////////
 
-inline auto simulate_gaussian_mixture(const Index n   = 100,     // sample size
-                                      const Index p   = 2,       // dimension
-                                      const Index k   = 3,       // #components
-                                      const Scalar sd = 0.01) {  // jitter
+inline std::tuple<Mat, std::vector<Index>, Mat> simulate_gaussian_mixture(
+    const Index n   = 300,     // sample size
+    const Index p   = 2,       // dimension
+    const Index k   = 3,       // #components
+    const Scalar sd = 0.01) {  // jitter
 
   std::random_device rd{};
   std::mt19937 gen{rd()};
@@ -239,6 +253,26 @@ inline auto simulate_gaussian_mixture(const Index n   = 100,     // sample size
   Mat X(p, n);
   X = (centroid * Z).unaryExpr([&](const Scalar x) { return x + sd * rnorm(gen); }).eval();
   return std::make_tuple(X, membership, centroid);
+}
+
+inline std::vector<Index> random_membership(const num_clust_t num_clust,  //
+                                            const num_sample_t num_sample) {
+
+  std::random_device rd{};
+  std::mt19937 gen{rd()};
+  const Index k = num_clust.val;
+  const Index n = num_sample.val;
+
+  std::uniform_int_distribution<Index> runifK{0, k - 1};
+  std::vector<Index> idx(n);
+  std::iota(idx.begin(), idx.end(), 0);
+  std::vector<Index> ret;
+  ret.reserve(n);
+
+  std::transform(idx.begin(), idx.end(), std::back_inserter(ret),
+                 [&](const Index i) { return runifK(gen); });
+
+  return ret;
 }
 
 #endif

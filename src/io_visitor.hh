@@ -146,7 +146,7 @@ void visit_matrix_market_stream(IFS &ifs, FUN &fun) {
     }
   };
 
-  for (; num_nz < max_elem && it != END; ++it) {
+  for (; num_nz < static_cast<size_t>(max_elem) && it != END; ++it) {
     char c = *it;
 
     // Skip the comment line. It doesn't count toward the line
@@ -196,7 +196,7 @@ void visit_matrix_market_stream(IFS &ifs, FUN &fun) {
   }
   if (num_nz >= INTERVAL) std::cerr << std::endl;
   fun.eval_end();
-} // End of the visit
+}  // End of the visit
 
 template <typename FUN>
 void visit_matrix_market_file(const std::string filename, FUN &fun) {
