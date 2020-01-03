@@ -16,7 +16,8 @@ struct col_data_normalizer_t {
   using scalar_t = Scalar;
 
   explicit col_data_normalizer_t(const std::string _target, const std::vector<scalar_t>& _scale)
-      : target_filename(_target), col_scale(_scale) {
+      : target_filename(_target),
+        col_scale(_scale) {
     elem_check = 0;
     max_row    = 0;
     max_col    = 0;
@@ -63,9 +64,10 @@ struct col_data_normalizer_t {
   static constexpr char FS = ' ';
 };
 
-void write_normalized(const std::string mtx_file,  // input file
-                      const std::string out_file,  // output file
-                      const Scalar tau_scale) {
+void
+write_normalized(const std::string mtx_file,  // input file
+                 const std::string out_file,  // output file
+                 const Scalar tau_scale) {
 
   col_stat_collector_t collector;
   visit_matrix_market_file(mtx_file, collector);
@@ -94,7 +96,8 @@ void write_normalized(const std::string mtx_file,  // input file
 }
 
 template <typename Derived>
-SpMat normalize_to_median(const Eigen::SparseMatrixBase<Derived>& xx) {
+SpMat
+normalize_to_median(const Eigen::SparseMatrixBase<Derived>& xx) {
 
   const Derived& X = xx.derived();
   const Vec deg    = X.transpose() * Mat::Ones(X.cols(), 1);

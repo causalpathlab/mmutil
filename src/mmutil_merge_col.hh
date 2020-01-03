@@ -3,12 +3,13 @@
 #ifndef MMUTIL_MERGE_COL_HH_
 #define MMUTIL_MERGE_COL_HH_
 
-int run_merge_col(const std::string glob_row_file,           //
-                  const Index column_threshold,              //
-                  const std::string output,                  //
-                  const std::vector<std::string> mtx_files,  //
-                  const std::vector<std::string> row_files,  //
-                  const std::vector<std::string> col_files);
+int
+run_merge_col(const std::string glob_row_file,           //
+              const Index column_threshold,              //
+              const std::string output,                  //
+              const std::vector<std::string> mtx_files,  //
+              const std::vector<std::string> row_files,  //
+              const std::vector<std::string> col_files);
 
 ////////////////////////////////
 // lightweight column counter //
@@ -66,7 +67,9 @@ struct glob_triplet_copier_t {
   explicit glob_triplet_copier_t(ogzstream& _ofs,                // output stream
                                  const index_map_t& _remap_row,  // row mapper
                                  const index_map_t& _remap_col)  // column mapper
-      : ofs(_ofs), remap_row(_remap_row), remap_col(_remap_col) {
+      : ofs(_ofs),
+        remap_row(_remap_row),
+        remap_col(_remap_col) {
     max_row  = 0;
     max_col  = 0;
     max_elem = 0;
@@ -103,10 +106,10 @@ struct glob_triplet_copier_t {
 
 #include "mmutil_merge_col.hh"
 
-int run_merge_col(const std::string glob_row_file, const Index column_threshold,
-                  const std::string output, const std::vector<std::string> mtx_files,
-                  const std::vector<std::string> row_files,
-                  const std::vector<std::string> col_files) {
+int
+run_merge_col(const std::string glob_row_file, const Index column_threshold,
+              const std::string output, const std::vector<std::string> mtx_files,
+              const std::vector<std::string> row_files, const std::vector<std::string> col_files) {
 
   using Str       = std::string;
   using Str2Index = std::unordered_map<Str, Index>;

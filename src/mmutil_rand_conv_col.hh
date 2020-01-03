@@ -18,9 +18,10 @@ struct RefPerSampleT {
   const Index val;
 };
 
-SpMat sample_conv_index(const NrefT _Nref, //
-			const ConvSampleT _N, //
-			const RefPerSampleT _D) {
+SpMat
+sample_conv_index(const NrefT _Nref,     //
+                  const ConvSampleT _N,  //
+                  const RefPerSampleT _D) {
 
   std::random_device rd;
   std::mt19937 rng(rd());

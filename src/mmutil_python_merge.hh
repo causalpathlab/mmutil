@@ -16,7 +16,8 @@ const char* _merge_files_desc =
     "count_threshold : Set the number of non-zero elements per column\n"
     "\n";
 
-static PyObject* mmutil_merge_files(PyObject* self, PyObject* args, PyObject* keywords) {
+static PyObject*
+mmutil_merge_files(PyObject* self, PyObject* args, PyObject* keywords) {
 
   static const char* kwlist[] = {"glob_row_file",  //
                                  "mtx_files",      //

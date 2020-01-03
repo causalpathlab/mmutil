@@ -45,17 +45,18 @@ struct match_options_t {
   Index iter;
 };
 
-int parse_match_options(const int argc,      //
-                        const char* argv[],  //
-                        match_options_t& mopt) {
+int
+parse_match_options(const int argc,      //
+                    const char* argv[],  //
+                    match_options_t& options) {
 
   const char* _usage =
       "\n"
       "[Arguments]\n"
       "--src_mtx (-s)  : Source MTX file\n"
-      "--src_col (-c)  : Source MTX file\n"
+      "--src_col (-c)  : Source column file\n"
       "--tgt_mtx (-t)  : Target MTX file\n"
-      "--tgt_col (-g)  : Target MTX file\n"
+      "--tgt_col (-g)  : Target column file\n"
       "--tgt_dict (-d) : Target dictionary file\n"
       "--knn (-k)      : K nearest neighbors (default: 1)\n"
       "--bilink (-m)   : # of bidirectional links (default: 10)\n"
@@ -116,43 +117,44 @@ int parse_match_options(const int argc,      //
 
     switch (opt) {
       case 's':
-        mopt.src_mtx = std::string(optarg);
+        options.src_mtx = std::string(optarg);
         break;
       case 't':
-        mopt.tgt_mtx = std::string(optarg);
+        options.tgt_mtx = std::string(optarg);
         break;
       case 'c':
-        mopt.src_col = std::string(optarg);
+        options.src_col = std::string(optarg);
         break;
       case 'g':
-        mopt.tgt_col = std::string(optarg);
+        options.tgt_col = std::string(optarg);
         break;
       case 'o':
-        mopt.out = std::string(optarg);
+        options.out = std::string(optarg);
         break;
       case 'k':
-        mopt.knn = std::stoi(optarg);
+        options.knn = std::stoi(optarg);
         break;
       case 'm':
-        mopt.bilink = std::stoi(optarg);
+        options.bilink = std::stoi(optarg);
         break;
-      case 'n':
-        mopt.nlist = std::stoi(optarg);
+      case 'f':
+        options.nlist = std::stoi(optarg);
         break;
       case 'u':
-        mopt.tau = std::stof(optarg);
+        options.tau = std::stof(optarg);
         break;
       case 'r':
-        mopt.rank = std::stoi(optarg);
+        options.rank = std::stoi(optarg);
         break;
       case 'i':
-        mopt.iter = std::stoi(optarg);
+        options.iter = std::stoi(optarg);
         break;
       case 'h':  // -h or --help
       case '?':  // Unrecognized option
         std::cerr << _usage << std::endl;
         return EXIT_FAILURE;
-      default:;
+      default:  //
+                ;
     }
   }
 
@@ -194,7 +196,9 @@ using index_triplet_vec = std::vector<std::tuple<Index, Index, Scalar> >;
 
 struct SrcDataT {
   explicit SrcDataT(const float* _data, const Index d, const Index s)
-      : data(_data), vecdim(d), vecsize(s) {}
+      : data(_data),
+        vecdim(d),
+        vecsize(s) {}
   const float* data;
   const Index vecdim;
   const Index vecsize;
@@ -202,7 +206,9 @@ struct SrcDataT {
 
 struct TgtDataT {
   explicit TgtDataT(const float* _data, const Index d, const Index s)
-      : data(_data), vecdim(d), vecsize(s) {}
+      : data(_data),
+        vecdim(d),
+        vecsize(s) {}
   const float* data;
   const Index vecdim;
   const Index vecsize;
@@ -212,32 +218,35 @@ struct TgtDataT {
 // search over the rows of sparse matrix //
 ///////////////////////////////////////////
 
-int search_knn(const SrcSparseRowsT _SrcRows,  //
-               const TgtSparseRowsT _TgtRows,  //
-               const KNN _knn,                 //
-               const BILINK _bilink,           //
-               const NNLIST _nnlist,           //
-               index_triplet_vec& out);
+int
+search_knn(const SrcSparseRowsT _SrcRows,  //
+           const TgtSparseRowsT _TgtRows,  //
+           const KNN _knn,                 //
+           const BILINK _bilink,           //
+           const NNLIST _nnlist,           //
+           index_triplet_vec& out);
 
 ////////////////////////////////
 // search over the dense data //
 ////////////////////////////////
 
-int search_knn(const SrcDataT _SrcData,  //
-               const TgtDataT _TgtData,  //
-               const KNN _knn,           //
-               const BILINK _bilink,     //
-               const NNLIST _nnlist,     //
-               index_triplet_vec& out);
+int
+search_knn(const SrcDataT _SrcData,  //
+           const TgtDataT _TgtData,  //
+           const KNN _knn,           //
+           const BILINK _bilink,     //
+           const NNLIST _nnlist,     //
+           index_triplet_vec& out);
 
 ////////////////////////////////////////////////////////////////
 
-int search_knn(const SrcSparseRowsT _SrcRows,  //
-               const TgtSparseRowsT _TgtRows,  //
-               const KNN _knn,                 //
-               const BILINK _bilink,           //
-               const NNLIST _nnlist,           //
-               index_triplet_vec& out) {
+int
+search_knn(const SrcSparseRowsT _SrcRows,  //
+           const TgtSparseRowsT _TgtRows,  //
+           const KNN _knn,                 //
+           const BILINK _bilink,           //
+           const NNLIST _nnlist,           //
+           index_triplet_vec& out) {
 
   const SpMat& SrcRows = _SrcRows.data;
   const SpMat& TgtRows = _TgtRows.data;
@@ -299,10 +308,13 @@ int search_knn(const SrcSparseRowsT _SrcRows,  //
   // recall //
   ////////////
 
-  TLOG("Finding " << knn << " nearest neighbors");
-
   {
-    progress_bar_t<Index> prog(SrcRows.outerSize(), 1e2);
+
+    const Index Ntot = SrcRows.outerSize();
+    
+    TLOG("Finding " << knn << " nearest neighbors for N = " << Ntot);
+
+    progress_bar_t<Index> prog(Ntot, 1e2);
 
 #pragma omp parallel for
     for (Index i = 0; i < SrcRows.outerSize(); ++i) {
@@ -342,12 +354,13 @@ int search_knn(const SrcSparseRowsT _SrcRows,  //
   return EXIT_SUCCESS;
 }
 
-int search_knn(const SrcDataT _SrcData,  //
-               const TgtDataT _TgtData,  //
-               const KNN _knn,           //
-               const BILINK _bilink,     //
-               const NNLIST _nnlist,     //
-               index_triplet_vec& out) {
+int
+search_knn(const SrcDataT _SrcData,  //
+           const TgtDataT _TgtData,  //
+           const KNN _knn,           //
+           const BILINK _bilink,     //
+           const NNLIST _nnlist,     //
+           index_triplet_vec& out) {
 
   ERR_RET(_SrcData.vecdim != _TgtData.vecdim,
           "source and target must have the same dimensionality");
@@ -387,9 +400,11 @@ int search_knn(const SrcDataT _SrcData,  //
   // recall //
   ////////////
 
-  TLOG("Finding " << knn << " nearest neighbors");
-
   {
+
+    const Index N = _SrcData.vecsize;
+    TLOG("Finding " << knn << " nearest neighbors for N = " << N);
+
     const float* mass = _SrcData.data;
     progress_bar_t<Index> prog(_SrcData.vecsize, 1e2);
 
@@ -410,7 +425,8 @@ int search_knn(const SrcDataT _SrcData,  //
   return EXIT_SUCCESS;
 }
 
-inline std::unordered_set<Index> find_nz_cols(const std::string mtx_file) {
+inline std::unordered_set<Index>
+find_nz_cols(const std::string mtx_file) {
   col_stat_collector_t collector;
   visit_matrix_market_file(mtx_file, collector);
   std::unordered_set<Index> valid;
@@ -422,9 +438,10 @@ inline std::unordered_set<Index> find_nz_cols(const std::string mtx_file) {
 }
 
 template <typename TVec, typename SVec>
-auto build_knn_named(const TVec& out_index,      //
-                     const SVec& col_src_names,  //
-                     const SVec& col_tgt_names) {
+auto
+build_knn_named(const TVec& out_index,      //
+                const SVec& col_src_names,  //
+                const SVec& col_tgt_names) {
 
   using RET = std::vector<std::tuple<std::string, std::string, Scalar> >;
 
@@ -442,11 +459,12 @@ auto build_knn_named(const TVec& out_index,      //
 }
 
 template <typename TVec, typename SVec, typename VVec>
-auto build_knn_named(const TVec& out_index,      //
-                     const SVec& col_src_names,  //
-                     const SVec& col_tgt_names,  //
-                     const VVec& valid_src,      //
-                     const VVec& valid_tgt) {
+auto
+build_knn_named(const TVec& out_index,      //
+                const SVec& col_src_names,  //
+                const SVec& col_tgt_names,  //
+                const VVec& valid_src,      //
+                const VVec& valid_tgt) {
 
   using RET = std::vector<std::tuple<std::string, std::string, Scalar> >;
 

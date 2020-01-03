@@ -8,17 +8,20 @@
 #define IO_VISITOR_HH_
 
 template <typename FUN>
-void visit_matrix_market_file(const std::string filename, FUN &fun);
+void
+visit_matrix_market_file(const std::string filename, FUN &fun);
 
 template <typename IFS, typename FUN>
-void visit_matrix_market_stream(IFS &ifs, FUN &fun);
+void
+visit_matrix_market_stream(IFS &ifs, FUN &fun);
 
 /////////////////////
 // implementations //
 /////////////////////
 
 template <typename IFS, typename FUN>
-void visit_matrix_market_stream(IFS &ifs, FUN &fun) {
+void
+visit_matrix_market_stream(IFS &ifs, FUN &fun) {
   using scalar_t = typename FUN::scalar_t;
   using index_t  = typename FUN::index_t;
 
@@ -199,7 +202,8 @@ void visit_matrix_market_stream(IFS &ifs, FUN &fun) {
 }  // End of the visit
 
 template <typename FUN>
-void visit_matrix_market_file(const std::string filename, FUN &fun) {
+void
+visit_matrix_market_file(const std::string filename, FUN &fun) {
   if (filename.size() >= 3 && (filename.substr(filename.size() - 3) == ".gz")) {
     igzstream ifs(filename.c_str(), std::ios::in);
     visit_matrix_market_stream(ifs, fun);

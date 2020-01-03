@@ -12,7 +12,8 @@
 #define EIGEN_UTIL_HH_
 
 template <typename EigenVec>
-inline auto std_vector(const EigenVec& eigen_vec) {
+inline auto
+std_vector(const EigenVec& eigen_vec) {
   std::vector<typename EigenVec::Scalar> ret(eigen_vec.size());
   for (typename EigenVec::Index j = 0; j < eigen_vec.size(); ++j) {
     ret[j] = eigen_vec(j);
@@ -21,7 +22,8 @@ inline auto std_vector(const EigenVec& eigen_vec) {
 }
 
 template <typename EigenVec, typename StdVec>
-inline void std_vector(const EigenVec& eigen_vec, StdVec& ret) {
+inline void
+std_vector(const EigenVec& eigen_vec, StdVec& ret) {
   ret.resize(eigen_vec.size());
   using T = typename StdVec::value_type;
   for (typename EigenVec::Index j = 0; j < eigen_vec.size(); ++j) {
@@ -30,7 +32,8 @@ inline void std_vector(const EigenVec& eigen_vec, StdVec& ret) {
 }
 
 template <typename T>
-inline auto eigen_triplets(const std::vector<T>& Tvec) {
+std::vector<Eigen::Triplet<float> >
+eigen_triplets(const std::vector<T>& Tvec) {
 
   using Scalar      = float;
   using _Triplet    = Eigen::Triplet<Scalar>;
@@ -47,12 +50,14 @@ inline auto eigen_triplets(const std::vector<T>& Tvec) {
 }
 
 template <typename Scalar>
-inline auto eigen_triplets(const std::vector<Eigen::Triplet<Scalar> >& Tvec) {
+inline auto
+eigen_triplets(const std::vector<Eigen::Triplet<Scalar> >& Tvec) {
   return Tvec;
 }
 
 template <typename TVEC, typename INDEX>
-inline auto build_eigen_sparse(const TVEC& Tvec, const INDEX max_row, const INDEX max_col) {
+inline Eigen::SparseMatrix<float, Eigen::RowMajor, std::ptrdiff_t>  //
+build_eigen_sparse(const TVEC& Tvec, const INDEX max_row, const INDEX max_col) {
 
   auto _tvec   = eigen_triplets(Tvec);
   using Scalar = float;
@@ -65,7 +70,8 @@ inline auto build_eigen_sparse(const TVEC& Tvec, const INDEX max_row, const INDE
 }
 
 template <typename Vec>
-auto eigen_argsort_descending(const Vec& data) {
+inline std::vector<typename Vec::Index>
+eigen_argsort_descending(const Vec& data) {
   using Index = typename Vec::Index;
   std::vector<Index> index(data.size());
   std::iota(std::begin(index), std::end(index), 0);
@@ -75,7 +81,8 @@ auto eigen_argsort_descending(const Vec& data) {
 }
 
 template <typename Vec>
-auto eigen_argsort_descending_par(const Vec& data) {
+inline std::vector<typename Vec::Index>
+eigen_argsort_descending_par(const Vec& data) {
   using Index = typename Vec::Index;
   std::vector<Index> index(data.size());
   std::iota(std::begin(index), std::end(index), 0);
@@ -85,24 +92,24 @@ auto eigen_argsort_descending_par(const Vec& data) {
 }
 
 template <typename Derived>
-Eigen::Matrix<typename Derived::Scalar, Eigen::Dynamic, Eigen::Dynamic> row_score_degree(
-    const Eigen::SparseMatrixBase<Derived>& _xx) {
+inline Eigen::Matrix<typename Derived::Scalar, Eigen::Dynamic, Eigen::Dynamic, Eigen::ColMajor>
+row_score_degree(const Eigen::SparseMatrixBase<Derived>& _xx) {
 
   const Derived& xx = _xx.derived();
   using Scalar      = typename Derived::Scalar;
-  using Mat         = Eigen::Matrix<Scalar, Eigen::Dynamic, Eigen::Dynamic>;
+  using Mat         = Eigen::Matrix<Scalar, Eigen::Dynamic, Eigen::Dynamic, Eigen::ColMajor>;
 
   return xx.unaryExpr([](const Scalar x) { return std::abs(x); }) * Mat::Ones(xx.cols(), 1);
 }
 
 template <typename Derived>
-Eigen::Matrix<typename Derived::Scalar, Eigen::Dynamic, Eigen::Dynamic> row_score_sd(
-    const Eigen::SparseMatrixBase<Derived>& _xx) {
+inline Eigen::Matrix<typename Derived::Scalar, Eigen::Dynamic, Eigen::Dynamic, Eigen::ColMajor>
+row_score_sd(const Eigen::SparseMatrixBase<Derived>& _xx) {
 
   const Derived& xx = _xx.derived();
   using Scalar      = typename Derived::Scalar;
   using Vec         = Eigen::Matrix<Scalar, Eigen::Dynamic, 1>;
-  using Mat         = Eigen::Matrix<Scalar, Eigen::Dynamic, Eigen::Dynamic>;
+  using Mat         = Eigen::Matrix<Scalar, Eigen::Dynamic, Eigen::Dynamic, Eigen::ColMajor>;
 
   Vec s1         = xx * Mat::Ones(xx.cols(), 1);
   Vec s2         = xx.cwiseProduct(xx) * Mat::Ones(xx.cols(), 1);
@@ -115,9 +122,9 @@ Eigen::Matrix<typename Derived::Scalar, Eigen::Dynamic, Eigen::Dynamic> row_scor
 }
 
 template <typename Derived>
-Eigen::SparseMatrix<typename Derived::Scalar, Eigen::RowMajor, std::ptrdiff_t> vcat(
-    const Eigen::SparseMatrixBase<Derived>& _upper,
-    const Eigen::SparseMatrixBase<Derived>& _lower) {
+inline Eigen::SparseMatrix<typename Derived::Scalar, Eigen::RowMajor, std::ptrdiff_t>
+vcat(const Eigen::SparseMatrixBase<Derived>& _upper,
+     const Eigen::SparseMatrixBase<Derived>& _lower) {
 
   using Scalar         = typename Derived::Scalar;
   using Index          = typename Derived::Index;
@@ -152,8 +159,9 @@ Eigen::SparseMatrix<typename Derived::Scalar, Eigen::RowMajor, std::ptrdiff_t> v
 }
 
 template <typename Derived>
-Eigen::SparseMatrix<typename Derived::Scalar, Eigen::RowMajor, std::ptrdiff_t> hcat(
-    const Eigen::SparseMatrixBase<Derived>& _left, const Eigen::SparseMatrixBase<Derived>& _right) {
+inline Eigen::SparseMatrix<typename Derived::Scalar, Eigen::RowMajor, std::ptrdiff_t>
+hcat(const Eigen::SparseMatrixBase<Derived>& _left,
+     const Eigen::SparseMatrixBase<Derived>& _right) {
 
   using Scalar         = typename Derived::Scalar;
   using Index          = typename Derived::Index;
@@ -188,7 +196,8 @@ Eigen::SparseMatrix<typename Derived::Scalar, Eigen::RowMajor, std::ptrdiff_t> h
 }
 
 template <typename Derived>
-inline typename Derived::Scalar log_sum_exp(const Eigen::MatrixBase<Derived>& log_vec) {
+inline typename Derived::Scalar
+log_sum_exp(const Eigen::MatrixBase<Derived>& log_vec) {
 
   using Scalar = typename Derived::Scalar;
   using Index  = typename Derived::Index;
@@ -209,8 +218,8 @@ inline typename Derived::Scalar log_sum_exp(const Eigen::MatrixBase<Derived>& lo
 }
 
 template <typename Derived, typename Derived2>
-inline typename Derived::Scalar normalized_exp(const Eigen::MatrixBase<Derived>& _log_vec,
-                                               Eigen::MatrixBase<Derived2>& _ret) {
+inline typename Derived::Scalar
+normalized_exp(const Eigen::MatrixBase<Derived>& _log_vec, Eigen::MatrixBase<Derived2>& _ret) {
 
   using Scalar = typename Derived::Scalar;
   using Index  = typename Derived::Index;
@@ -229,6 +238,54 @@ inline typename Derived::Scalar normalized_exp(const Eigen::MatrixBase<Derived>&
 
   const Scalar log_normalizer = fasterlog(denom) + log_denom;
   return log_normalizer;
+}
+
+template <typename Derived>
+inline Eigen::Matrix<typename Derived::Scalar, Eigen::Dynamic, Eigen::Dynamic, Eigen::ColMajor>
+standardize(const Eigen::MatrixBase<Derived>& Xraw, const typename Derived::Scalar EPS = 1e-8) {
+
+  using Index  = typename Derived::Index;
+  using Scalar = typename Derived::Scalar;
+  using mat_t  = Eigen::Matrix<Scalar, Eigen::Dynamic, Eigen::Dynamic, Eigen::ColMajor>;
+  using RowVec = typename Eigen::internal::plain_row_type<Derived>::type;
+
+  mat_t X(Xraw.rows(), Xraw.cols());
+
+  ////////////////
+  // Remove NaN //
+  ////////////////
+
+  const RowVec num_obs =
+      Xraw.unaryExpr([](const Scalar x) {
+            return std::isfinite(x) ? static_cast<Scalar>(1) : static_cast<Scalar>(0);
+          })
+          .colwise()
+          .sum();
+
+  X = Xraw.unaryExpr([](const Scalar x) { return std::isfinite(x) ? x : static_cast<Scalar>(0); });
+
+  //////////////////////////
+  // calculate statistics //
+  //////////////////////////
+
+  const RowVec x_mean  = X.colwise().sum().cwiseQuotient(num_obs);
+  const RowVec x2_mean = X.cwiseProduct(X).colwise().sum().cwiseQuotient(num_obs);
+  const RowVec x_sd    = (x2_mean - x_mean.cwiseProduct(x_mean)).cwiseSqrt();
+
+  // standardize
+  for (Index j = 0; j < X.cols(); ++j) {
+    const Scalar mu = x_mean(j);
+    const Scalar sd = x_sd(j) + EPS;
+    auto std_op     = [&mu, &sd](const Scalar& x) -> Scalar {
+      const Scalar ret = static_cast<Scalar>((x - mu) / sd);
+      return ret;
+    };
+
+    // This must be done with original data
+    X.col(j) = X.col(j).unaryExpr(std_op).eval();
+  }
+
+  return X;
 }
 
 #endif

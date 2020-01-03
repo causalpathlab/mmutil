@@ -6,7 +6,8 @@
 #define STD_UTIL_HH_
 
 template <typename Vec>
-auto std_argsort(const Vec& data) {
+auto
+std_argsort(const Vec& data) {
   using Index = std::ptrdiff_t;
   std::vector<Index> index(data.size());
   std::iota(std::begin(index), std::end(index), 0);
@@ -16,7 +17,8 @@ auto std_argsort(const Vec& data) {
 }
 
 template <typename Vec>
-auto std_argsort_par(const Vec& data) {
+auto
+std_argsort_par(const Vec& data) {
   using Index = std::ptrdiff_t;
   std::vector<Index> index(data.size());
   std::iota(std::begin(index), std::end(index), 0);

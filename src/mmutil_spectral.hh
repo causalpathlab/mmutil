@@ -11,9 +11,9 @@
 /////////////////////////////////////////////
 
 template <typename Derived>
-inline Mat make_scaled_regularized(const Eigen::SparseMatrixBase<Derived>& _X0,  // sparse data
-                                   const float tau_scale                         // regularization
-) {
+inline Mat
+make_scaled_regularized(const Eigen::SparseMatrixBase<Derived>& _X0,  // sparse data
+                        const float tau_scale){                        // regularization
 
   const Derived& X0 = _X0.derived();
 
@@ -25,7 +25,8 @@ inline Mat make_scaled_regularized(const Eigen::SparseMatrixBase<Derived>& _X0, 
 
   TLOG("Constructing a reguarlized graph Laplacian ...");
 
-  const SpMat X    = normalize_to_median(X0);
+  const SpMat X = normalize_to_median(X0);
+
   const Mat Deg    = (X.transpose().cwiseProduct(X.transpose()) * Mat::Ones(max_row, 1));
   const Scalar tau = Deg.mean() * tau_scale;
   const Mat degree_tau_sqrt_inverse = Deg.unaryExpr([&tau](const Scalar x) {
@@ -38,11 +39,12 @@ inline Mat make_scaled_regularized(const Eigen::SparseMatrixBase<Derived>& _X0, 
 }
 
 template <typename Derived>
-std::tuple<Mat, Mat, Mat> take_spectrum_laplacian(  //
-    const Eigen::SparseMatrixBase<Derived>& _X0,    // sparse data
-    const float tau_scale,                          // regularization
-    const int rank,                                 // desired rank
-    const int iter = 5                              // should be enough
+inline std::tuple<Mat, Mat, Mat>
+take_spectrum_laplacian(                          //
+    const Eigen::SparseMatrixBase<Derived>& _X0,  // sparse data
+    const float tau_scale,                        // regularization
+    const int rank,                               // desired rank
+    const int iter = 5                            // should be enough
 ) {
 
   const Mat XtTau = make_scaled_regularized(_X0, tau_scale);

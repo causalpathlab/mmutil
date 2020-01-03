@@ -1,5 +1,5 @@
-#include <iostream>
 #include <iomanip>
+#include <iostream>
 
 #ifndef PROGRESS_HH_
 #define PROGRESS_HH_
@@ -8,7 +8,9 @@ template <typename index_t>
 struct progress_bar_t {
 
   explicit progress_bar_t(const index_t max_iter, const index_t interval)
-      : MAX_ITER(max_iter), INTERVAL(interval), MAX_PRINT(max_iter / interval) {
+      : MAX_ITER(max_iter),
+        INTERVAL(interval),
+        MAX_PRINT(max_iter / interval) {
     iter = 0;
   }
 

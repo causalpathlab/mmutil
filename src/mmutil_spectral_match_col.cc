@@ -1,23 +1,23 @@
 #include "mmutil_match.hh"
 #include "mmutil_spectral.hh"
 
-int main(const int argc, const char* argv[]) {
+int
+main(const int argc, const char* argv[]) {
 
-  match_options_t mopt;
+  match_options_t options;
 
-  CHK_ERR_RET(parse_match_options(argc, argv, mopt), "");
+  CHECK(parse_match_options(argc, argv, options));
 
-  if (!file_exists(mopt.src_mtx) || !file_exists(mopt.tgt_mtx)) {
-    return EXIT_FAILURE;
-  }
+  const std::string mtx_src_file(options.src_mtx);
+  const std::string mtx_tgt_file(options.tgt_mtx);
 
-  const std::string mtx_src_file(mopt.src_mtx);
-  const std::string mtx_tgt_file(mopt.tgt_mtx);
+  ERR_RET(!file_exists(mtx_src_file), "No source data file");
+  ERR_RET(!file_exists(mtx_tgt_file), "No target data file");
 
-  const float tau  = mopt.tau;
-  const Index iter = mopt.iter;
-  const Index rank = mopt.rank;
-  const std::string out_file(mopt.out);
+  const float tau  = options.tau;
+  const Index iter = options.iter;
+  const Index rank = options.rank;
+  const std::string out_file(options.out);
 
   std::vector<std::tuple<Index, Index, Scalar> > out_index;
 
@@ -32,8 +32,8 @@ int main(const int argc, const char* argv[]) {
 
   const SpMat SrcTgt = hcat(Src, Tgt);
 
-  Mat U, V, D;
-  std::tie(U, V, D) = take_spectrum_laplacian(SrcTgt, tau, rank, iter);
+  Mat U;
+  std::tie(U, std::ignore, std::ignore) = take_spectrum_laplacian(SrcTgt, tau, rank, iter);
 
   // must normalize before the search
   U = U.rowwise().normalized().eval();
@@ -41,12 +41,12 @@ int main(const int argc, const char* argv[]) {
   Mat src_u = U.topRows(Nsrc).transpose().eval();     // col = data point
   Mat tgt_u = U.bottomRows(Ntgt).transpose().eval();  // col = data point
 
-  const int knn = search_knn(SrcDataT(src_u.data(), src_u.rows(), src_u.cols()),
-                             TgtDataT(tgt_u.data(), tgt_u.rows(), tgt_u.cols()),
-                             KNN(mopt.knn),        //
-                             BILINK(mopt.bilink),  //
-                             NNLIST(mopt.nlist),   //
-                             out_index);
+  auto knn = search_knn(SrcDataT(src_u.data(), src_u.rows(), src_u.cols()),
+                        TgtDataT(tgt_u.data(), tgt_u.rows(), tgt_u.cols()),
+                        KNN(options.knn),        //
+                        BILINK(options.bilink),  //
+                        NNLIST(options.nlist),   //
+                        out_index);
 
   CHK_ERR_RET(knn, "Failed to search kNN");
 
@@ -63,8 +63,8 @@ int main(const int argc, const char* argv[]) {
   // give names to the columns //
   ///////////////////////////////
 
-  const std::string col_src_file(mopt.src_col);
-  const std::string col_tgt_file(mopt.tgt_col);
+  const std::string col_src_file(options.src_col);
+  const std::string col_tgt_file(options.tgt_col);
 
   std::vector<std::string> col_src_names;
   std::vector<std::string> col_tgt_names;

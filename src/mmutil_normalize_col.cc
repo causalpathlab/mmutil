@@ -1,6 +1,7 @@
 #include "mmutil_normalize.hh"
 
-void print_help(const char* fname) {
+void
+print_help(const char* fname) {
 
   const char* _norm_help =
       "[Arguments]\n"
@@ -24,7 +25,8 @@ void print_help(const char* fname) {
   std::cerr << _norm_help << std::endl;
 }
 
-int main(const int argc, const char* argv[]) {
+int
+main(const int argc, const char* argv[]) {
   if (argc < 4) {
     print_help(argv[0]);
     return EXIT_FAILURE;

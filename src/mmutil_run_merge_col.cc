@@ -1,7 +1,8 @@
 #include "mmutil.hh"
 #include "mmutil_merge_col.hh"
 
-void print_help(const char* fname) {
+void
+print_help(const char* fname) {
   std::cerr << "Merge the columns of sparse matrices matching rows" << std::endl;
   std::cerr << std::endl;
   std::cerr << fname << " global_row count_threshold output" << std::endl;
@@ -16,7 +17,8 @@ void print_help(const char* fname) {
   std::cerr << std::endl;
 }
 
-int main(const int argc, const char* argv[]) {
+int
+main(const int argc, const char* argv[]) {
 
   if (argc < 7) {
     print_help(argv[0]);

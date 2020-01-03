@@ -1,7 +1,8 @@
 #include "mmutil.hh"
 #include "mmutil_spectral.hh"
 
-void print_help(const char* fname) {
+void
+print_help(const char* fname) {
   std::cerr << "Find an eigen spectrum of regularized graph Laplacian" << std::endl;
   std::cerr << "Output [U,D,V] of the corresponding SVD" << std::endl;
   std::cerr << "Ref. Qin and Rohe (2013)" << std::endl;
@@ -10,7 +11,8 @@ void print_help(const char* fname) {
   std::cerr << std::endl;
 }
 
-int main(const int argc, const char* argv[]) {
+int
+main(const int argc, const char* argv[]) {
   if (argc < 5) {
     print_help(argv[0]);
     return EXIT_FAILURE;

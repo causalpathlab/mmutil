@@ -4,9 +4,10 @@
 #ifndef MMUTIL_DISTRIBUTE_COL_HH_
 #define MMUTIL_DISTRIBUTE_COL_HH_
 
-void distribute_col(const std::string mtx_file,         // matrix market
-                    const std::string membership_file,  // membership
-                    const std::string output) {         //
+void
+distribute_col(const std::string mtx_file,         // matrix market
+               const std::string membership_file,  // membership
+               const std::string output) {         //
 
   using Str = std::string;
 

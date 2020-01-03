@@ -22,19 +22,24 @@
 //////////////////////////////////////////////////////////////////////
 
 template <typename Derived>
-auto make_gaus_repr(const Eigen::MatrixBase<Derived>& y);
+auto
+make_gaus_repr(const Eigen::MatrixBase<Derived>& y);
 
 template <typename Matrix>
-void clear_repr(gaus_repr_t<Matrix>&);
+void
+clear_repr(gaus_repr_t<Matrix>&);
 
 template <typename Matrix, typename Derived>
-void update_repr(gaus_repr_t<Matrix>& repr, const Eigen::MatrixBase<Derived>& F);
+void
+update_repr(gaus_repr_t<Matrix>& repr, const Eigen::MatrixBase<Derived>& F);
 
 template <typename Matrix, typename Derived>
-void update_mean(gaus_repr_t<Matrix>& repr, const Eigen::MatrixBase<Derived>& M);
+void
+update_mean(gaus_repr_t<Matrix>& repr, const Eigen::MatrixBase<Derived>& M);
 
 template <typename Matrix, typename Derived>
-void update_var(gaus_repr_t<Matrix>& repr, const Eigen::MatrixBase<Derived>& V);
+void
+update_var(gaus_repr_t<Matrix>& repr, const Eigen::MatrixBase<Derived>& V);
 
 ///////////////////////////////////////////
 // random normal generation by intel MKL //
@@ -42,29 +47,36 @@ void update_var(gaus_repr_t<Matrix>& repr, const Eigen::MatrixBase<Derived>& V);
 
 #ifdef EIGEN_USE_MKL_ALL
 template <typename Matrix>
-const Matrix& sample_repr(gaus_repr_t<Matrix>& repr, VSLStreamStatePtr rstream);
+const Matrix&
+sample_repr(gaus_repr_t<Matrix>& repr, VSLStreamStatePtr rstream);
 
 template <typename Matrix>
-const Matrix& sample_repr_zeromean(gaus_repr_t<Matrix>& repr, VSLStreamStatePtr rstream);
+const Matrix&
+sample_repr_zeromean(gaus_repr_t<Matrix>& repr, VSLStreamStatePtr rstream);
 
 #else
 
 template <typename Matrix, typename RNG>
-const Matrix& sample_repr(gaus_repr_t<Matrix>& repr, RNG&);
+const Matrix&
+sample_repr(gaus_repr_t<Matrix>& repr, RNG&);
 
 template <typename Matrix, typename RNG>
-const Matrix& sample_repr_zeromean(gaus_repr_t<Matrix>& repr, RNG&);
+const Matrix&
+sample_repr_zeromean(gaus_repr_t<Matrix>& repr, RNG&);
 
 #endif
 
 template <typename Matrix>
-const Matrix& sample_repr(gaus_repr_t<Matrix>& repr);
+const Matrix&
+sample_repr(gaus_repr_t<Matrix>& repr);
 
 template <typename Matrix>
-const Matrix& sample_repr_zeromean(gaus_repr_t<Matrix>& repr);
+const Matrix&
+sample_repr_zeromean(gaus_repr_t<Matrix>& repr);
 
 template <typename Matrix>
-const Matrix& get_sampled_repr(gaus_repr_t<Matrix>& repr);
+const Matrix&
+get_sampled_repr(gaus_repr_t<Matrix>& repr);
 
 /////////////////////
 // implementations //
@@ -152,14 +164,16 @@ struct gaus_repr_t {
 };
 
 template <typename Derived>
-auto make_gaus_repr(const Eigen::MatrixBase<Derived>& y) {
+auto
+make_gaus_repr(const Eigen::MatrixBase<Derived>& y) {
   gaus_repr_t<typename Derived::Scalar> ret(y.rows(), y.cols());
   clear_repr(ret);
   return ret;
 }
 
 template <typename Matrix>
-void clear_repr(gaus_repr_t<Matrix>& repr) {
+void
+clear_repr(gaus_repr_t<Matrix>& repr) {
   const auto n = repr.n;
   const auto m = repr.m;
 
@@ -181,7 +195,8 @@ void clear_repr(gaus_repr_t<Matrix>& repr) {
 #ifdef EIGEN_USE_MKL_ALL
 
 template <typename Matrix>
-const Matrix& sample_repr(gaus_repr_t<Matrix>& repr, VSLStreamStatePtr rstream) {
+const Matrix&
+sample_repr(gaus_repr_t<Matrix>& repr, VSLStreamStatePtr rstream) {
   static_assert(std::is_same<float, typename Matrix::Scalar>::value,
                 "Only assume float for intel RNG");
 
@@ -191,7 +206,8 @@ const Matrix& sample_repr(gaus_repr_t<Matrix>& repr, VSLStreamStatePtr rstream) 
 }
 
 template <typename Matrix>
-const Matrix& sample_repr_zeromean(gaus_repr_t<Matrix>& repr, VSLStreamStatePtr rstream) {
+const Matrix&
+sample_repr_zeromean(gaus_repr_t<Matrix>& repr, VSLStreamStatePtr rstream) {
   static_assert(std::is_same<float, typename Matrix::Scalar>::value,
                 "Only assume float for intel RNG");
 
@@ -204,7 +220,8 @@ const Matrix& sample_repr_zeromean(gaus_repr_t<Matrix>& repr, VSLStreamStatePtr 
 #else
 
 template <typename Matrix, typename RNG>
-const Matrix& sample_repr(gaus_repr_t<Matrix>& repr, RNG& rng) {
+const Matrix&
+sample_repr(gaus_repr_t<Matrix>& repr, RNG& rng) {
   using Scalar = typename Matrix::Scalar;
   std::normal_distribution<Scalar> rnorm(0., 1.);
   repr.Eps = repr.Eps.unaryExpr([&](const auto& x) { return rnorm(rng); });
@@ -213,7 +230,8 @@ const Matrix& sample_repr(gaus_repr_t<Matrix>& repr, RNG& rng) {
 }
 
 template <typename Matrix, typename RNG>
-const Matrix& sample_repr_zeromean(gaus_repr_t<Matrix>& repr, RNG& rng) {
+const Matrix&
+sample_repr_zeromean(gaus_repr_t<Matrix>& repr, RNG& rng) {
   using Scalar = typename Matrix::Scalar;
   std::normal_distribution<Scalar> rnorm(0., 1.);
   repr.Eps = repr.Eps.unaryExpr([&](const auto& x) { return rnorm(rng); });
@@ -223,7 +241,8 @@ const Matrix& sample_repr_zeromean(gaus_repr_t<Matrix>& repr, RNG& rng) {
 #endif
 
 template <typename Matrix>
-const Matrix& sample_repr(gaus_repr_t<Matrix>& repr) {
+const Matrix&
+sample_repr(gaus_repr_t<Matrix>& repr) {
   using Scalar = typename Matrix::Scalar;
   repr.Eps = repr.Eps.unaryExpr([&](const auto& x) { return static_cast<Scalar>(ZIGG.norm()); });
   repr.Eta = repr.Mean + repr.Eps.cwiseProduct(repr.Var.cwiseSqrt());
@@ -231,14 +250,16 @@ const Matrix& sample_repr(gaus_repr_t<Matrix>& repr) {
 }
 
 template <typename Matrix>
-const Matrix& sample_repr_zeromean(gaus_repr_t<Matrix>& repr) {
+const Matrix&
+sample_repr_zeromean(gaus_repr_t<Matrix>& repr) {
   using Scalar = typename Matrix::Scalar;
   repr.Eps = repr.Eps.unaryExpr([&](const auto& x) { return static_cast<Scalar>(ZIGG.norm()); });
   return repr.Eta;
 }
 
 template <typename Matrix>
-const Matrix& get_sampled_repr(gaus_repr_t<Matrix>& repr) {
+const Matrix&
+get_sampled_repr(gaus_repr_t<Matrix>& repr) {
   return repr.Eta;
 }
 
@@ -255,7 +276,8 @@ const Matrix& get_sampled_repr(gaus_repr_t<Matrix>& repr) {
 ///////////////////////////////////////////////////////////////////////
 
 template <typename Matrix, typename Derived>
-void update_repr(gaus_repr_t<Matrix>& repr, const Eigen::MatrixBase<Derived>& F) {
+void
+update_repr(gaus_repr_t<Matrix>& repr, const Eigen::MatrixBase<Derived>& F) {
 
   repr.epsSd   = repr.Eps.binaryExpr(repr.Var, repr.EpsSd_op);
   repr.eps1Var = repr.Eps.binaryExpr(repr.Var, repr.Eps1Var_op);
@@ -278,13 +300,15 @@ void update_repr(gaus_repr_t<Matrix>& repr, const Eigen::MatrixBase<Derived>& F)
 }
 
 template <typename Matrix, typename Derived>
-void update_mean(gaus_repr_t<Matrix>& repr, const Eigen::MatrixBase<Derived>& M) {
+void
+update_mean(gaus_repr_t<Matrix>& repr, const Eigen::MatrixBase<Derived>& M) {
   repr.Mean       = M.eval();
   repr.summarized = false;
 }
 
 template <typename Matrix, typename Derived>
-void update_var(gaus_repr_t<Matrix>& repr, const Eigen::MatrixBase<Derived>& V) {
+void
+update_var(gaus_repr_t<Matrix>& repr, const Eigen::MatrixBase<Derived>& V) {
   repr.Var        = V.eval();
   repr.summarized = false;
 }

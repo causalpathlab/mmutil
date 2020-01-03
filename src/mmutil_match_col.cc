@@ -1,6 +1,7 @@
 #include "mmutil_match.hh"
 
-int main(const int argc, const char* argv[]) {
+int
+main(const int argc, const char* argv[]) {
 
   match_options_t mopt;
 
@@ -8,6 +9,10 @@ int main(const int argc, const char* argv[]) {
 
   const std::string mtx_src_file(mopt.src_mtx);
   const std::string mtx_tgt_file(mopt.tgt_mtx);
+
+  ERR_RET(!file_exists(mtx_src_file), "No source data file");
+  ERR_RET(!file_exists(mtx_tgt_file), "No target data file");
+
   const std::string out_file(mopt.out);
 
   std::vector<std::tuple<Index, Index, Scalar> > out_index;
@@ -15,12 +20,12 @@ int main(const int argc, const char* argv[]) {
   const SpMat Src = build_eigen_sparse(mtx_src_file).transpose().eval();
   const SpMat Tgt = build_eigen_sparse(mtx_tgt_file).transpose().eval();
 
-  const int knn = search_knn(SrcSparseRowsT(Src),  //
-                             TgtSparseRowsT(Tgt),  //
-                             KNN(mopt.knn),        //
-                             BILINK(mopt.bilink),  //
-                             NNLIST(mopt.nlist),   //
-                             out_index);
+  auto knn = search_knn(SrcSparseRowsT(Src),  //
+                        TgtSparseRowsT(Tgt),  //
+                        KNN(mopt.knn),        //
+                        BILINK(mopt.bilink),  //
+                        NNLIST(mopt.nlist),   //
+                        out_index);
 
   CHK_ERR_RET(knn, "Failed to search kNN");
 

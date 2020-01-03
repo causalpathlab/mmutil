@@ -28,15 +28,18 @@ const char* _write_numpy_desc =
     "Output: A (dense) matrix file name.\n"
     "The function treats it gzipped if the name ends with `.gz`\n";
 
-static PyObject* mmutil_read_triplets_numpy(PyObject* self, PyObject* args);
+static PyObject*
+mmutil_read_triplets_numpy(PyObject* self, PyObject* args);
 
-static PyObject* mmutil_read_triplets(PyObject* self, PyObject* args);
+static PyObject*
+mmutil_read_triplets(PyObject* self, PyObject* args);
 
 /////////////////////
 // implementations //
 /////////////////////
 
-static PyObject* mmutil_read_triplets_numpy(PyObject* self, PyObject* args) {
+static PyObject*
+mmutil_read_triplets_numpy(PyObject* self, PyObject* args) {
   char* _filename;
 
   if (!PyArg_ParseTuple(args, "s", &_filename)) {
@@ -88,7 +91,8 @@ static PyObject* mmutil_read_triplets_numpy(PyObject* self, PyObject* args) {
   return ret;
 }
 
-static PyObject* mmutil_read_triplets(PyObject* self, PyObject* args) {
+static PyObject*
+mmutil_read_triplets(PyObject* self, PyObject* args) {
   char* _filename;
 
   if (!PyArg_ParseTuple(args, "s", &_filename)) {
@@ -167,8 +171,9 @@ static PyObject* mmutil_read_triplets(PyObject* self, PyObject* args) {
 }
 
 template <typename OFS, typename T>
-void _write_numpy_array_stream(OFS& ofs, const T* data, const Index nrow, const Index ncol,
-                               const Index num_elements) {
+void
+_write_numpy_array_stream(OFS& ofs, const T* data, const Index nrow, const Index ncol,
+                          const Index num_elements) {
 
   const std::string SEP(" ");
   const Index INTERVAL = 1e6;
@@ -202,8 +207,9 @@ void _write_numpy_array_stream(OFS& ofs, const T* data, const Index nrow, const 
 }
 
 template <typename T>
-void _write_numpy_array_file(const std::string _filename, const T* data, const Index nrow,
-                             const Index ncol, const Index num_elements) {
+void
+_write_numpy_array_file(const std::string _filename, const T* data, const Index nrow,
+                        const Index ncol, const Index num_elements) {
 
   if (file_exists(_filename)) {
     WLOG("File exists: " << _filename);
@@ -221,7 +227,8 @@ void _write_numpy_array_file(const std::string _filename, const T* data, const I
   }
 }
 
-static PyObject* mmutil_write_numpy(PyObject* self, PyObject* args) {
+static PyObject*
+mmutil_write_numpy(PyObject* self, PyObject* args) {
   PyArrayObject* input = NULL;
   char* _filename      = NULL;
 

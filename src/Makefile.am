@@ -78,9 +78,13 @@ mmutil_match_col_SOURCES = mmutil_match_col.cc \
     mmutil_match.hh $(common) $(hnslib)
 
 mmutil_spectral_match_col_SOURCES = mmutil_spectral_match_col.cc \
-    mmutil_match.hh $(common) $(hnslib)
+    mmutil_match.hh $(common) $(hnslib) $(math)
 
-mmutil_spectral_cluster_col_SOURCES = mmutil_spectral_cluster_col.cc \
+mmutil_spectral_cluster_col_SOURCES = \
+    mmutil_spectral_cluster_col.hh \
+    mmutil_spectral_cluster_col.cc \
+    mmutil_match.hh \
+    mmutil_spectral.hh \
     mmutil_cluster.hh \
     inference/dpm.hh \
     inference/sampler.hh \

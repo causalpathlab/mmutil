@@ -1,6 +1,7 @@
 #include "mmutil_distribute_col.hh"
 
-void print_help(const char* fname) {
+void
+print_help(const char* fname) {
 
   const char* _desc =
       "[Arguments]\n"
@@ -16,7 +17,8 @@ void print_help(const char* fname) {
   std::cerr << _desc << std::endl;
 }
 
-int main(const int argc, const char* argv[]) {
+int
+main(const int argc, const char* argv[]) {
 
   if (argc < 4) {
     print_help(argv[0]);

@@ -2,14 +2,15 @@
 #define NET_UTIL_IMPL_HH_
 
 template <typename Data, typename Str2Int, typename Derived>
-void read_sparse_pairs(const Data& data, const Str2Int& vertex2index,
-                       Eigen::SparseMatrixBase<Derived>& Amat) {
+void
+read_sparse_pairs(const Data& data, const Str2Int& vertex2index,
+                  Eigen::SparseMatrixBase<Derived>& Amat) {
   Derived& out = Amat.derived();
 
-  using Scalar = typename Derived::Scalar;
-  using Triplet = Eigen::Triplet<Scalar>;
+  using Scalar     = typename Derived::Scalar;
+  using Triplet    = Eigen::Triplet<Scalar>;
   using TripletVec = std::vector<Triplet>;
-  using Index = typename Eigen::SparseMatrix<Scalar>::Index;
+  using Index      = typename Eigen::SparseMatrix<Scalar>::Index;
 
   Index u, v;
   std::string u_str;
@@ -22,8 +23,8 @@ void read_sparse_pairs(const Data& data, const Str2Int& vertex2index,
 
   for (auto& pp : data) {
     std::tie(u_str, v_str, weight) = pp;
-    u = vertex2index.at(u_str);
-    v = vertex2index.at(v_str);
+    u                              = vertex2index.at(u_str);
+    v                              = vertex2index.at(v_str);
 
     if (u < 0 || v < 0) continue;
     if (u > umax) umax = u;
@@ -39,7 +40,8 @@ void read_sparse_pairs(const Data& data, const Str2Int& vertex2index,
 }
 
 template <typename Data, typename Str2Int, typename Int2Str>
-void build_vertex2index(const Data& data, Str2Int& vertex2index, Int2Str& index2vertex) {
+void
+build_vertex2index(const Data& data, Str2Int& vertex2index, Int2Str& index2vertex) {
   int pos = 0;
 
   auto add_vertex = [&pos, &vertex2index, &index2vertex](const auto& v) {
@@ -57,11 +59,12 @@ void build_vertex2index(const Data& data, Str2Int& vertex2index, Int2Str& index2
 }
 
 template <typename Data, typename Str2Int, typename Graph>
-void build_boost_graph(const Data& data, const Str2Int& vertex2index, Graph& G) {
-  using Vertex = typename boost::graph_traits<Graph>::vertex_descriptor;
-  using Edge = typename Graph::edge_descriptor;
+void
+build_boost_graph(const Data& data, const Str2Int& vertex2index, Graph& G) {
+  using Vertex      = typename boost::graph_traits<Graph>::vertex_descriptor;
+  using Edge        = typename Graph::edge_descriptor;
   Vertex max_vertex = 0;
-  using IndexPair = std::pair<Vertex, Vertex>;
+  using IndexPair   = std::pair<Vertex, Vertex>;
   std::vector<IndexPair> index_pairs;
 
   auto update_max_vertex = [&max_vertex, &vertex2index, &index_pairs](const auto& e) {
@@ -94,7 +97,8 @@ void build_boost_graph(const Data& data, const Str2Int& vertex2index, Graph& G) 
 // note: we're removing edges so vertices should remain intact
 // so, this is different from iterative degree-cutoff
 template <typename Graph, typename Scalar>
-void prune_uninformative_edges(const Graph& gIn, Graph& gOut, const Scalar snCutoff) {
+void
+prune_uninformative_edges(const Graph& gIn, Graph& gOut, const Scalar snCutoff) {
   // add vertices
   for (auto u = boost::num_vertices(gOut); u <= boost::num_vertices(gIn); ++u)
     boost::add_vertex(gOut);
@@ -127,17 +131,17 @@ void prune_uninformative_edges(const Graph& gIn, Graph& gOut, const Scalar snCut
 }
 
 ////////////////////////////////////////////////////////////////
-std::vector<std::shared_ptr<network_component_t> > read_network_data(
-    const std::string data_file, const std::string color_file = "", const bool weighted = false,
-    const double snCutoff = 0.0) {
+std::vector<std::shared_ptr<network_component_t> >
+read_network_data(const std::string data_file, const std::string color_file = "",
+                  const bool weighted = false, const double snCutoff = 0.0) {
   using Graph = boost::adjacency_list<boost::vecS, boost::vecS, boost::undirectedS,
                                       boost::no_property, boost::no_property>;
 
-  using Index = network_component_t::Index;
+  using Index     = network_component_t::Index;
   using Str2Index = boost::unordered_map<std::string, Index>;
   using Index2Str = std::vector<std::string>;
 
-  using WPair = std::tuple<std::string, std::string, double>;
+  using WPair    = std::tuple<std::string, std::string, double>;
   using WPairVec = std::vector<WPair>;
 
   ////////////////////////////////////////////////////////////////
@@ -224,9 +228,9 @@ std::vector<std::shared_ptr<network_component_t> > read_network_data(
   build_boost_graph(dataTot, vertex2indexTot, G);
 
   if (snCutoff > 0.0) {
-    Index m = boost::num_edges(G);
+    Index m      = boost::num_edges(G);
     Index m_prev = m + 1;  // just bigger
-    H = G;
+    H            = G;
     TLOG("Edge pruning ... number of edges : " << m << " shared neighbor >= " << snCutoff);
     while (m_prev > m) {
       m_prev = m;
@@ -260,15 +264,15 @@ std::vector<std::shared_ptr<network_component_t> > read_network_data(
   }
 
   using Vertex = typename boost::graph_traits<Graph>::vertex_descriptor;
-  using Edge = typename Graph::edge_descriptor;
+  using Edge   = typename Graph::edge_descriptor;
 
   std::string v1;
   std::string v2;
   double weight;
   for (const auto& pp : dataTot) {
     std::tie(v1, v2, weight) = pp;
-    const Vertex& u1 = vertex2indexTot.at(v1);
-    const Vertex& u2 = vertex2indexTot.at(v2);
+    const Vertex& u1         = vertex2indexTot.at(v1);
+    const Vertex& u2         = vertex2indexTot.at(v2);
     bool has_edge;
     Edge e;
     boost::tie(e, has_edge) = boost::edge(u1, u2, H);
@@ -315,8 +319,8 @@ std::vector<std::shared_ptr<network_component_t> > read_network_data(
     for (const auto& e : comp.Edges) {
       Index i, j;
       std::tie(i, j) = e;
-      auto key = SPair(index2vertex.at(i), index2vertex.at(j));
-      Index k = unif(gen);
+      auto key       = SPair(index2vertex.at(i), index2vertex.at(j));
+      Index k        = unif(gen);
       if (color.count(key) > 0) {
         k = color.at(key);
       }
@@ -341,16 +345,17 @@ std::vector<std::shared_ptr<network_component_t> > read_network_data(
 }
 
 template <typename Derived, typename Pair>
-int construct_edge_incidence(const Eigen::SparseMatrixBase<Derived>& A,
-                             Eigen::SparseMatrixBase<Derived>& mleft,
-                             Eigen::SparseMatrixBase<Derived>& mright, std::vector<Pair>& edges) {
+int
+construct_edge_incidence(const Eigen::SparseMatrixBase<Derived>& A,
+                         Eigen::SparseMatrixBase<Derived>& mleft,
+                         Eigen::SparseMatrixBase<Derived>& mright, std::vector<Pair>& edges) {
   const Derived& Amat = A.derived();
-  Derived& Mleft = mleft.derived();
-  Derived& Mright = mright.derived();
+  Derived& Mleft      = mleft.derived();
+  Derived& Mright     = mright.derived();
 
-  using Scalar = typename Derived::Scalar;
-  using Index = typename Derived::Index;
-  using Triplet = Eigen::Triplet<Scalar>;
+  using Scalar     = typename Derived::Scalar;
+  using Index      = typename Derived::Index;
+  using Triplet    = Eigen::Triplet<Scalar>;
   using TripletVec = std::vector<Triplet>;
 
   TripletVec mvecLeft;

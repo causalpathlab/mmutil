@@ -11,10 +11,10 @@
 // C-style string buffer
 struct strbuf_t {
   explicit strbuf_t() {
-    si = -1;
+    si       = -1;
     buf_size = 1024;
-    data = new char[buf_size];
-    data[0] = '\0';
+    data     = new char[buf_size];
+    data[0]  = '\0';
   }
 
   ~strbuf_t() { delete[] data; }
@@ -22,7 +22,7 @@ struct strbuf_t {
   void add(const char c) {
     if (!isspace(c)) {
       if ((si + 1) == buf_size) double_size();
-      data[++si] = c;
+      data[++si]   = c;
       data[si + 1] = '\0';
     }
   }
@@ -30,7 +30,7 @@ struct strbuf_t {
   size_t size() const { return si + 1; }
 
   void clear() {
-    si = -1;
+    si           = -1;
     data[si + 1] = '\0';
   }
 
@@ -63,8 +63,8 @@ struct strbuf_t {
     const char *p = data;
     // while (isspace(*p)) ++p;  // ignore white space
     const float TEN = 10.0;
-    float r = 0.0;
-    bool neg = false;
+    float r         = 0.0;
+    bool neg        = false;
     if (*p == '-') {
       neg = true;
       ++p;
@@ -77,7 +77,7 @@ struct strbuf_t {
     // parse <= 1
     if (*p == '.') {
       float f = 0.0;
-      int n = 0;
+      int n   = 0;
       ++p;
       while (*p >= '0' && *p <= '9') {
         f = (f * 10.0) + (*p - '0');
@@ -89,7 +89,7 @@ struct strbuf_t {
     // parse the power of 10
     if (*p == 'e' || *p == 'E') {
       ++p;
-      float e = 0.0;
+      float e      = 0.0;
       bool neg_exp = false;
       if (*p == '-') {
         neg_exp = true;
@@ -117,8 +117,8 @@ struct strbuf_t {
   }
 
   const int take_int() const {
-    int x = 0;
-    bool neg = false;
+    int x         = 0;
+    bool neg      = false;
     const char *p = data;
     // while (isspace(*p)) ++p;  // ignore white space
     if (*p == '-') {

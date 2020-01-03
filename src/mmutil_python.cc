@@ -31,7 +31,8 @@ static struct PyModuleDef mmutil_module = {
     mmutil_methods,
 };
 
-PyMODINIT_FUNC PyInit_mmutil(void) {
+PyMODINIT_FUNC
+PyInit_mmutil(void) {
   Py_Initialize();
   PyObject* ret = PyModule_Create(&mmutil_module);
   if (ret == NULL) return NULL;

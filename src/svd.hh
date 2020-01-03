@@ -15,7 +15,12 @@ template <typename T>
 class RandomizedSVD {
  public:
   RandomizedSVD(const int _max_rank, const int _iter)
-      : max_rank(_max_rank), iter(_iter), U(), D(), V(), qq() {}
+      : max_rank(_max_rank),
+        iter(_iter),
+        U(),
+        D(),
+        V(),
+        qq() {}
 
   using Vec = Eigen::Matrix<typename T::Scalar, Eigen::Dynamic, 1>;
 
@@ -99,7 +104,7 @@ class RandomizedSVD {
     if (verbose) TLOG("Find Q in randomized svd...");
 
     for (int i = 0; i < iter; ++i) {
-      if (verbose) TLOG("Start : LU iteration " << (i + 1));
+      if (verbose) TLOG("[Start] LU iteration" << std::setw(10) << (i + 1));
 
       lu1.compute(X * Q);
       L.setIdentity();
@@ -111,7 +116,7 @@ class RandomizedSVD {
       Q.block(0, 0, nc, rank_and_oversample).template triangularView<Eigen::StrictlyLower>() =
           lu2.matrixLU();
 
-      if (verbose) TLOG("Done : LU iteration " << (i + 1));
+      if (verbose) TLOG("[Done ] LU iteration" << std::setw(10) << (i + 1));
     }
 
     Eigen::ColPivHouseholderQR<T> qr(X * Q);

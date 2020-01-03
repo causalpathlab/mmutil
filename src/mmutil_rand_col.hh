@@ -8,11 +8,12 @@
 #ifndef MMUTIL_RANDOM_COL_HH_
 #define MMUTIL_RANDOM_COL_HH_
 
-void copy_random_columns(const Index Nsample,          //
-                         std::string mtx_file,         //
-                         std::string column_file,      //
-                         std::string output_mtx_file,  //
-                         std::string output_column_file) {
+void
+copy_random_columns(const Index Nsample,          //
+                    std::string mtx_file,         //
+                    std::string column_file,      //
+                    std::string output_mtx_file,  //
+                    std::string output_column_file) {
 
   std::vector<std::string> column_names(0);
   CHECK(read_vector_file(column_file, column_names));

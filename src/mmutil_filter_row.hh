@@ -8,7 +8,8 @@
 // compute statistics //
 ////////////////////////
 
-inline auto compute_sd_mtx_row(const std::string mtx_file) {
+inline auto
+compute_sd_mtx_row(const std::string mtx_file) {
   row_stat_collector_t collector;
   visit_matrix_market_file(mtx_file, collector);
 
@@ -29,10 +30,11 @@ inline auto compute_sd_mtx_row(const std::string mtx_file) {
   return std::make_tuple(ret, Nvec, collector.max_row, collector.max_col);
 }
 
-void filter_row_by_sd(const Index Ntop,                //
-                      const std::string mtx_file,      //
-                      const std::string feature_file,  //
-                      const std::string output) {
+void
+filter_row_by_sd(const Index Ntop,                //
+                 const std::string mtx_file,      //
+                 const std::string feature_file,  //
+                 const std::string output) {
 
   using Str         = std::string;
   using copier_t    = triplet_copier_remapped_rows_t<Index, Scalar>;

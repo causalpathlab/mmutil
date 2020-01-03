@@ -29,13 +29,15 @@ const char* _take_svd_desc =
     "`out['d']` : D matrix/vector \n"
     "\n";
 
-static PyObject* mmutil_take_svd(PyObject* self, PyObject* args, PyObject* keywords);
+static PyObject*
+mmutil_take_svd(PyObject* self, PyObject* args, PyObject* keywords);
 
 ////////////////////
 // implementation //
 ////////////////////
 
-static PyObject* mmutil_take_svd(PyObject* self, PyObject* args, PyObject* keywords) {
+static PyObject*
+mmutil_take_svd(PyObject* self, PyObject* args, PyObject* keywords) {
   static const char* kwlist[] = {"file", "rank", "tau", "iter", NULL};
 
   char* mtx_file;

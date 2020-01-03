@@ -35,7 +35,7 @@ struct check_prob_t {
 
   const T val;
   static constexpr T zero_val = 0.0;
-  static constexpr T one_val = 1.0;
+  static constexpr T one_val  = 1.0;
 };
 
 #endif

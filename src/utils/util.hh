@@ -13,7 +13,8 @@
 #include <string>
 #include <vector>
 
-std::string curr_time();
+std::string
+curr_time();
 
 #define TLOG(msg) \
   { std::cerr << "         [" << curr_time() << "] " << msg << std::endl; }
@@ -47,12 +48,12 @@ std::string curr_time();
     }                             \
   }
 
-#define CHK_ERR_RET(cond, msg)    \
-  {                               \
-    if ((cond) != EXIT_SUCCESS) { \
-      ELOG(msg);                  \
-      return EXIT_FAILURE;        \
-    }                             \
+#define CHK_ERR_RET(cond, msg)       \
+  {                                  \
+    if ((cond) != EXIT_SUCCESS) {    \
+      std::cerr << msg << std::endl; \
+      return EXIT_FAILURE;           \
+    }                                \
   }
 
 #define ERR_RET(cond, msg) \
@@ -63,9 +64,11 @@ std::string curr_time();
     }                      \
   }
 
-std::string zeropad(const int t, const int tmax);
+std::string
+zeropad(const int t, const int tmax);
 
-std::string curr_time() {
+std::string
+curr_time() {
   time_t rawtime;
   time(&rawtime);
   struct tm* timeinfo = localtime(&rawtime);
@@ -74,10 +77,11 @@ std::string curr_time() {
   return std::string(buff);
 }
 
-std::string zeropad(const int t, const int tmax) {
-  std::string tt = std::to_string(t);
+std::string
+zeropad(const int t, const int tmax) {
+  std::string tt    = std::to_string(t);
   std::string ttmax = std::to_string(tmax);
-  const int ndigit = ttmax.size();
+  const int ndigit  = ttmax.size();
 
   std::ostringstream ss;
   ss << std::setw(ndigit) << std::setfill('0') << tt;

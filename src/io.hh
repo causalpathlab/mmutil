@@ -22,11 +22,13 @@
 #ifndef UTIL_IO_HH_
 #define UTIL_IO_HH_
 
-bool file_exists(std::string filename) {
+bool
+file_exists(std::string filename) {
   return std::filesystem::exists(std::filesystem::path(filename));
 }
 
-bool all_files_exist(std::vector<std::string> filenames) {
+bool
+all_files_exist(std::vector<std::string> filenames) {
   bool ret = true;
   for (auto f : filenames) {
     if (!file_exists(f)) {
@@ -42,17 +44,20 @@ bool all_files_exist(std::vector<std::string> filenames) {
 // common utility for data I/O //
 /////////////////////////////////
 
-bool is_file_gz(const std::string filename) {
+bool
+is_file_gz(const std::string filename) {
   if (filename.size() < 3) return false;
   return filename.substr(filename.size() - 3) == ".gz";
 }
 
-std::shared_ptr<std::ifstream> open_ifstream(const std::string filename) {
+std::shared_ptr<std::ifstream>
+open_ifstream(const std::string filename) {
   std::shared_ptr<std::ifstream> ret(new std::ifstream(filename.c_str(), std::ios::in));
   return ret;
 }
 
-std::shared_ptr<igzstream> open_igzstream(const std::string filename) {
+std::shared_ptr<igzstream>
+open_igzstream(const std::string filename) {
   std::shared_ptr<igzstream> ret(new igzstream(filename.c_str(), std::ios::in));
   return ret;
 }
@@ -62,7 +67,8 @@ std::shared_ptr<igzstream> open_igzstream(const std::string filename) {
 ///////////////
 
 template <typename IFS, typename T1, typename T2>
-auto read_pair_stream(IFS &ifs, std::unordered_map<T1, T2> &in) {
+auto
+read_pair_stream(IFS &ifs, std::unordered_map<T1, T2> &in) {
   in.clear();
   T1 v;
   T2 w;
@@ -74,7 +80,8 @@ auto read_pair_stream(IFS &ifs, std::unordered_map<T1, T2> &in) {
 }
 
 template <typename T1, typename T2>
-auto read_pair_file(const std::string filename, std::unordered_map<T1, T2> &in) {
+auto
+read_pair_file(const std::string filename, std::unordered_map<T1, T2> &in) {
   auto ret = EXIT_SUCCESS;
 
   if (is_file_gz(filename)) {
@@ -90,7 +97,8 @@ auto read_pair_file(const std::string filename, std::unordered_map<T1, T2> &in) 
 }
 
 template <typename IFS, typename T>
-auto read_vector_stream(IFS &ifs, std::vector<T> &in) {
+auto
+read_vector_stream(IFS &ifs, std::vector<T> &in) {
   in.clear();
   T v;
   while (ifs >> v) {
@@ -101,7 +109,8 @@ auto read_vector_stream(IFS &ifs, std::vector<T> &in) {
 }
 
 template <typename T>
-auto read_vector_file(const std::string filename, std::vector<T> &in) {
+auto
+read_vector_file(const std::string filename, std::vector<T> &in) {
   auto ret = EXIT_SUCCESS;
 
   if (is_file_gz(filename)) {
@@ -165,7 +174,8 @@ using std_triplet_reader_t   = _triplet_reader_t<std_triplet_t>;
 using eigen_triplet_reader_t = _triplet_reader_t<Eigen::Triplet<float> >;
 
 template <typename IFS, typename READER>
-inline auto _read_matrix_market_stream(IFS &ifs) {
+inline auto
+_read_matrix_market_stream(IFS &ifs) {
   typename READER::TripletVec Tvec;
   READER reader(Tvec);
 
@@ -178,7 +188,8 @@ inline auto _read_matrix_market_stream(IFS &ifs) {
 }
 
 template <typename READER>
-inline auto _read_matrix_market_file(const std::string filename) {
+inline auto
+_read_matrix_market_file(const std::string filename) {
   typename READER::TripletVec Tvec;
   READER reader(Tvec);
 
@@ -190,21 +201,25 @@ inline auto _read_matrix_market_file(const std::string filename) {
   return std::make_tuple(Tvec, max_row, max_col);
 }
 
-inline auto read_matrix_market_file(const std::string filename) {
+inline auto
+read_matrix_market_file(const std::string filename) {
   return _read_matrix_market_file<std_triplet_reader_t>(filename);
 }
 
-inline auto read_eigen_matrix_market_file(const std::string filename) {
+inline auto
+read_eigen_matrix_market_file(const std::string filename) {
   return _read_matrix_market_file<eigen_triplet_reader_t>(filename);
 }
 
 template <typename IFS>
-inline auto read_matrix_market_stream(IFS &ifs) {
+inline auto
+read_matrix_market_stream(IFS &ifs) {
   return _read_matrix_market_stream<IFS, std_triplet_reader_t>(ifs);
 }
 
 template <typename IFS>
-inline auto read_eigen_matrix_market_stream(IFS &ifs) {
+inline auto
+read_eigen_matrix_market_stream(IFS &ifs) {
   return _read_matrix_market_stream<IFS, eigen_triplet_reader_t>(ifs);
 }
 
@@ -216,7 +231,8 @@ using SpMat = Eigen::SparseMatrix<eigen_triplet_reader_t::scalar_t,  //
                                   Eigen::RowMajor,                   //
                                   std::ptrdiff_t>;
 
-SpMat build_eigen_sparse(const std::string mtx_file) {
+SpMat
+build_eigen_sparse(const std::string mtx_file) {
 
   eigen_triplet_reader_t::TripletVec Tvec;
   SpMat::Index max_row, max_col;
@@ -245,7 +261,9 @@ struct triplet_copier_remapped_rows_t {
   explicit triplet_copier_remapped_rows_t(const std::string _filename,  // output filename
                                           const index_map_t &_remap,    // valid rows
                                           const index_t _nnz)
-      : filename(_filename), remap(_remap), NNZ(_nnz) {
+      : filename(_filename),
+        remap(_remap),
+        NNZ(_nnz) {
     max_row  = 0;
     max_col  = 0;
     max_elem = 0;
@@ -327,7 +345,9 @@ struct triplet_copier_remapped_cols_t {
   explicit triplet_copier_remapped_cols_t(const std::string _filename,  //
                                           const index_map_t &_remap,    //
                                           const index_t _nnz)
-      : filename(_filename), remap(_remap), NNZ(_nnz) {
+      : filename(_filename),
+        remap(_remap),
+        NNZ(_nnz) {
     max_row  = 0;
     max_col  = 0;
     max_elem = 0;
@@ -401,7 +421,8 @@ struct triplet_copier_remapped_cols_t {
 ///////////////////
 
 template <typename OFS, typename Derived>
-void write_matrix_market_stream(OFS &ofs, const Eigen::SparseMatrixBase<Derived> &out) {
+void
+write_matrix_market_stream(OFS &ofs, const Eigen::SparseMatrixBase<Derived> &out) {
   ofs.precision(4);
 
   const Derived &M = out.derived();
@@ -434,7 +455,8 @@ void write_matrix_market_stream(OFS &ofs, const Eigen::SparseMatrixBase<Derived>
 }
 
 template <typename T>
-void write_matrix_market_file(const std::string filename, T &out) {
+void
+write_matrix_market_file(const std::string filename, T &out) {
   if (is_file_gz(filename)) {
     ogzstream ofs(filename.c_str(), std::ios::out);
     write_matrix_market_stream(ofs, out);
@@ -451,7 +473,8 @@ void write_matrix_market_file(const std::string filename, T &out) {
 /////////////////////////////////////
 
 template <typename OFS, typename Vec>
-void write_tuple_stream(OFS &ofs, const Vec &vec) {
+void
+write_tuple_stream(OFS &ofs, const Vec &vec) {
 
   int i = 0;
 
@@ -471,7 +494,8 @@ void write_tuple_stream(OFS &ofs, const Vec &vec) {
 }
 
 template <typename Vec>
-void write_tuple_file(const std::string filename, const Vec &out) {
+void
+write_tuple_file(const std::string filename, const Vec &out) {
   if (is_file_gz(filename)) {
     ogzstream ofs(filename.c_str(), std::ios::out);
     write_tuple_stream(ofs, out);
@@ -484,7 +508,8 @@ void write_tuple_file(const std::string filename, const Vec &out) {
 }
 
 template <typename OFS, typename Vec>
-void write_pair_stream(OFS &ofs, const Vec &vec) {
+void
+write_pair_stream(OFS &ofs, const Vec &vec) {
   ofs.precision(4);
 
   for (auto pp : vec) {
@@ -493,7 +518,8 @@ void write_pair_stream(OFS &ofs, const Vec &vec) {
 }
 
 template <typename Vec>
-void write_pair_file(const std::string filename, const Vec &out) {
+void
+write_pair_file(const std::string filename, const Vec &out) {
   if (is_file_gz(filename)) {
     ogzstream ofs(filename.c_str(), std::ios::out);
     write_pair_stream(ofs, out);
@@ -506,7 +532,8 @@ void write_pair_file(const std::string filename, const Vec &out) {
 }
 
 template <typename OFS, typename Vec>
-void write_vector_stream(OFS &ofs, const Vec &vec) {
+void
+write_vector_stream(OFS &ofs, const Vec &vec) {
   ofs.precision(4);
 
   for (auto pp : vec) {
@@ -515,7 +542,8 @@ void write_vector_stream(OFS &ofs, const Vec &vec) {
 }
 
 template <typename Vec>
-void write_vector_file(const std::string filename, const Vec &out) {
+void
+write_vector_file(const std::string filename, const Vec &out) {
   if (is_file_gz(filename)) {
     ogzstream ofs(filename.c_str(), std::ios::out);
     write_vector_stream(ofs, out);
@@ -532,7 +560,8 @@ void write_vector_file(const std::string filename, const Vec &out) {
 /////////////////////////////
 
 template <typename IFS>
-auto num_cols(IFS &ifs) {
+auto
+num_cols(IFS &ifs) {
   std::istreambuf_iterator<char> eos;
   std::istreambuf_iterator<char> it(ifs);
   const auto eol = '\n';
@@ -547,7 +576,8 @@ auto num_cols(IFS &ifs) {
 }
 
 template <typename IFS>
-auto num_rows(IFS &ifs) {
+auto
+num_rows(IFS &ifs) {
   std::istreambuf_iterator<char> eos;
   std::istreambuf_iterator<char> it(ifs);
   const char eol = '\n';
@@ -560,7 +590,8 @@ auto num_rows(IFS &ifs) {
 }
 
 template <typename IFS, typename T>
-auto read_data_stream(IFS &ifs, T &in) {
+auto
+read_data_stream(IFS &ifs, T &in) {
   typedef typename T::Scalar elem_t;
 
   typedef enum _state_t { S_WORD, S_EOW, S_EOL } state_t;
@@ -633,7 +664,8 @@ auto read_data_stream(IFS &ifs, T &in) {
 
 ////////////////////////////////////////////////////////////////
 template <typename T>
-auto read_data_file(const std::string filename, T &in) {
+auto
+read_data_file(const std::string filename, T &in) {
   auto ret = EXIT_SUCCESS;
 
   if (is_file_gz(filename)) {
@@ -651,7 +683,8 @@ auto read_data_file(const std::string filename, T &in) {
 
 ////////////////////////////////////////////////////////////////
 template <typename T>
-auto read_data_file(const std::string filename) {
+auto
+read_data_file(const std::string filename) {
   typename std::shared_ptr<T> ret(new T{});
   auto &in = *ret.get();
 
@@ -670,7 +703,8 @@ auto read_data_file(const std::string filename) {
 
 ////////////////////////////////////////////////////////////////
 template <typename OFS, typename Derived>
-void write_data_stream(OFS &ofs, const Eigen::MatrixBase<Derived> &out) {
+void
+write_data_stream(OFS &ofs, const Eigen::MatrixBase<Derived> &out) {
   ofs.precision(4);
 
   const Derived &M = out.derived();
@@ -684,7 +718,8 @@ void write_data_stream(OFS &ofs, const Eigen::MatrixBase<Derived> &out) {
 }
 
 template <typename OFS, typename Derived>
-void write_data_stream(OFS &ofs, const Eigen::SparseMatrixBase<Derived> &out) {
+void
+write_data_stream(OFS &ofs, const Eigen::SparseMatrixBase<Derived> &out) {
   ofs.precision(4);
 
   const Derived &M = out.derived();
@@ -704,7 +739,8 @@ void write_data_stream(OFS &ofs, const Eigen::SparseMatrixBase<Derived> &out) {
 
 ////////////////////////////////////////////////////////////////
 template <typename T>
-void write_data_file(const std::string filename, const T &out) {
+void
+write_data_file(const std::string filename, const T &out) {
   if (is_file_gz(filename)) {
     ogzstream ofs(filename.c_str(), std::ios::out);
     write_data_stream(ofs, out);

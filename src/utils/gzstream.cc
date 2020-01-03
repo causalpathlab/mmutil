@@ -42,7 +42,8 @@ namespace GZSTREAM_NAMESPACE {
 // class gzstreambuf:
 // --------------------------------------
 
-gzstreambuf *gzstreambuf::open(const char *name, int open_mode) {
+gzstreambuf *
+gzstreambuf::open(const char *name, int open_mode) {
   if (is_open()) return (gzstreambuf *)0;
   mode = open_mode;
   // no append nor read/write mode
@@ -56,14 +57,15 @@ gzstreambuf *gzstreambuf::open(const char *name, int open_mode) {
   else if (mode & std::ios::out)
     *fmodeptr++ = 'w';
   *fmodeptr++ = 'b';
-  *fmodeptr = '\0';
-  file = gzopen(name, fmode);
+  *fmodeptr   = '\0';
+  file        = gzopen(name, fmode);
   if (file == 0) return (gzstreambuf *)0;
   opened = 1;
   return this;
 }
 
-gzstreambuf *gzstreambuf::close() {
+gzstreambuf *
+gzstreambuf::close() {
   if (is_open()) {
     sync();
     opened = 0;
@@ -72,7 +74,8 @@ gzstreambuf *gzstreambuf::close() {
   return (gzstreambuf *)0;
 }
 
-int gzstreambuf::underflow() {  // used for input buffer only
+int
+gzstreambuf::underflow() {  // used for input buffer only
   if (gptr() && (gptr() < egptr())) return *reinterpret_cast<unsigned char *>(gptr());
 
   if (!(mode & std::ios::in) || !opened) return EOF;
@@ -94,7 +97,8 @@ int gzstreambuf::underflow() {  // used for input buffer only
   return *reinterpret_cast<unsigned char *>(gptr());
 }
 
-int gzstreambuf::flush_buffer() {
+int
+gzstreambuf::flush_buffer() {
   // Separate the writing of the buffer from overflow() and
   // sync() operation.
   int w = pptr() - pbase();
@@ -103,7 +107,8 @@ int gzstreambuf::flush_buffer() {
   return w;
 }
 
-int gzstreambuf::overflow(int c) {  // used for output buffer only
+int
+gzstreambuf::overflow(int c) {  // used for output buffer only
   if (!(mode & std::ios::out) || !opened) return EOF;
   if (c != EOF) {
     *pptr() = c;
@@ -113,7 +118,8 @@ int gzstreambuf::overflow(int c) {  // used for output buffer only
   return c;
 }
 
-int gzstreambuf::sync() {
+int
+gzstreambuf::sync() {
   // Changed to use flush_buffer() instead of overflow( EOF)
   // which caused improper behavior with std::endl and flush(),
   // bug reported by Vincent Ricard.
@@ -134,11 +140,13 @@ gzstreambase::gzstreambase(const char *name, int mode) {
 
 gzstreambase::~gzstreambase() { buf.close(); }
 
-void gzstreambase::open(const char *name, int open_mode) {
+void
+gzstreambase::open(const char *name, int open_mode) {
   if (!buf.open(name, open_mode)) clear(rdstate() | std::ios::badbit);
 }
 
-void gzstreambase::close() {
+void
+gzstreambase::close() {
   if (buf.is_open())
     if (!buf.close()) clear(rdstate() | std::ios::badbit);
 }
