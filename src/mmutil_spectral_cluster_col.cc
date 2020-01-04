@@ -31,7 +31,7 @@ main(const int argc, const char* argv[]) {
   write_data_file(output + ".centroid.gz", C);
 
   vector<Scalar> count = std_vector(Z * Mat::Ones(N, 1));
-  print_histogram(count);
+  print_histogram(count, std::cout);
 
   if (file_exists(col_file)) {
     std::vector<std::string> samples;

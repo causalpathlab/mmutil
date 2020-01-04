@@ -116,24 +116,25 @@ create_argmax_vector(const Eigen::MatrixBase<Derived>& Z, const std::vector<S>& 
   return membership;
 }
 
+template <typename OFS>
 void
-print_histogram(const std::vector<Scalar>& nn, const Scalar height = 10.0) {
+print_histogram(const std::vector<Scalar>& nn, OFS& ofs, const Scalar height = 50.0) {
 
   const Scalar ntot = std::accumulate(nn.begin(), nn.end(), 0.0);
 
-  std::cout << "<histogram>" << std::endl;
+  ofs << "<histogram>" << std::endl;
 
   Index j = 0;
 
   auto _print = [&](const Scalar x) {
-    std::cout << std::setw(10) << (j++) << " [" << std::setw(10) << std::floor(x) << "] ";
-    for (int j = 0; j < std::floor(x / ntot * height); ++j) std::cout << "*";
-    std::cout << std::endl;
+    ofs << std::setw(10) << (j++) << " [" << std::setw(10) << std::floor(x) << "] ";
+    for (int j = 0; j < std::floor(x / ntot * height); ++j) ofs << "*";
+    ofs << std::endl;
   };
 
   std::for_each(nn.begin(), nn.end(), _print);
 
-  std::cout << "</histogram>" << std::endl;
+  ofs << "</histogram>" << std::endl;
 }
 
 #endif

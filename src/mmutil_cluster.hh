@@ -22,7 +22,7 @@ struct cluster_options_t {
     burnin_iter   = 10;
     max_iter      = 100;
     min_iter      = 5;
-    Tol           = 1e-8;
+    Tol           = 1e-4;
     rate_discount = .55;
     knn           = 0;
     bilink        = 10;
@@ -390,7 +390,7 @@ estimate_mixture_of_columns(const Mat& X, const cluster_options_t& options) {
     elbo.push_back(_elbo);
 
     if (t >= options.min_iter) {
-      const Scalar diff = std::abs(elbo.at(t) - elbo.at(t - 1)) / elbo.at(t - 1);
+      const Scalar diff = std::abs(elbo.at(t) - elbo.at(t - 1));
       if (diff < options.Tol) break;
     }
 
