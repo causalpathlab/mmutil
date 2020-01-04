@@ -17,7 +17,7 @@ make_similarity_graph(const TVEC& knn_index, const Index N) {
   auto _sim = [](const auto& tt) {
     const Index i  = std::get<0>(tt);
     const Index j  = std::get<1>(tt);
-    const Scalar v = static_cast<Scalar>(1.0);
+    const Scalar v = static_cast<Scalar>(1.0) - std::get<2>(tt);
     return Eigen::Triplet<Scalar>(i, j, v);
   };
 
@@ -72,25 +72,24 @@ create_clustering_data(const SpMat& X, const cluster_options_t& options) {
       return Data;
     }
 
-    TLOG("Spectral transformation of G");
+    TLOG("Spectral transformation of shared-neighborhohod graph");
 
-  //   const SpMat G = make_similarity_graph(knn_index, N);
-  //   const Mat Deg    = (G.transpose().cwiseProduct(G.transpose()) * Mat::Ones(N, 1));
-  // const Scalar tau = Deg.mean() * tau_scale;
-  // const Mat degree_tau_sqrt_inverse = Deg.unaryExpr([&tau](const Scalar x) {
-  //   const Scalar _one = 1.0;
-  //   return _one / std::max(_one, std::sqrt(x + tau));
-  // });
-  // Mat ret = degree_tau_sqrt_inverse.asDiagonal() * (G.transpose());
-  //   Mat UG;
-  //   tie(UG, ignore, ignore) = take_spectrum_laplacian(G, tau, rank, lu_iter);
-  // RandomizedSVD<Mat> svd(rank, iter);
-  // svd.set_verbose();
-  // svd.compute(XtTau);
-  // TLOG("Done SVD");
-  // Mat U = svd.matrixU();
-    // Data.resize(UG.cols(), UG.rows());
-    // Data = UG.transpose();
+    const SpMat G = make_similarity_graph(knn_index, N);
+    const Mat Deg = (G * G.transpose()) * Mat::Ones(N, 1);
+
+    const Mat deg = Deg.unaryExpr([](const Scalar x) {
+      const Scalar _one = 1.0;
+      const Scalar _eps = 1e-8;
+      return _one / std::max(_one, std::sqrt(x + _eps));
+    });
+
+    Mat xx = deg.asDiagonal() * G.transpose();
+    RandomizedSVD<Mat> svd(rank, lu_iter);
+    svd.set_verbose();
+    svd.compute(xx);
+
+    Data.resize(svd.matrixU().cols(), svd.matrixU().rows());
+    Data = standardize(svd.matrixU()).transpose().eval();
   }
 
   return Data;
