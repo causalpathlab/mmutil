@@ -24,9 +24,26 @@ main(const int argc, const char* argv[]) {
   const Index N = X.cols();
   Mat Data      = create_clustering_data(X, options);
 
-  Mat Z, C;
+  Mat Z, C, _Z, _C;
   vector<Scalar> elbo;
   tie(Z, C, elbo) = estimate_mixture_of_columns<F0, F>(Data, options);
+
+  for (Index t = 1; t < options.repeat; ++t) {
+
+    vector<Scalar> _elbo;
+    tie(_Z, _C, _elbo) = estimate_mixture_of_columns<F0, F>(Data, options);
+
+    const Scalar score_best = elbo.at(elbo.size() - 1);
+    const Scalar score      = _elbo.at(_elbo.size() - 1);
+
+    if (score > score_best) {
+      Z = _Z;
+      C = _C;
+      elbo.clear();
+      elbo.reserve(_elbo.size());
+      std::copy(_elbo.begin(), _elbo.end(), std::back_inserter(elbo));
+    }
+  }
 
   write_data_file(output + ".centroid.gz", C);
 
@@ -45,7 +62,7 @@ main(const int argc, const char* argv[]) {
     write_tuple_file(output + ".argmax.gz", argmax);
   }
 
-  if(options.out_data) {
+  if (options.out_data) {
     write_data_file(output + ".data.gz", Data);
   }
 

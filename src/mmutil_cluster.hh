@@ -24,9 +24,9 @@ struct cluster_options_t {
     min_iter      = 5;
     Tol           = 1e-4;
     rate_discount = .55;
-    knn           = 0;
     bilink        = 10;
     nlist         = 10;
+    repeat        = 10;
 
     out      = "output";
     out_data = false;
@@ -43,7 +43,6 @@ struct cluster_options_t {
   Index min_iter;        // minimum number of iterations
   Scalar Tol;            // tolerance to check convergence
   Scalar rate_discount;  // learning rate discount
-  Index knn;             // knn-pruning
   Index bilink;
   Index nlist;
 
@@ -56,6 +55,7 @@ struct cluster_options_t {
   Index lu_iter;  // LU iteration for SVD
 
   bool out_data;  // output clustering data
+  Index repeat;   //
 };
 
 int
@@ -74,43 +74,21 @@ parse_cluster_options(const int argc,      //
       "--min_vbiter (-v) : minimum VB iterations (default: 5)\n"
       "--max_vbiter (-V) : maximum VB iterations (default: 100)\n"
       "--eps (-E)        : epsilon value for checking convergence (default: eps = 1e-8)\n"
-      "--tau (-u)        : Regularization parameter (default: tau = 1)\n"
-      "--rank (-r)       : The maximal rank of SVD (default: rank = 10)\n"
-      "--luiter (-l)     : # of LU iterations (default: iter = 3)\n"
-      "--knn (-n)        : nearest-neighbor-based pruning (0 = no-pruning) \n"
+      "--tau (-u)        : Regularization parameter (default: 1)\n"
+      "--rank (-r)       : The maximal rank of SVD (default: 10)\n"
+      "--luiter (-l)     : # of LU iterations (default: 3)\n"
       "--bilink (-m)     : # of bidirectional links (default: 10)\n"
       "--nlist (-f)      : # nearest neighbor lists (default: 10)\n"
       "--out (-o)        : Output file header (default: output)\n"
       "--out_data (-D)   : Output clustering data (default: false)\n"
-      "\n"
-      "[Details for kNN]\n"
-      "\n"
-      "(M)\n"
-      "The number of bi-directional links created for every new element during construction.\n"
-      "Reasonable range for M is 2-100. Higher M work better on datasets with high intrinsic\n"
-      "dimensionality and/or high recall, while low M work better for datasets with low intrinsic\n"
-      "dimensionality and/or low recalls.\n"
-      "\n"
-      "(N)\n"
-      "The size of the dynamic list for the nearest neighbors (used during the search). A higher \n"
-      "value leads to more accurate but slower search. This cannot be set lower than the number \n"
-      "of queried nearest neighbors k. The value ef of can be anything between k and the size of \n"
-      "the dataset.\n"
-      "\n"
-      "[Reference]\n"
-      "Malkov, Yu, and Yashunin. `Efficient and robust approximate nearest neighbor search using\n"
-      "Hierarchical Navigable Small World graphs.` preprint: https://arxiv.org/abs/1603.09320\n"
-      "\n"
-      "See also:\n"
-      "https://github.com/nmslib/hnswlib\n"
+      "--repeat (-t)     : # of repeated clustering (default: 10)\n"
       "\n";
 
-  const char* const short_opts = "d:c:n:K:B:v:V:E:u:r:l:m:f:o:Dh";
+  const char* const short_opts = "d:c:K:B:v:V:E:u:r:l:m:f:o:Dt:h";
 
   const option long_opts[] = {{"mtx", required_argument, nullptr, 'd'},         //
                               {"data", required_argument, nullptr, 'd'},        //
                               {"col", required_argument, nullptr, 'c'},         //
-                              {"knn", required_argument, nullptr, 'n'},         //
                               {"trunc", required_argument, nullptr, 'K'},       //
                               {"burnin", required_argument, nullptr, 'B'},      //
                               {"min_vbiter", required_argument, nullptr, 'v'},  //
@@ -123,6 +101,7 @@ parse_cluster_options(const int argc,      //
                               {"nlist", required_argument, nullptr, 'f'},       //
                               {"out", required_argument, nullptr, 'o'},         //
                               {"out_data", no_argument, nullptr, 'D'},          //
+                              {"repeat", required_argument, nullptr, 't'},      //
                               {"help", no_argument, nullptr, 'h'},              //
                               {nullptr, no_argument, nullptr, 0}};
 
@@ -141,9 +120,6 @@ parse_cluster_options(const int argc,      //
         break;
       case 'c':
         options.col = std::string(optarg);
-        break;
-      case 'n':
-        options.knn = std::stoi(optarg);
         break;
       case 'K':
         options.K = std::stoi(optarg);
@@ -179,8 +155,11 @@ parse_cluster_options(const int argc,      //
         options.out = std::string(optarg);
         break;
       case 'D':
-	options.out_data = true;
-	break;
+        options.out_data = true;
+        break;
+      case 't':
+        options.repeat = std::stoi(optarg);
+        break;
       case 'h':  // -h or --help
       case '?':  // Unrecognized option
         std::cerr << _usage << std::endl;
@@ -243,12 +222,73 @@ estimate_mixture_of_columns(const Mat& X, const cluster_options_t& options) {
   elbo.reserve(2 + options.burnin_iter + options.max_iter);
   Vec mass(K);
 
-  ////////////////////////////////////////////////////////
-  // Kmeans++ initialization (Arthur and Vassilvitskii) //
-  ////////////////////////////////////////////////////////
-
   std::vector<Index> membership = random_membership(num_clust_t(K), num_sample_t(N));
-  {
+
+  if (options.repeat < 2) {
+
+    ////////////////////////////////////////////////////////
+    // Kmeans++ initialization (Arthur and Vassilvitskii) //
+    ////////////////////////////////////////////////////////
+
+    {
+      Scalar _elbo = 0;
+      for (Index i = 0; i < N; ++i) {
+        const Index k = membership.at(i);
+        _elbo += components[k].elbo(X.col(i));
+      }
+      _elbo /= static_cast<Scalar>(N * D);
+      TLOG("baseline[" << std::setw(5) << 0 << "] [" << std::setw(10) << _elbo << "]");
+      elbo.push_back(_elbo);
+    }
+
+    std::fill(membership.begin(), membership.end(), -1);
+    {
+      Vec x(D);
+      x.setZero();
+      DS sampler_n(N);
+      Vec dist(N);
+
+      for (Index k = 0; k < K; ++k) {
+        dist          = (X.colwise() - x).cwiseProduct(X.colwise() - x).colwise().sum().transpose();
+        dist          = dist.unaryExpr([](const Scalar _x) { return fasterlog(_x + 1e-8); });
+        const Index j = sampler_n(dist);
+
+        x = X.col(j).eval();
+        components[k] += x;
+        membership[j] = k;
+        prior.add_to(k);
+      }
+      TLOG("Finished kmeans++ seeding");
+    }
+
+    {
+      Scalar _elbo = 0;
+      for (Index i = 0; i < N; ++i) {
+        if (membership.at(i) < 0) {
+          mass.setZero();
+          for (Index k = 0; k < K; ++k) {
+            mass(k) += components.at(k).log_lcvi(X.col(i));
+          }
+          const Index l = sampler_k(mass);
+          membership[i] = l;
+          prior.add_to(l);
+          components[l] += X.col(i);
+        }
+
+        const Index k = membership.at(i);
+        _elbo += components[k].elbo(X.col(i));
+      }
+
+      _elbo /= static_cast<Scalar>(N * D);
+      TLOG("Greedy- [" << std::setw(5) << 0 << "] [" << std::setw(10) << _elbo << "]");
+      elbo.push_back(_elbo);
+    }
+  } else {
+    for (Index i = 0; i < N; ++i) {
+      const Index k = membership.at(i);
+      components[k] += X.col(i);
+      prior.add_to(k);
+    }
     Scalar _elbo = 0;
     for (Index i = 0; i < N; ++i) {
       const Index k = membership.at(i);
@@ -256,49 +296,6 @@ estimate_mixture_of_columns(const Mat& X, const cluster_options_t& options) {
     }
     _elbo /= static_cast<Scalar>(N * D);
     TLOG("baseline[" << std::setw(5) << 0 << "] [" << std::setw(10) << _elbo << "]");
-    elbo.push_back(_elbo);
-  }
-
-  std::fill(membership.begin(), membership.end(), -1);
-  {
-    Vec x(D);
-    x.setZero();
-    DS sampler_n(N);
-    Vec dist(N);
-
-    for (Index k = 0; k < K; ++k) {
-      dist          = (X.colwise() - x).cwiseProduct(X.colwise() - x).colwise().sum().transpose();
-      dist          = dist.unaryExpr([](const Scalar _x) { return fasterlog(_x + 1e-8); });
-      const Index j = sampler_n(dist);
-
-      x = X.col(j).eval();
-      components[k] += x;
-      membership[j] = k;
-      prior.add_to(k);
-    }
-    TLOG("Finished kmeans++ seeding");
-  }
-
-  {
-    Scalar _elbo = 0;
-    for (Index i = 0; i < N; ++i) {
-      if (membership.at(i) < 0) {
-        mass.setZero();
-        for (Index k = 0; k < K; ++k) {
-          mass(k) += components.at(k).log_lcvi(X.col(i));
-        }
-        const Index l = sampler_k(mass);
-        membership[i] = l;
-        prior.add_to(l);
-        components[l] += X.col(i);
-      }
-
-      const Index k = membership.at(i);
-      _elbo += components[k].elbo(X.col(i));
-    }
-
-    _elbo /= static_cast<Scalar>(N * D);
-    TLOG("Greedy- [" << std::setw(5) << 0 << "] [" << std::setw(10) << _elbo << "]");
     elbo.push_back(_elbo);
   }
 
@@ -317,7 +314,6 @@ estimate_mixture_of_columns(const Mat& X, const cluster_options_t& options) {
         prior.subtract_from(k_old);
 
         mass.setZero();
-        mass += prior.log_lcvi();
         for (Index k = 0; k < K; ++k) {
           mass(k) += components.at(k).log_lcvi(X.col(i));
         }
@@ -349,7 +345,6 @@ estimate_mixture_of_columns(const Mat& X, const cluster_options_t& options) {
     Z(k, i)       = 1.0;
   }
 
-  const Scalar rate_discount = options.rate_discount;
   Vec z_i(K);
 
   for (Index t = 0; t < options.max_iter; ++t) {
@@ -362,9 +357,9 @@ estimate_mixture_of_columns(const Mat& X, const cluster_options_t& options) {
       // Local step //
       ////////////////
 
-      mass = prior.log_lcvi();
+      mass = prior.elbo();
       for (Index k = 0; k < K; ++k) {
-        mass(k) += components.at(k).log_lcvi(X.col(i));
+        mass(k) += components.at(k).elbo(X.col(i));
       }
 
       normalized_exp(mass, z_i);
@@ -385,8 +380,7 @@ estimate_mixture_of_columns(const Mat& X, const cluster_options_t& options) {
       Z.col(i) = z_i;
     }
 
-    const Scalar rate = std::pow(static_cast<Scalar>(t + 1), -rate_discount);
-    prior.update(Z, rate);
+    prior.update(Z, 1.0);
     elbo.push_back(_elbo);
 
     if (t >= options.min_iter) {

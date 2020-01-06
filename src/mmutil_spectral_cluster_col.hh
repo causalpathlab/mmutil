@@ -42,55 +42,8 @@ create_clustering_data(const SpMat& X, const cluster_options_t& options) {
   Mat U;
   tie(U, ignore, ignore) = take_spectrum_laplacian(X, tau, rank, lu_iter);
 
-  Mat Data;
-
-  if (options.knn <= 1) {  // Just run clustering without kNN
-
-    TLOG("Using spectral data ...");
-
-    Data.resize(U.cols(), U.rows());
-    Data = standardize(U).transpose();
-
-  } else {
-
-    TLOG("Constructing kNN graph ...");
-
-    Mat uu = U.rowwise().normalized().transpose().eval();
-
-    const Index nnlist = std::max(options.knn + 1, options.nlist);
-    const Index bilink = std::max(std::min(options.bilink, uu.rows() - 1), static_cast<Index>(2));
-
-    vector<tuple<Index, Index, Scalar> > knn_index;
-    auto _knn = search_knn(SrcDataT(uu.data(), uu.rows(), uu.cols()),  //
-                           TgtDataT(uu.data(), uu.rows(), uu.cols()),  //
-                           KNN(options.knn + 1),                       //
-                           BILINK(bilink),                             //
-                           NNLIST(nnlist),                             //
-                           knn_index);
-
-    if (_knn != EXIT_SUCCESS) {
-      return Data;
-    }
-
-    TLOG("Spectral transformation of shared-neighborhohod graph");
-
-    const SpMat G = make_similarity_graph(knn_index, N);
-    const Mat Deg = (G * G.transpose()) * Mat::Ones(N, 1);
-
-    const Mat deg = Deg.unaryExpr([](const Scalar x) {
-      const Scalar _one = 1.0;
-      const Scalar _eps = 1e-8;
-      return _one / std::max(_one, std::sqrt(x + _eps));
-    });
-
-    Mat xx = deg.asDiagonal() * G.transpose();
-    RandomizedSVD<Mat> svd(rank, lu_iter);
-    svd.set_verbose();
-    svd.compute(xx);
-
-    Data.resize(svd.matrixU().cols(), svd.matrixU().rows());
-    Data = standardize(svd.matrixU()).transpose().eval();
-  }
+  Mat Data(U.cols(), U.rows());
+  Data = standardize(U).transpose();
 
   return Data;
 }
