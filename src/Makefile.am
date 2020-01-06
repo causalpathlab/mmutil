@@ -14,6 +14,10 @@ bin_PROGRAMS = mmutil_merge_col \
 
 math = svd.hh
 
+sgd = \
+    inference/sgd_representation_gaussian.hh \
+    inference/sgd_regression.hh
+
 common = mmutil.hh \
     mmutil_stat.hh \
     eigen_util.hh \
@@ -89,6 +93,5 @@ mmutil_spectral_cluster_col_SOURCES = \
     inference/dpm.hh \
     inference/sampler.hh \
     inference/component_gaussian.hh \
-    inference/representation_gaussian.hh \
     $(common) \
     $(math)
