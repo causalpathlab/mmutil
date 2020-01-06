@@ -267,7 +267,7 @@ estimate_mixture_of_columns(const Mat& X, const cluster_options_t& options) {
         if (membership.at(i) < 0) {
           mass.setZero();
           for (Index k = 0; k < K; ++k) {
-            mass(k) += components.at(k).log_lcvi(X.col(i));
+            mass(k) += components.at(k).log_marginal_ratio(X.col(i));
           }
           const Index l = sampler_k(mass);
           membership[i] = l;
@@ -315,7 +315,7 @@ estimate_mixture_of_columns(const Mat& X, const cluster_options_t& options) {
 
         mass.setZero();
         for (Index k = 0; k < K; ++k) {
-          mass(k) += components.at(k).log_lcvi(X.col(i));
+          mass(k) += components.at(k).log_marginal_ratio(X.col(i));
         }
 
         Index k_new   = sampler_k(mass);

@@ -150,7 +150,7 @@ struct multi_gaussian_component_t {
   Scalar log_marginal() const {
 
     // mu = s1 / (scale + n);  // posterior mean
-    const Scalar C = s2 + (s1 / (scale + n)).cwiseProduct(s1).sum();
+    const Scalar C = s2 - (s1 / (scale + n)).cwiseProduct(s1).sum();
 
     Scalar ret = -0.5 * n * d * ln2pi;
     ret += 0.5 * d * fasterlog(scale);
@@ -159,6 +159,36 @@ struct multi_gaussian_component_t {
     ret -= fasterlgamma(a0);
     ret += a0 * fasterlog(b0);
     ret -= (a0 + n * d * 0.5) * fasterlog(b0 + C * 0.5);
+
+    return ret;
+  }
+
+  template <typename Derived>
+  Scalar log_marginal_ratio(const Eigen::MatrixBase<Derived>& xx) const {
+
+    const Derived& x = xx.derived();
+#ifdef DEBUG
+    ASSERT(x.cols() == 1, "only support dim x 1 in log_lcvi()");
+#endif
+
+    // mu = (s1 + x) / (scale + n + 1);  // posterior mean
+    // s2 = s2 + sum x^2
+    const Scalar x2 = x.cwiseProduct(x).sum();
+
+    const Scalar C_new = s2 + x2 - ((s1 + x) / (scale + n + 1.0)).cwiseProduct(s1 + x).sum();
+
+    const Scalar C = s2 - (s1 / (scale + n)).cwiseProduct(s1).sum();
+
+    Scalar ret = -0.5 * d * ln2pi;
+
+    ret -= 0.5 * d * fasterlog(n + 1.0 + scale);  // new
+    ret += 0.5 * d * fasterlog(n + scale);        // old
+
+    ret += fasterlgamma(a0 + (n + 1.0) * d * 0.5);  // new
+    ret -= fasterlgamma(a0 + n * d * 0.5);          // old
+
+    ret -= (a0 + (n + 1.0) * d * 0.5) * fasterlog(b0 + C_new * 0.5);  // new
+    ret += (a0 + n * d * 0.5) * fasterlog(b0 + C * 0.5);              // old
 
     return ret;
   }
