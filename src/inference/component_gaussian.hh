@@ -35,8 +35,8 @@ struct multi_gaussian_component_t {
         s1(p),                            // 1st moment sum
         s2(0.),                           // 2nd moment sum
         scale(1e-2),                      // hyper for mean prior
-        a0(1.0),                          // hyper for precision prior
-        b0(1.0),                          // hyper for precision prior
+        a0(1e-2),                         // hyper for precision prior
+        b0(1e-2),                         // hyper for precision prior
         mu(p),                            // variational (posterior) mean
         mu_prec(a0 / b0 / scale),         // prec of vari-mean
         tau(a0 / b0),                     // precision

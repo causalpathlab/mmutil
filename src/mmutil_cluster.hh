@@ -27,6 +27,7 @@ struct cluster_options_t {
     bilink        = 10;
     nlist         = 10;
     repeat        = 10;
+    kmeanspp      = false;
 
     out      = "output";
     out_data = false;
@@ -54,6 +55,8 @@ struct cluster_options_t {
   Index rank;     // rank
   Index lu_iter;  // LU iteration for SVD
 
+  bool kmeanspp;  // initialization by kmeans++
+
   bool out_data;  // output clustering data
   Index repeat;   //
 };
@@ -77,14 +80,13 @@ parse_cluster_options(const int argc,      //
       "--tau (-u)        : Regularization parameter (default: 1)\n"
       "--rank (-r)       : The maximal rank of SVD (default: 10)\n"
       "--luiter (-l)     : # of LU iterations (default: 3)\n"
-      "--bilink (-m)     : # of bidirectional links (default: 10)\n"
-      "--nlist (-f)      : # nearest neighbor lists (default: 10)\n"
       "--out (-o)        : Output file header (default: output)\n"
       "--out_data (-D)   : Output clustering data (default: false)\n"
+      "--kmeanspp (-i)   : Kmeans++ initialization (default: false)\n"
       "--repeat (-t)     : # of repeated clustering (default: 10)\n"
       "\n";
 
-  const char* const short_opts = "d:c:K:B:v:V:E:u:r:l:m:f:o:Dt:h";
+  const char* const short_opts = "d:c:K:B:v:V:E:u:r:l:m:f:o:Dit:h";
 
   const option long_opts[] = {{"mtx", required_argument, nullptr, 'd'},         //
                               {"data", required_argument, nullptr, 'd'},        //
@@ -101,6 +103,7 @@ parse_cluster_options(const int argc,      //
                               {"nlist", required_argument, nullptr, 'f'},       //
                               {"out", required_argument, nullptr, 'o'},         //
                               {"out_data", no_argument, nullptr, 'D'},          //
+                              {"kmeanspp", no_argument, nullptr, 'i'},          //
                               {"repeat", required_argument, nullptr, 't'},      //
                               {"help", no_argument, nullptr, 'h'},              //
                               {nullptr, no_argument, nullptr, 0}};
@@ -156,6 +159,9 @@ parse_cluster_options(const int argc,      //
         break;
       case 'D':
         options.out_data = true;
+        break;
+      case 'i':
+        options.kmeanspp = true;
         break;
       case 't':
         options.repeat = std::stoi(optarg);
@@ -224,7 +230,7 @@ estimate_mixture_of_columns(const Mat& X, const cluster_options_t& options) {
 
   std::vector<Index> membership = random_membership(num_clust_t(K), num_sample_t(N));
 
-  if (options.repeat < 2) {
+  if (options.kmeanspp) {
 
     ////////////////////////////////////////////////////////
     // Kmeans++ initialization (Arthur and Vassilvitskii) //
@@ -249,8 +255,9 @@ estimate_mixture_of_columns(const Mat& X, const cluster_options_t& options) {
       Vec dist(N);
 
       for (Index k = 0; k < K; ++k) {
-        dist          = (X.colwise() - x).cwiseProduct(X.colwise() - x).colwise().sum().transpose();
-        dist          = dist.unaryExpr([](const Scalar _x) { return fasterlog(_x + 1e-8); });
+        dist = (X.colwise() - x).cwiseProduct(X.colwise() - x).colwise().sum().transpose();
+        dist = dist.unaryExpr(
+            [](const Scalar _x) { return static_cast<Scalar>(0.5) * fasterlog(_x + 1e-8); });
         const Index j = sampler_n(dist);
 
         x = X.col(j).eval();
@@ -303,7 +310,6 @@ estimate_mixture_of_columns(const Mat& X, const cluster_options_t& options) {
   // burn-in to initialize again //
   /////////////////////////////////
   {
-
     for (Index b = 0; b < options.burnin_iter; ++b) {
 
       Scalar _elbo = 0;
@@ -313,7 +319,7 @@ estimate_mixture_of_columns(const Mat& X, const cluster_options_t& options) {
         components[k_old] -= X.col(i);
         prior.subtract_from(k_old);
 
-        mass.setZero();
+        mass = prior.log_lcvi();
         for (Index k = 0; k < K; ++k) {
           mass(k) += components.at(k).log_marginal_ratio(X.col(i));
         }

@@ -2,6 +2,7 @@
 #include "mmutil_cluster.hh"
 #include "mmutil_match.hh"
 #include "mmutil_spectral.hh"
+#include "svd.hh"
 
 #ifndef MMUTIL_SPECTRAL_CLUSTER_COL_HH
 #define MMUTIL_SPECTRAL_CLUSTER_COL_HH
@@ -44,7 +45,6 @@ create_clustering_data(const SpMat& X, const cluster_options_t& options) {
 
   Mat Data(U.cols(), U.rows());
   Data = standardize(U).transpose();
-
   return Data;
 }
 
