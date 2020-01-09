@@ -32,6 +32,7 @@ common = mmutil.hh \
     utils/gzstream.hh \
     utils/gzstream.cc \
     utils/util.hh \
+    utils/graph.hh \
     utils/check.hh \
     utils/tuple_util.hh \
     utils/progress.hh \

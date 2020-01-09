@@ -5,18 +5,45 @@
 #ifndef YPP_TUPLE_UTIL_HH_
 #define YPP_TUPLE_UTIL_HH_
 
-////////////////////////////////////////////////////////////////
-// apply function, one by one each, to each element of tuple
-// e.g.,
-// func_apply(
-//   [](auto &&x) {
-//     std::cout << x.name << std::endl;
-//   },
-// std::make_tuple(eta_mean1, eta_mean2, eta_mean3, eta_var1));
+//////////////////////////////////////////////////////////////////
+// apply function, one by one each, to each element of tuple    //
+// e.g.,						        //
+// func_apply(						        //
+//   [](auto &&x) {					        //
+//     std::cout << x.name << std::endl;		        //
+//   },							        //
+// std::make_tuple(eta_mean1, eta_mean2, eta_mean3, eta_var1)); //
+//////////////////////////////////////////////////////////////////
 
 template <typename Func, typename... Ts>
 void
 func_apply(Func &&func, std::tuple<Ts...> &&tup);
+
+/////////////////////////////////////////////////////////////////
+// create an arbitrary size tuples with lambda		       //
+// e.g.,						       //
+//   create_tuple<10>([](std::size_t j) { return obj.at(j); }) //
+/////////////////////////////////////////////////////////////////
+
+template <std::size_t N, typename Func>
+auto
+create_tuple(Func func);
+
+/////////////////////
+// implementations //
+/////////////////////
+
+template <typename Func, std::size_t... Is>
+auto
+create_tuple_impl(Func func, std::index_sequence<Is...>) {
+  return std::make_tuple(func(Is)...);
+}
+
+template <std::size_t N, typename Func>
+auto
+create_tuple(Func func) {
+  return create_tuple_impl(func, std::make_index_sequence<N>{});
+}
 
 ////////////////////////////////////////////////////////////////
 // apply function, one by one each, to each element of tuple

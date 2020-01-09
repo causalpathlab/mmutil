@@ -71,22 +71,27 @@ create_argmax_vector(const Eigen::MatrixBase<Derived>& Z, const std::vector<S>& 
 
 template <typename OFS>
 void
-print_histogram(const std::vector<Scalar>& nn, OFS& ofs, const Scalar height = 50.0) {
+print_histogram(const std::vector<Scalar>& nn, OFS& ofs, const Scalar height = 50.0,
+                const Scalar cutoff = .01, const Index ntop = 20) {
 
   const Scalar ntot = std::accumulate(nn.begin(), nn.end(), 0.0);
 
   ofs << "<histogram>" << std::endl;
 
-  Index j = 0;
-
-  auto _print = [&](const Scalar x) {
-    ofs << std::setw(10) << (j++) << " [" << std::setw(10) << std::floor(x) << "] ";
-    for (int j = 0; j < std::floor(x / ntot * height); ++j) ofs << "*";
+  auto _print = [&](const Index j) {
+    const Scalar x = nn.at(j);
+    ofs << std::setw(10) << (j) << " [" << std::setw(10) << std::floor(x) << "] ";
+    for (int i = 0; i < std::floor(x / ntot * height); ++i) ofs << "*";
     ofs << std::endl;
   };
 
-  std::for_each(nn.begin(), nn.end(), _print);
+  auto _args = std_argsort(nn);
 
+  if (_args.size() <= ntop) {
+    std::for_each(_args.begin(), _args.end(), _print);
+  } else {
+    std::for_each(_args.begin(), _args.begin() + 20, _print);
+  }
   ofs << "</histogram>" << std::endl;
 }
 

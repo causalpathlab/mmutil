@@ -13,7 +13,7 @@
 
 template <typename EigenVec>
 inline auto
-std_vector(const EigenVec& eigen_vec) {
+std_vector(const EigenVec eigen_vec) {
   std::vector<typename EigenVec::Scalar> ret(eigen_vec.size());
   for (typename EigenVec::Index j = 0; j < eigen_vec.size(); ++j) {
     ret[j] = eigen_vec(j);
@@ -23,7 +23,7 @@ std_vector(const EigenVec& eigen_vec) {
 
 template <typename EigenVec, typename StdVec>
 inline void
-std_vector(const EigenVec& eigen_vec, StdVec& ret) {
+std_vector(const EigenVec eigen_vec, StdVec& ret) {
   ret.resize(eigen_vec.size());
   using T = typename StdVec::value_type;
   for (typename EigenVec::Index j = 0; j < eigen_vec.size(); ++j) {

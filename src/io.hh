@@ -564,9 +564,9 @@ auto
 num_cols(IFS &ifs) {
   std::istreambuf_iterator<char> eos;
   std::istreambuf_iterator<char> it(ifs);
-  const auto eol = '\n';
+  const char eol = '\n';
 
-  auto ret = 1;
+  std::size_t ret = 1;
   for (; it != eos && *it != eol; ++it) {
     char c = *it;
     if (isspace(c) && c != eol) ++ret;
@@ -582,11 +582,40 @@ num_rows(IFS &ifs) {
   std::istreambuf_iterator<char> it(ifs);
   const char eol = '\n';
 
-  auto ret = 0;
+  std::size_t ret = 0;
   for (; it != eos; ++it)
     if (*it == eol) ++ret;
 
   return ret;
+}
+
+template <typename IFS>
+auto
+num_rows_cols(IFS &ifs) {
+  std::istreambuf_iterator<char> eos;
+  std::istreambuf_iterator<char> it(ifs);
+  const char eol = '\n';
+
+  std::size_t nr     = 0;
+  std::size_t nc     = 1;
+  bool start_newline = true;
+
+  for (; it != eos; ++it) {
+    std::size_t _nc = 1;
+    char c          = *it;
+
+    if (*it == eol) {
+      ++nr;
+      nc            = std::max(nc, _nc);
+      start_newline = true;
+    } else {
+      start_newline = false;
+    }
+
+    if (isspace(c) && c != eol) _nc++;
+  }
+
+  return std::make_tuple(nr, nc);
 }
 
 template <typename IFS, typename T>
