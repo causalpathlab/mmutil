@@ -48,6 +48,15 @@ struct multi_gaussian_component_t {
     posterior_update();
   }
 
+  void clear() {
+    s1.setZero();
+    s2 = 0;
+    mu.setZero();
+    mu_prec = a0 / b0 / scale;
+    tau = a0 / b0;
+    posterior_update();
+  }
+
   /////////////////////
   // update routines //
   /////////////////////

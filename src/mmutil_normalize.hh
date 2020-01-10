@@ -120,4 +120,23 @@ normalize_to_median(const Eigen::SparseMatrixBase<Derived>& xx) {
   return ret;
 }
 
+template <typename Derived>
+Mat
+scale_by_degree(const Eigen::MatrixBase<Derived>& xx, const Scalar _tau) {
+
+  const Derived& X = xx.derived();
+
+  const Index D = X.rows();
+  const Mat Deg = X.cwiseProduct(X).transpose() * Mat::Ones(D, 1);
+
+  const Scalar tau = Deg.mean() * _tau;
+  const Mat dd     = Deg.unaryExpr([&tau](const Scalar x) {
+    const Scalar _one = 1.0;
+    return _one / std::max(_one, std::sqrt(x + tau));
+  });
+
+  Mat ret = X * dd.asDiagonal();
+  return ret;
+}
+
 #endif

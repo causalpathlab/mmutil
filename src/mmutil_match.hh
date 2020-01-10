@@ -1,5 +1,7 @@
 #include <getopt.h>
 
+#include <algorithm>
+#include <unordered_map>
 #include <unordered_set>
 
 #include "eigen_util.hh"
@@ -238,6 +240,10 @@ search_knn(const SrcDataT _SrcData,  //
            const NNLIST _nnlist,     //
            index_triplet_vec& out);
 
+template <typename TVEC>
+TVEC
+prune_mutual_knn(const TVEC& knn_index);
+
 ////////////////////////////////////////////////////////////////
 
 int
@@ -311,7 +317,7 @@ search_knn(const SrcSparseRowsT _SrcRows,  //
   {
 
     const Index Ntot = SrcRows.outerSize();
-    
+
     TLOG("Finding " << knn << " nearest neighbors for N = " << Ntot);
 
     progress_bar_t<Index> prog(Ntot, 1e2);
@@ -423,6 +429,51 @@ search_knn(const SrcDataT _SrcData,  //
   }
   TLOG("Done kNN searches");
   return EXIT_SUCCESS;
+}
+
+template <typename TVEC>
+TVEC
+prune_mutual_knn(const TVEC& knn_index) {
+  // Make sure that we could only consider reciprocal kNN pairs
+  std::unordered_map<std::tuple<Index, Index>, short> edge_count;
+
+  auto _count = [&edge_count](const auto& tt) {
+    Index i, j, temp;
+    std::tie(i, j, std::ignore) = tt;
+    if (i == j) return;
+
+    if (i > j) {
+      temp = i;
+      i    = j;
+      j    = temp;
+    }
+
+    if (edge_count.count({i, j}) < 1) {
+      edge_count[{i, j}] = 1;
+    } else {
+      edge_count[{i, j}] += 1;
+    }
+  };
+
+  std::for_each(knn_index.begin(), knn_index.end(), _count);
+
+  auto is_mutual = [&edge_count](const auto& tt) {
+    Index i, j, temp;
+    std::tie(i, j, std::ignore) = tt;
+    if (i == j) return false;
+    if (i > j) {
+      temp = i;
+      i    = j;
+      j    = temp;
+    }
+    return (edge_count[{i, j}] > 1);
+  };
+
+  std::vector<std::tuple<Index, Index, Scalar> > mutual_knn_index;
+  mutual_knn_index.reserve(knn_index.size());
+  std::copy_if(knn_index.begin(), knn_index.end(), std::back_inserter(mutual_knn_index), is_mutual);
+
+  return mutual_knn_index;
 }
 
 inline std::unordered_set<Index>

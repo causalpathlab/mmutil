@@ -72,4 +72,57 @@ func_apply(Func &&f, std::tuple<Ts...> &&tup) {
                                                          std::forward<Tuple>(tup));
 }
 
+////////////////////
+// hash functions //
+////////////////////
+
+template <typename T>
+inline void
+hash_combine(std::size_t &seed, const T &val) {
+  std::hash<T> hasher;
+  seed ^= hasher(val) + 0x9e3779b9 + (seed << 6) + (seed >> 2);
+}
+
+template <typename S, typename T>
+struct std::hash<std::pair<S, T>> {
+  inline std::size_t operator()(const std::pair<S, T> &val) const {
+    std::size_t seed = 0;
+    hash_combine(seed, val.first);
+    hash_combine(seed, val.second);
+    return seed;
+  }
+};
+
+template <class... TupleArgs>
+struct std::hash<std::tuple<TupleArgs...>> {
+ private:
+  //  this is a termination condition
+  //  N == sizeof...(TupleTypes)
+  //
+  template <std::size_t Idx, typename... TupleTypes>
+  inline typename std::enable_if<Idx == sizeof...(TupleTypes), void>::type hash_combine_tup(
+      std::size_t &seed, const std::tuple<TupleTypes...> &tup) const {}
+
+  //  this is the computation function
+  //  continues till condition N < sizeof...(TupleTypes) holds
+  //
+  template <std::size_t Idx, typename... TupleTypes>
+      inline typename std::enable_if <
+      Idx<sizeof...(TupleTypes), void>::type hash_combine_tup(
+          std::size_t &seed, const std::tuple<TupleTypes...> &tup) const {
+    hash_combine(seed, std::get<Idx>(tup));
+
+    //  on to next element
+    hash_combine_tup<Idx + 1>(seed, tup);
+  }
+
+ public:
+  std::size_t operator()(const std::tuple<TupleArgs...> &tupleValue) const {
+    std::size_t seed = 0;
+    //  begin with the first iteration
+    hash_combine_tup<0>(seed, tupleValue);
+    return seed;
+  }
+};
+
 #endif

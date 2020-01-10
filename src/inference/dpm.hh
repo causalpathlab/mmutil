@@ -49,6 +49,14 @@ struct trunc_dpm_t {
     sizeVec.setOnes();
   }
 
+  void clear() {
+    std::iota(sortedIndexes.begin(), sortedIndexes.end(), 0);
+    logPr.setZero();
+    u.setOnes();
+    v.setOnes();
+    sizeVec.setOnes();
+  }
+
   template <typename Derived>
   void operator+=(const Eigen::MatrixBase<Derived>& Z) {
     _add(Z);

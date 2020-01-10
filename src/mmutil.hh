@@ -25,5 +25,7 @@ using Index  = SpMat::Index;
 
 using Mat = typename Eigen::Matrix<Scalar, Eigen::Dynamic, Eigen::Dynamic, Eigen::ColMajor>;
 using Vec = typename Eigen::Matrix<Scalar, Eigen::Dynamic, 1>;
+using IntMat = typename Eigen::Matrix<std::ptrdiff_t, Eigen::Dynamic, Eigen::Dynamic, Eigen::ColMajor>;
+using IntVec = typename Eigen::Matrix<std::ptrdiff_t, Eigen::Dynamic, 1>;
 
 #endif

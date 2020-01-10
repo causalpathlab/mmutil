@@ -29,8 +29,8 @@ create_clustering_data(const SpMat& X, const cluster_options_t& options) {
 }
 
 template <typename Derived, typename S>
-std::vector<std::tuple<S, Index> >
-create_argmax_vector(const Eigen::MatrixBase<Derived>& Z, const std::vector<S>& samples) {
+inline std::vector<std::tuple<S, Index> >
+create_argmax_pair(const Eigen::MatrixBase<Derived>& Z, const std::vector<S>& samples) {
 
   ASSERT(Z.cols() == samples.size(), "#samples should correspond the columns of Z");
 
@@ -49,5 +49,25 @@ create_argmax_vector(const Eigen::MatrixBase<Derived>& Z, const std::vector<S>& 
   return membership;
 }
 
+template <typename Derived>
+inline std::vector<Index>
+create_argmax_vector(const Eigen::MatrixBase<Derived>& Z) {
+
+  const Index N = Z.cols();
+  std::vector<Index> ret;
+  ret.reserve(N);
+
+  auto _argmax = [&Z](const Index j) {
+    Index _ret;
+    Z.col(j).maxCoeff(&_ret);
+    return _ret;
+  };
+
+  std::vector<Index> index(N);
+  std::iota(index.begin(), index.end(), 0);
+  std::transform(index.begin(), index.end(), std::back_inserter(ret), _argmax);
+
+  return ret;
+}
 
 #endif

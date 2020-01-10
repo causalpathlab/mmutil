@@ -32,8 +32,8 @@ std_vector(const EigenVec eigen_vec, StdVec& ret) {
 }
 
 template <typename T>
-std::vector<Eigen::Triplet<float> >
-eigen_triplets(const std::vector<T>& Tvec) {
+inline std::vector<Eigen::Triplet<float> >
+eigen_triplets(const std::vector<T>& Tvec, bool weighted = true) {
 
   using Scalar      = float;
   using _Triplet    = Eigen::Triplet<Scalar>;
@@ -42,10 +42,15 @@ eigen_triplets(const std::vector<T>& Tvec) {
   _TripletVec ret;
   ret.reserve(Tvec.size());
 
-  for (auto tt : Tvec) {
-    ret.emplace_back(_Triplet(std::get<0>(tt), std::get<1>(tt), std::get<2>(tt)));
+  if (weighted) {
+    for (auto tt : Tvec) {
+      ret.emplace_back(_Triplet(std::get<0>(tt), std::get<1>(tt), std::get<2>(tt)));
+    }
+  } else {
+    for (auto tt : Tvec) {
+      ret.emplace_back(_Triplet(std::get<0>(tt), std::get<1>(tt), 1.0));
+    }
   }
-
   return ret;
 }
 
