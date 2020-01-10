@@ -10,6 +10,7 @@
 #include "inference/sampler.hh"
 #include "mmutil.hh"
 #include "mmutil_match.hh"
+#include "mmutil_spectral.hh"
 #include "utils/graph.hh"
 #include "utils/progress.hh"
 
@@ -33,8 +34,8 @@ struct cluster_options_t {
     bilink        = 10;
     nlist         = 10;
     kmeanspp      = false;
-    knn           = 10;
-    cosine_cutoff = 1e-2;
+    knn           = 50;
+    cosine_cutoff = 1e-1;
     levels        = 20;
 
     out      = "output";
@@ -106,7 +107,7 @@ parse_cluster_options(const int argc,      //
       "[Options for DBSCAN]\n"
       "\n"
       "--knn (-k)         : K nearest neighbors (default: 10)\n"
-      "--epsilon (-e)     : maximum cosine distance cutoff (default: 1e-2)\n"
+      "--epsilon (-e)     : maximum cosine distance cutoff (default: 0.1)\n"
       "--bilink (-m)      : # of bidirectional links (default: 10)\n"
       "--nlist (-f)       : # nearest neighbor lists (default: 10)\n"
       "\n"
@@ -291,16 +292,125 @@ sum_log_marginal(const Mat& X,                    //
   std::transform(cindex.begin(), cindex.end(), std::back_inserter(components),
                  [&dim](const Index) { return F(dim); });
 
+  Scalar Ntot = 0.;
+
   for (Index i = 0; i < N; ++i) {
     const Index k = membership.at(i);
-    components[k] += X.col(i);
+    if (k >= 0) {
+      components[k] += X.col(i);
+      Ntot += 1.0;
+    }
   }
 
   Scalar ret     = 0.;
   auto _log_marg = [&ret, &components](const Index k) { ret += components.at(k).log_marginal(); };
   std::for_each(cindex.begin(), cindex.end(), _log_marg);
 
-  return ret;
+  return (ret / Ntot);
+}
+
+template <typename T>
+inline void
+sort_cluster_index(std::vector<T>& _membership, const T cutoff = 0) {
+
+  const auto N = _membership.size();
+
+  const T kk = *std::max_element(_membership.begin(), _membership.end()) + 1;
+  ASSERT(kk > 0, "Empty membership");
+
+  std::vector<T> _sz(kk, 0);
+
+  for (std::size_t j = 0; j < N; ++j) {
+    const T k = _membership.at(j);
+    if (k >= 0) _sz[k]++;
+  }
+
+  auto _order = std_argsort(_sz);
+
+  std::vector<T> rename(kk, -1);
+  T k_new = 0;
+  for (T k : _order) {
+    if (_sz.at(k) > cutoff) rename[k] = k_new++;
+  }
+
+  for (std::size_t j = 0; j < N; ++j) {
+    const T k_old  = _membership.at(j);
+    const T k_new  = rename.at(k_old);
+    _membership[j] = k_new;
+  }
+}
+
+inline std::tuple<Mat, Mat>
+embedding_by_centroid(const Mat& X,                          //
+                      const std::vector<Index>& membership,  //
+                      const Index rank = 2, const Index iter = 5) {
+
+  const Index kk = *std::max_element(membership.begin(), membership.end()) + 1;
+  const Index D  = X.rows();
+  const Index N  = X.cols();
+
+  Mat _cc(D, kk);  // take the means
+  Vec _nn(kk);     // denominator
+  _cc.setZero();
+  _nn.setConstant(1e-8);
+
+  for (Index j = 0; j < N; ++j) {
+    const Index k = membership.at(j);
+    if (k >= 0) {
+      _cc.col(k) += X.col(j);
+      _nn(k) += 1.0;
+    }
+  }
+
+  Mat C = _cc * (_nn.cwiseInverse().asDiagonal());
+
+  const Mat Deg = (C.transpose().cwiseProduct(C.transpose()) * Mat::Ones(D, 1));
+
+  const Scalar tau = Deg.mean();
+  const Mat dd     = Deg.unaryExpr([&tau](const Scalar x) {
+    const Scalar _one = 1.0;
+    return _one / std::max(_one, std::sqrt(x + tau));
+  });
+
+  Mat CC = dd.asDiagonal() * (C.transpose());
+
+  RandomizedSVD<Mat> svd(std::min(rank, kk), iter);
+  svd.compute(CC);
+
+  // Embedded C and X
+  Mat Cd = svd.matrixV();
+  Mat Xd = svd.singularValues().cwiseInverse().asDiagonal() * svd.matrixU().transpose() * X;
+
+  return std::make_tuple(Cd, Xd);
+}
+
+template <typename OFS>
+void
+print_histogram(const std::vector<Scalar>& nn,  //
+                OFS& ofs,                       //
+                const Scalar height = 50.0,     //
+                const Scalar cutoff = .01,      //
+                const Index ntop    = 20) {
+
+  const Scalar ntot = std::accumulate(nn.begin(), nn.end(), 0.0);
+
+  ofs << "<histogram>" << std::endl;
+
+  auto _print = [&](const Index j) {
+    const Scalar x = nn.at(j);
+    ofs << std::setw(10) << (j) << " [" << std::setw(10) << std::floor(x) << "] ";
+    for (int i = 0; i < std::floor(x / ntot * height); ++i) ofs << "*";
+    ofs << std::endl;
+  };
+
+  auto _args = std_argsort(nn);
+
+  if (_args.size() <= ntop) {
+    std::for_each(_args.begin(), _args.end(), _print);
+  } else {
+    std::for_each(_args.begin(), _args.begin() + 20, _print);
+  }
+  ofs << "</histogram>" << std::endl;
 }
 
 template <typename F0, typename F>
@@ -340,18 +450,20 @@ estimate_dbscan_of_columns(const Mat& X, const cluster_options_t& options) {
   std::vector<Scalar> scores;
   scores.reserve(options.levels);
   std::vector<Index> Ncomponents;
-  Ncomponents.reserve(options.levels);  
+  Ncomponents.reserve(options.levels);
 
   Index K           = 1;
   Scalar best_score = 0.;
-  std::vector< std::vector<Index> > membership;
+  Index best_level  = 0;
+  std::vector<std::vector<Index> > membership;
 
-  for (Index l = 1; l <= options.levels; ++l) {
-    const Scalar cutoff = delta * l;
+  for (Index l = 0; l <= options.levels; ++l) {
+    const Scalar cutoff = delta * (l + 1);
     UGraph G;
     build_boost_graph(knn_index, G, cutoff);
     std::vector<Index> _membership(N);
-    const Index kk      = boost::connected_components(G, &_membership[0]);
+    const Index kk = boost::connected_components(G, &_membership[0]);
+    sort_cluster_index(_membership);
     const Scalar _score = sum_log_marginal<F0, F>(X, kk, _membership, options);
 
     Ncomponents.push_back(kk);
@@ -364,6 +476,9 @@ estimate_dbscan_of_columns(const Mat& X, const cluster_options_t& options) {
     }
 
     TLOG("K = " << kk << " components with distance < " << cutoff << ", score = " << _score);
+
+    Mat xx, cc;
+    std::tie(cc, xx) = embedding_by_centroid(X, _membership);
   }
 
   TLOG("Choosing K = " << K << " clusters");

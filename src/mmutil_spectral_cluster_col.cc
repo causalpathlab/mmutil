@@ -32,12 +32,12 @@ main(const int argc, const char* argv[]) {
 
   switch (method) {
 
-    case cluster_options_t::GAUSSIAN_MIXTURE: {
+    case cluster_options_t::GAUSSIAN_MIXTURE:
       tie(Z, C, score) = estimate_mixture_of_columns<F0, F>(Data, options);
-    } break;
-    case cluster_options_t::DBSCAN: {
+      break;
+    case cluster_options_t::DBSCAN:
       tie(Z, C, score) = estimate_dbscan_of_columns<F0, F>(Data, options);
-    } break;
+      break;
     default:
       break;
   }

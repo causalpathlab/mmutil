@@ -25,7 +25,7 @@ make_scaled_regularized(const Eigen::SparseMatrixBase<Derived>& _X0,  // sparse 
 
   TLOG("Constructing a reguarlized graph Laplacian ...");
 
-  const SpMat X = normalize_to_median(X0);
+  const SpMat X= normalize_to_median(X0);
 
   const Mat Deg    = (X.transpose().cwiseProduct(X.transpose()) * Mat::Ones(max_row, 1));
   const Scalar tau = Deg.mean() * tau_scale;
