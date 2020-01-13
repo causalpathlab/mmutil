@@ -91,11 +91,30 @@ main(const int argc, const char* argv[]) {
   vector<vector<Index> > membership;
   estimate_dbscan_of_columns(X, membership, options);
 
-  // vector<Index> levels = std_argsort(scores);
+  // output cluster membership and embedding results
+  Index l = 0;
+  for (const vector<Index>& z : membership) {
 
-  // Mat Z, C, _Z, _C;
+    string _output = output + "_level_" + std::to_string(++l);
 
-  // // write_data_file(output + ".centroid.gz", C);
+    if (file_exists(col_file)) {
+      vector<string> samples;
+      CHECK(read_vector_file(col_file, samples));
+      auto argmax = create_argmax_pair(z, samples);
+      write_tuple_file(_output + ".argmax.gz", argmax);
+    } else {
+      vector<Index> samples(N);
+      std::iota(samples.begin(), samples.end(), 0);
+      auto argmax = create_argmax_pair(z, samples);
+      write_tuple_file(_output + ".argmax.gz", argmax);
+    }
+
+    Mat xx, cc;
+    tie(cc, xx) = embed_by_centroid(Data, z, options);
+
+    write_data_file(_output + ".embedded.gz", xx);
+    write_data_file(_output + ".embedded_centroid.gz", cc);
+  }
 
   return EXIT_SUCCESS;
 }

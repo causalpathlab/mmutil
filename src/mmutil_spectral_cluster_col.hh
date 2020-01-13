@@ -49,6 +49,27 @@ create_argmax_pair(const Eigen::MatrixBase<Derived>& Z, const std::vector<S>& sa
   return membership;
 }
 
+template <typename S>
+inline std::vector<std::tuple<S, Index> >
+create_argmax_pair(const std::vector<Index>& argmax, const std::vector<S>& samples) {
+
+  const Index N = argmax.size();
+  ASSERT(N == samples.size(), "#samples should correspond the columns of Z");
+
+  auto _argmax = [&](const Index j) {
+    const Index k = argmax.at(j);
+    return std::make_tuple(samples.at(j), k);
+  };
+
+  std::vector<Index> index(N);
+  std::vector<std::tuple<S, Index> > ret;
+  ret.reserve(N);
+  std::iota(index.begin(), index.end(), 0);
+  std::transform(index.begin(), index.end(), std::back_inserter(ret), _argmax);
+
+  return ret;
+}
+
 template <typename Derived>
 inline std::vector<Index>
 create_argmax_vector(const Eigen::MatrixBase<Derived>& Z) {

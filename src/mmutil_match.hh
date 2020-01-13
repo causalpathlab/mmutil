@@ -218,6 +218,8 @@ struct TgtDataT {
 
 ///////////////////////////////////////////
 // search over the rows of sparse matrix //
+// 					 //
+// each row = each data point		 //
 ///////////////////////////////////////////
 
 int
@@ -228,9 +230,11 @@ search_knn(const SrcSparseRowsT _SrcRows,  //
            const NNLIST _nnlist,           //
            index_triplet_vec& out);
 
-////////////////////////////////
-// search over the dense data //
-////////////////////////////////
+///////////////////////////////////
+// search over the dense data	 //
+// 				 //
+// each column = each data point //
+///////////////////////////////////
 
 int
 search_knn(const SrcDataT _SrcData,  //
@@ -241,7 +245,7 @@ search_knn(const SrcDataT _SrcData,  //
            index_triplet_vec& out);
 
 template <typename TVEC>
-TVEC
+inline TVEC
 prune_mutual_knn(const TVEC& knn_index);
 
 ////////////////////////////////////////////////////////////////
@@ -432,7 +436,7 @@ search_knn(const SrcDataT _SrcData,  //
 }
 
 template <typename TVEC>
-TVEC
+inline TVEC
 prune_mutual_knn(const TVEC& knn_index) {
   // Make sure that we could only consider reciprocal kNN pairs
   std::unordered_map<std::tuple<Index, Index>, short> edge_count;

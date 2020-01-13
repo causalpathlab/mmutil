@@ -326,10 +326,11 @@ estimate_dbscan_of_columns(const Mat& X,                                  //
   TLOG("Found " << mutual_knn_index.size() << " mutual kNN edges");
 
   membership.clear();
-  // std::vector<std::vector<Index> > membership;
 
   for (Index l = 0; l <= options.levels; ++l) {
-    const Scalar cutoff = options.cosine_cutoff * std::exp(l - options.levels);
+
+    const Scalar rr     = std::sqrt(l - options.levels);
+    const Scalar cutoff = options.cosine_cutoff * std::exp(rr);
 
     UGraph G;
     build_boost_graph(mutual_knn_index, G, cutoff);
@@ -337,7 +338,8 @@ estimate_dbscan_of_columns(const Mat& X,                                  //
     boost::connected_components(G, &_membership[0]);
     const Index kk = sort_cluster_index(_membership, options.min_size);
     membership.push_back(_membership);
-    TLOG("K = " << kk << " components with distance < " << cutoff);
+
+    TLOG("K = " << kk << " components with distance <= " << cutoff);
     if (options.verbose) {
       auto nn = count_frequency(_membership, options.min_size);
       print_histogram(nn, std::cerr);

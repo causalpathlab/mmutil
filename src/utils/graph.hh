@@ -30,7 +30,7 @@ build_boost_graph(const TripleVec& data, UGraph& G, const T cutoff) {
   for (Vertex u = boost::num_vertices(G); u <= max_vertex; ++u) boost::add_vertex(G);
 
   auto add_edge = [&G, &cutoff](const auto& tt) {
-    if (std::get<2>(tt) < cutoff) boost::add_edge(std::get<0>(tt), std::get<1>(tt), G);
+    if (std::get<2>(tt) <= cutoff) boost::add_edge(std::get<0>(tt), std::get<1>(tt), G);
   };
 
   std::for_each(data.begin(), data.end(), add_edge);
