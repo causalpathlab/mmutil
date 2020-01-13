@@ -221,6 +221,11 @@ embed_by_centroid(const Mat& X,                    //
   const Index D  = X.rows();
   const Index N  = X.cols();
 
+  if (kk < 1) {
+    TLOG("There is no centroid");
+    return std::make_tuple(Mat{}, Mat{});
+  }
+
   Mat _cc(D, kk);  // take the means
   Vec _nn(kk);     // denominator
   _cc.setZero();
@@ -245,7 +250,7 @@ embed_by_centroid(const Mat& X,                    //
   svd.compute(CC);
 
   // Embedded C and X
-  Mat Cd = svd.matrixV().transpose();
+  Mat Cd = (svd.singularValues().cwiseInverse().asDiagonal() * svd.matrixV()).transpose();
   Mat Xd = (svd.matrixU().transpose() * XX).transpose();
 
   return std::make_tuple(Cd, Xd);
@@ -329,7 +334,7 @@ estimate_dbscan_of_columns(const Mat& X,                                  //
 
   for (Index l = 0; l <= options.levels; ++l) {
 
-    const Scalar rr     = std::sqrt(l - options.levels);
+    const Scalar rr     = -std::sqrt(options.levels - l);
     const Scalar cutoff = options.cosine_cutoff * std::exp(rr);
 
     UGraph G;

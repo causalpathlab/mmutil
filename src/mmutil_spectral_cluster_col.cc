@@ -95,6 +95,9 @@ main(const int argc, const char* argv[]) {
   Index l = 0;
   for (const vector<Index>& z : membership) {
 
+    const Index k_max = *std::max_element(z.begin(), z.end()) + 1;
+    if(k_max < 1) continue;
+
     string _output = output + "_level_" + std::to_string(++l);
 
     if (file_exists(col_file)) {
