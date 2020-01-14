@@ -74,13 +74,11 @@ main(const int argc, const char* argv[]) {
     //////////////////////////////////////
 
     TLOG("Embedding the clustering results");
-
-    Mat xx, cc;
     vector<Index> argmax = create_argmax_vector(Z);
-    tie(cc, xx)          = embed_by_centroid(Data, argmax, options);
+
+    Mat xx = embed_by_centroid(Data, argmax, options);
 
     write_data_file(output + ".embedded.gz", xx);
-    write_data_file(output + ".embedded_centroid.gz", cc);
 
     TLOG("Done fitting a mixture model");
     return EXIT_SUCCESS;
@@ -96,9 +94,11 @@ main(const int argc, const char* argv[]) {
   for (const vector<Index>& z : membership) {
 
     const Index k_max = *std::max_element(z.begin(), z.end()) + 1;
-    if(k_max < 1) continue;
+    if (k_max < 1) continue;
 
     string _output = output + "_level_" + std::to_string(++l);
+
+    TLOG("Writing " << _output);
 
     if (file_exists(col_file)) {
       vector<string> samples;
@@ -112,11 +112,9 @@ main(const int argc, const char* argv[]) {
       write_tuple_file(_output + ".argmax.gz", argmax);
     }
 
-    Mat xx, cc;
-    tie(cc, xx) = embed_by_centroid(Data, z, options);
+    Mat xx = embed_by_centroid(Data, z, options);
 
     write_data_file(_output + ".embedded.gz", xx);
-    write_data_file(_output + ".embedded_centroid.gz", cc);
   }
 
   return EXIT_SUCCESS;

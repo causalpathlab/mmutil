@@ -20,7 +20,8 @@ class RandomizedSVD {
         U(),
         D(),
         V(),
-        qq() {}
+        qq(),
+        verbose(false) {}
 
   using Vec = Eigen::Matrix<typename T::Scalar, Eigen::Dynamic, 1>;
 
