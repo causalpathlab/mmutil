@@ -263,22 +263,16 @@ embed_by_centroid(const Mat& X,                    //
   // shatter the centroids //
   ///////////////////////////
 
-  for(Index k = 0; k < CC.cols(); ++k) {
+  for (Index k = 0; k < CC.cols(); ++k) {
     CC.col(k) /= (CC.col(k).norm() + 1e-8);
   }
 
   Vec grad_D(D);
 
   for (Index t = 0; t < nepochs; ++t) {
-
     const Scalar rate = 1.0 - static_cast<Scalar>(t) / static_cast<Scalar>(nepochs);
-
     for (Index k = 0; k < kk; ++k) {
-
       grad_D.setZero();
-      const Scalar pp = _sigmoid(-CC.col(k).dot(CC.col(k)));
-      grad_D -= CC.col(k) * pp * static_cast<Scalar>((kk - 1));
-
       for (Index l = 0; l < kk; ++l) {
         if (k == l) continue;
         const Scalar qq = _sigmoid(CC.col(l).dot(CC.col(k)));
@@ -303,19 +297,17 @@ embed_by_centroid(const Mat& X,                    //
     return Xd;
   }
 
-  Vec grad_rank(rank);
+  //////////////////////
+  // Move data points //
+  //////////////////////
 
-  // Refining by noise-contrastive estimation
+  Vec grad_rank(rank);
   Vec pr(kk);
   const Scalar _d = static_cast<Scalar>(rank);
 
   for (Index t = 0; t < nepochs; ++t) {
 
     const Scalar rate = 1.0 - static_cast<Scalar>(t) / static_cast<Scalar>(nepochs);
-
-    //////////////////////
-    // Move data points //
-    //////////////////////
 
     for (Index j = 0; j < N; ++j) {
       Index k = memb.at(j);
