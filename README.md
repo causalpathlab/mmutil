@@ -14,12 +14,11 @@
 
 * `mmutil_distribute_col`: Distribute the columns of a given data matrix into separate files.
 
+* `mmutil_select_col`: Select the columns by names.
+
 * `mmutil_rand_col`: Randomly select the columns.
 
-* `mmutil_match_col`:
+* `mmutil_match_col`: Match columns of two matrices
 
-* `mmutil_spectral_match_col`:
+* `mmutil_spectral_match_col`: Match columns of two matrices after spectral transformation
 
-## TODO
-
-* Python and R wrapper
