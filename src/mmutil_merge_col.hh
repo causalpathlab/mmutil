@@ -20,7 +20,8 @@ struct col_counter_on_valid_rows_t {
   using scalar_t    = Scalar;
   using index_map_t = std::unordered_map<index_t, index_t>;
 
-  explicit col_counter_on_valid_rows_t(const index_map_t& _valid_rows) : valid_rows(_valid_rows) {
+  explicit col_counter_on_valid_rows_t(const index_map_t& _valid_rows)
+      : valid_rows(_valid_rows) {
     max_row  = 0;
     max_col  = 0;
     max_elem = 0;
@@ -33,7 +34,8 @@ struct col_counter_on_valid_rows_t {
   }
 
   void eval(const index_t row, const index_t col, const scalar_t weight) {
-    if (row < max_row && col < max_col && is_valid(row) && std::abs(weight) > EPS) {
+    if (row < max_row && col < max_col && is_valid(row) &&
+        std::abs(weight) > EPS) {
       Col_N[col]++;
     }
   }
@@ -64,9 +66,10 @@ struct glob_triplet_copier_t {
   using scalar_t    = Scalar;
   using index_map_t = std::unordered_map<index_t, index_t>;
 
-  explicit glob_triplet_copier_t(ogzstream& _ofs,                // output stream
-                                 const index_map_t& _remap_row,  // row mapper
-                                 const index_map_t& _remap_col)  // column mapper
+  explicit glob_triplet_copier_t(
+      ogzstream& _ofs,                // output stream
+      const index_map_t& _remap_row,  // row mapper
+      const index_map_t& _remap_col)  // column mapper
       : ofs(_ofs),
         remap_row(_remap_row),
         remap_col(_remap_col) {
@@ -108,8 +111,10 @@ struct glob_triplet_copier_t {
 
 int
 run_merge_col(const std::string glob_row_file, const Index column_threshold,
-              const std::string output, const std::vector<std::string> mtx_files,
-              const std::vector<std::string> row_files, const std::vector<std::string> col_files) {
+              const std::string output,
+              const std::vector<std::string> mtx_files,
+              const std::vector<std::string> row_files,
+              const std::vector<std::string> col_files) {
 
   using Str       = std::string;
   using Str2Index = std::unordered_map<Str, Index>;
@@ -129,8 +134,10 @@ run_merge_col(const std::string glob_row_file, const Index column_threshold,
   ////////////////////////////
 
   Index2Str glob_rows(0);
-  CHK_ERR_RET(read_vector_file(glob_row_file, glob_rows), "unable to read the rows");
-  TLOG("Read the global row names: " << glob_row_file << " " << glob_rows.size() << " rows");
+  CHK_ERR_RET(read_vector_file(glob_row_file, glob_rows),
+              "unable to read the rows");
+  TLOG("Read the global row names: " << glob_row_file << " " << glob_rows.size()
+                                     << " rows");
 
   Str2Index glob_positions;
   const Index glob_max_row = glob_rows.size();
@@ -139,8 +146,12 @@ run_merge_col(const std::string glob_row_file, const Index column_threshold,
     glob_positions[glob_rows.at(r)] = r;
   }
 
-  auto is_glob_row   = [&glob_positions](const Str& s) { return glob_positions.count(s) > 0; };
-  auto _glob_row_pos = [&glob_positions](const Str& s) { return glob_positions.at(s); };
+  auto is_glob_row = [&glob_positions](const Str& s) {
+    return glob_positions.count(s) > 0;
+  };
+  auto _glob_row_pos = [&glob_positions](const Str& s) {
+    return glob_positions.at(s);
+  };
 
   ///////////////////////////////
   // Figure out dimensionality //
@@ -183,15 +194,16 @@ run_merge_col(const std::string glob_row_file, const Index column_threshold,
       CHECK(read_vector_file(row_file, row_names));
 
       std::vector<Index> local_index(row_names.size());  // original
-      std::vector<Index> rel_local_index;                // relevant local indexes
+      std::vector<Index> rel_local_index;  // relevant local indexes
       std::iota(local_index.begin(), local_index.end(), 0);
-      std::copy_if(local_index.begin(), local_index.end(), std::back_inserter(rel_local_index),
+      std::copy_if(local_index.begin(), local_index.end(),
+                   std::back_inserter(rel_local_index),
                    [&](const Index i) { return is_glob_row(row_names.at(i)); });
 
       std::vector<index_pair_t> local_glob;  // local -> glob mapping
 
-      std::transform(rel_local_index.begin(), rel_local_index.end(), std::back_inserter(local_glob),
-                     [&](const Index _local) {
+      std::transform(rel_local_index.begin(), rel_local_index.end(),
+                     std::back_inserter(local_glob), [&](const Index _local) {
                        const Index _glob = _glob_row_pos(row_names.at(_local));
                        return std::make_pair(_local, _glob);
                      });
@@ -220,21 +232,26 @@ run_merge_col(const std::string glob_row_file, const Index column_threshold,
       std::vector<Str> column_names(0);
       CHECK(read_vector_file(col_file, column_names));
 
-      ASSERT(column_names.size() >= counter.max_col, "Insufficient number of columns");
+      ASSERT(column_names.size() >= counter.max_col,
+             "Insufficient number of columns");
 
       std::vector<Index> cols(counter.max_col);
       std::iota(std::begin(cols), std::end(cols), 0);
       std::vector<Index> valid_cols;
-      std::copy_if(cols.begin(), cols.end(), std::back_inserter(valid_cols),
-                   [&](const Index j) { return nnz_col.at(j) >= column_threshold; });
+      std::copy_if(
+          cols.begin(), cols.end(), std::back_inserter(valid_cols),
+          [&](const Index j) { return nnz_col.at(j) >= column_threshold; });
 
-      TLOG("Found " << valid_cols.size() << " (with the nnz >=" << column_threshold << ")");
+      TLOG("Found " << valid_cols.size()
+                    << " (with the nnz >=" << column_threshold << ")");
 
       std::vector<Index> nnz_col_valid;
-      std::transform(valid_cols.begin(), valid_cols.end(), std::back_inserter(nnz_col_valid),
+      std::transform(valid_cols.begin(), valid_cols.end(),
+                     std::back_inserter(nnz_col_valid),
                      [&](const Index j) { return nnz_col.at(j); });
 
-      glob_max_elem += std::accumulate(nnz_col_valid.begin(), nnz_col_valid.end(), 0);
+      glob_max_elem +=
+          std::accumulate(nnz_col_valid.begin(), nnz_col_valid.end(), 0);
 
       std::vector<Index> idx(valid_cols.size());
       std::iota(idx.begin(), idx.end(), 0);
@@ -246,20 +263,23 @@ run_merge_col(const std::string glob_row_file, const Index column_threshold,
       };
 
       std::vector<index_pair_t> local2glob;
-      std::transform(idx.begin(), idx.end(), std::back_inserter(local2glob), fun_local2glob);
+      std::transform(idx.begin(), idx.end(), std::back_inserter(local2glob),
+                     fun_local2glob);
       remap_to_glob_col.insert(local2glob.begin(), local2glob.end());
 
       // auto fun_glob2local = [&](const Index i) {
       //   return std::make_pair(glob_cols.at(i), valid_cols.at(i));
       // };
       // std::vector<index_pair_t> glob2local;
-      // std::transform(idx.begin(), idx.end(), std::back_inserter(glob2local), fun_glob2local);
-      // remap_to_local_col.insert(glob2local.begin(), glob2local.end());
+      // std::transform(idx.begin(), idx.end(), std::back_inserter(glob2local),
+      // fun_glob2local); remap_to_local_col.insert(glob2local.begin(),
+      // glob2local.end());
 
       glob_max_col += glob_cols.size();  // cumulative
 
       for (Index v : valid_cols) {
-        ofs_columns << column_names.at(v) << " " << (batch_index + 1) << std::endl;
+        ofs_columns << column_names.at(v) << " " << (batch_index + 1)
+                    << std::endl;
       }
     }
 
@@ -287,7 +307,8 @@ run_merge_col(const std::string glob_row_file, const Index column_threshold,
   // write the header
   {
     ofs << "%%MatrixMarket matrix coordinate integer general" << std::endl;
-    ofs << glob_max_row << " " << glob_max_col << " " << glob_max_elem << std::endl;
+    ofs << glob_max_row << " " << glob_max_col << " " << glob_max_elem
+        << std::endl;
   }
 
   for (int batch_index = 0; batch_index < num_batches; ++batch_index) {
@@ -295,9 +316,12 @@ run_merge_col(const std::string glob_row_file, const Index column_threshold,
     const Str mtx_file = mtx_files.at(batch_index);
     TLOG("MTX : " << mtx_file);
 
-    const index_map_t& remap_to_glob_row = *(remap_to_glob_row_vec.at(batch_index).get());
-    const index_map_t& remap_to_glob_col = *(remap_to_glob_col_vec.at(batch_index).get());
-    // const index_map_t& remap_to_local_col = *(remap_to_local_col_vec.at(batch_index).get());
+    const index_map_t& remap_to_glob_row =
+        *(remap_to_glob_row_vec.at(batch_index).get());
+    const index_map_t& remap_to_glob_col =
+        *(remap_to_glob_col_vec.at(batch_index).get());
+    // const index_map_t& remap_to_local_col =
+    // *(remap_to_local_col_vec.at(batch_index).get());
 
     glob_triplet_copier_t copier(ofs, remap_to_glob_row, remap_to_glob_col);
     visit_matrix_market_file(mtx_file, copier);

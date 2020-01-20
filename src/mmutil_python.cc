@@ -5,13 +5,16 @@
 #include "mmutil_python_spectral.hh"
 
 static PyMethodDef mmutil_methods[] = {
-    {"read_triplets", (PyCFunction)mmutil_read_triplets, METH_VARARGS, _read_triplets_desc},
-    {"read_triplets_numpy", (PyCFunction)mmutil_read_triplets_numpy, METH_VARARGS,
-     _read_triplets_numpy_desc},
-    {"write_numpy", (PyCFunction)mmutil_write_numpy, METH_VARARGS, _write_numpy_desc},
-    {"take_svd", (PyCFunction)mmutil_take_svd, METH_VARARGS | METH_KEYWORDS, _take_svd_desc},
-    {"merge_files", (PyCFunction)mmutil_merge_files, METH_VARARGS | METH_KEYWORDS,
-     _merge_files_desc},
+    {"read_triplets", (PyCFunction)mmutil_read_triplets, METH_VARARGS,
+     _read_triplets_desc},
+    {"read_triplets_numpy", (PyCFunction)mmutil_read_triplets_numpy,
+     METH_VARARGS, _read_triplets_numpy_desc},
+    {"write_numpy", (PyCFunction)mmutil_write_numpy, METH_VARARGS,
+     _write_numpy_desc},
+    {"take_svd", (PyCFunction)mmutil_take_svd, METH_VARARGS | METH_KEYWORDS,
+     _take_svd_desc},
+    {"merge_files", (PyCFunction)mmutil_merge_files,
+     METH_VARARGS | METH_KEYWORDS, _merge_files_desc},
     {NULL, NULL, 0, NULL},
 };
 

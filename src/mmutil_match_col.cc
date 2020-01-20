@@ -58,7 +58,8 @@ main(const int argc, const char* argv[]) {
     Scalar d;
     std::tie(i, j, d) = tt;
     if (valid_src.count(i) > 0 && valid_tgt.count(j) > 0) {
-      out_named.push_back(std::make_tuple(col_src_names.at(i), col_tgt_names.at(j), d));
+      out_named.push_back(
+          std::make_tuple(col_src_names.at(i), col_tgt_names.at(j), d));
     }
   }
 

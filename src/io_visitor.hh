@@ -142,8 +142,8 @@ visit_matrix_market_stream(IFS &ifs, FUN &fun) {
     if (num_nz % INTERVAL == 0) {
       std::cerr << "\r" << std::left << std::setfill('.');
       std::cerr << std::setw(30) << "Reading ";
-      std::cerr << std::right << std::setfill(' ') << std::setw(10) << (num_nz / INTERVAL)
-                << " x 1M triplets";
+      std::cerr << std::right << std::setfill(' ') << std::setw(10)
+                << (num_nz / INTERVAL) << " x 1M triplets";
       std::cerr << " (total " << std::setw(10) << MAX_PRINT << ")";
       std::cerr << "\r" << std::flush;
     }
@@ -175,10 +175,12 @@ visit_matrix_market_stream(IFS &ifs, FUN &fun) {
       state = S_EOL;
 
       if (row <= 0 || row > max_row) {
-        WLOG("Ignore unexpected row" << std::setfill(' ') << std::setw(10) << row);
+        WLOG("Ignore unexpected row" << std::setfill(' ') << std::setw(10)
+                                     << row);
         continue;
       } else if (col <= 0 || col > max_col) {
-        WLOG("Ignore unexpected column" << std::setfill(' ') << std::setw(10) << col);
+        WLOG("Ignore unexpected column" << std::setfill(' ') << std::setw(10)
+                                        << col);
         continue;
       } else {
         // convert 1-based to 0-based

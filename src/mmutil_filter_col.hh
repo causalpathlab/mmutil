@@ -34,7 +34,8 @@ filter_col_by_nnz(const Index column_threshold,   //
   std::copy_if(cols.begin(), cols.end(), std::back_inserter(valid_cols),
                [&](const Index j) { return nnz_col(j) >= _cutoff; });
 
-  TLOG("Found " << valid_cols.size() << " (with the nnz >=" << column_threshold << ")");
+  TLOG("Found " << valid_cols.size() << " (with the nnz >=" << column_threshold
+                << ")");
   copier_t::index_map_t remap;
 
   std::vector<Str> out_column_names;

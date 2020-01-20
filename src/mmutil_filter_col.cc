@@ -11,7 +11,8 @@ print_help(const char* fname) {
       "OUTPUT:    Output file header\n"
       "\n";
 
-  std::cerr << "Filter in informative samples to reduce computational cost" << std::endl;
+  std::cerr << "Filter in informative samples to reduce computational cost"
+            << std::endl;
   std::cerr << std::endl;
   std::cerr << fname << " THRESHOLD MTX COLUMN OUTPUT" << std::endl;
   std::cerr << std::endl;

@@ -36,7 +36,8 @@ main(const int argc, const char* argv[]) {
   const Str output_col_file = output + ".columns.gz";
   const Str output_mtx_file = output + ".mtx.gz";
 
-  copy_random_columns(Nsample, mtx_file, column_file, output_mtx_file, output_col_file);
+  copy_random_columns(Nsample, mtx_file, column_file, output_mtx_file,
+                      output_col_file);
 
   return EXIT_SUCCESS;
 }

@@ -20,7 +20,8 @@ const char* _take_svd_desc =
     "             if the file name ends with `.gz`\n"
     "rank       : Set the maximal rank to save computational cost.\n"
     "tau        : Regularization parameter. We add tau/mean_degree * I.\n"
-    "iterations : Number of iterations to improve the accuracy of randomized SVD\n"
+    "iterations : Number of iterations to improve the accuracy of randomized "
+    "SVD\n"
     "\n"
     "[Output]\n"
     "A dictionary `out` that contains\n"
@@ -51,8 +52,8 @@ mmutil_take_svd(PyObject* self, PyObject* args, PyObject* keywords) {
                                    const_cast<char**>(kwlist),  //
                                    &mtx_file,                   // filename
                                    &rank,                       //
-                                   &tau_scale,                  // regularization
-                                   &iterations                  // iteration
+                                   &tau_scale,  // regularization
+                                   &iterations  // iteration
                                    )) {
     return NULL;
   }
@@ -78,7 +79,8 @@ mmutil_take_svd(PyObject* self, PyObject* args, PyObject* keywords) {
   X0.setFromTriplets(Tvec.begin(), Tvec.end());
 
   Mat _U, _V, _D;
-  std::tie(_U, _V, _D) = take_spectrum_laplacian(X0, tau_scale, rank, iterations);
+  std::tie(_U, _V, _D) =
+      take_spectrum_laplacian(X0, tau_scale, rank, iterations);
 
   TLOG("Output results");
 

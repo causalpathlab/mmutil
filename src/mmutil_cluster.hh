@@ -51,6 +51,10 @@ struct cluster_options_t {
     embedding_epochs = 20;
     min_size         = 10;
     prune_knn        = false;
+    raw_scale        = false;
+    log_scale        = true;
+
+    row_weight_file = "";
 
     verbose = false;
   }
@@ -85,8 +89,13 @@ struct cluster_options_t {
   method_t method;
   bool prune_knn;
 
+  std::string row_weight_file;
+
   bool verbose;
   Index min_size;
+
+  bool raw_scale;
+  bool log_scale;
 
   void set_method(const std::string _method) {
     for (int j = 0; j < METHOD_NAMES.size(); ++j) {
@@ -100,7 +109,8 @@ struct cluster_options_t {
 };
 
 int
-parse_cluster_options(const int argc, const char* argv[], cluster_options_t& options);
+parse_cluster_options(const int argc, const char* argv[],
+                      cluster_options_t& options);
 
 template <typename F0, typename F>
 inline std::tuple<Mat, Mat, std::vector<Scalar> >
@@ -164,7 +174,9 @@ sum_log_marginal(const Mat& X,                    //
   }
 
   Scalar ret     = 0.;
-  auto _log_marg = [&ret, &components](const Index k) { ret += components.at(k).log_marginal(); };
+  auto _log_marg = [&ret, &components](const Index k) {
+    ret += components.at(k).log_marginal();
+  };
   std::for_each(cindex.begin(), cindex.end(), _log_marg);
 
   return (ret / Ntot);
@@ -270,7 +282,8 @@ embed_by_centroid(const Mat& X,                    //
   Vec grad_D(D);
 
   for (Index t = 0; t < nepochs; ++t) {
-    const Scalar rate = 1.0 - static_cast<Scalar>(t) / static_cast<Scalar>(nepochs);
+    const Scalar rate =
+        1.0 - static_cast<Scalar>(t) / static_cast<Scalar>(nepochs);
     for (Index k = 0; k < kk; ++k) {
       grad_D.setZero();
       for (Index l = 0; l < kk; ++l) {
@@ -307,7 +320,8 @@ embed_by_centroid(const Mat& X,                    //
 
   for (Index t = 0; t < nepochs; ++t) {
 
-    const Scalar rate = 1.0 - static_cast<Scalar>(t) / static_cast<Scalar>(nepochs);
+    const Scalar rate =
+        1.0 - static_cast<Scalar>(t) / static_cast<Scalar>(nepochs);
 
     for (Index j = 0; j < N; ++j) {
       Index k = memb.at(j);
@@ -349,8 +363,9 @@ print_histogram(const std::vector<T>& nn,  //
   using std::round;
   using std::setw;
 
-  const Scalar ntot = (nn.size() <= ntop) ? (accumulate(nn.begin(), nn.end(), 1e-8))
-                                          : (accumulate(nn.begin(), nn.begin() + ntop, 1e-8));
+  const Scalar ntot = (nn.size() <= ntop)
+                          ? (accumulate(nn.begin(), nn.end(), 1e-8))
+                          : (accumulate(nn.begin(), nn.begin() + ntop, 1e-8));
 
   ofs << "<histogram>" << std::endl;
 
@@ -391,7 +406,8 @@ estimate_dbscan_of_columns(const Mat& X,                                  //
   Mat uu = X.colwise().normalized().eval();  // each col is data point
 
   const Index nnlist = std::max(options.knn + 1, options.nlist);
-  const Index bilink = std::max(std::min(options.bilink, uu.rows() - 1), static_cast<Index>(2));
+  const Index bilink =
+      std::max(std::min(options.bilink, uu.rows() - 1), static_cast<Index>(2));
 
   std::vector<std::tuple<Index, Index, Scalar> > knn_index;
   auto _knn = search_knn(SrcDataT(uu.data(), uu.rows(), uu.cols()),  //
@@ -413,7 +429,8 @@ estimate_dbscan_of_columns(const Mat& X,                                  //
 
   for (Index l = 1; l <= options.levels; ++l) {
 
-    const Scalar rr     = static_cast<Scalar>(l) / static_cast<Scalar>(options.levels);
+    const Scalar rr =
+        static_cast<Scalar>(l) / static_cast<Scalar>(options.levels);
     const Scalar cutoff = options.cosine_cutoff * rr;
 
     UGraph G;
@@ -426,8 +443,8 @@ estimate_dbscan_of_columns(const Mat& X,                                  //
     TLOG("K = " << kk << " components with distance <= " << cutoff);
     if (options.verbose) {
       auto nn = count_frequency(_membership, options.min_size);
-      print_histogram(nn, std::cerr);
-      std::cerr << std::flush;
+      print_histogram(nn, std::cout);
+      std::cout << std::flush;
     }
   }
 }
@@ -460,7 +477,8 @@ estimate_mixture_of_columns(const Mat& X, const cluster_options_t& options) {
   elbo.reserve(2 + options.burnin_iter + options.max_iter);
   Vec mass(K);
 
-  std::vector<Index> membership = random_membership(num_clust_t(K), num_sample_t(N));
+  std::vector<Index> membership =
+      random_membership(num_clust_t(K), num_sample_t(N));
 
   if (options.kmeanspp) {
 
@@ -475,7 +493,8 @@ estimate_mixture_of_columns(const Mat& X, const cluster_options_t& options) {
         _elbo += components[k].elbo(X.col(i));
       }
       _elbo /= static_cast<Scalar>(N * D);
-      TLOG("baseline[" << std::setw(5) << 0 << "] [" << std::setw(10) << _elbo << "]");
+      TLOG("baseline[" << std::setw(5) << 0 << "] [" << std::setw(10) << _elbo
+                       << "]");
       elbo.push_back(_elbo);
     }
 
@@ -487,9 +506,14 @@ estimate_mixture_of_columns(const Mat& X, const cluster_options_t& options) {
       Vec dist(N);
 
       for (Index k = 0; k < K; ++k) {
-        dist = (X.colwise() - x).cwiseProduct(X.colwise() - x).colwise().sum().transpose();
-        dist = dist.unaryExpr(
-            [](const Scalar _x) { return static_cast<Scalar>(0.5) * fasterlog(_x + 1e-8); });
+        dist = (X.colwise() - x)
+                   .cwiseProduct(X.colwise() - x)
+                   .colwise()
+                   .sum()
+                   .transpose();
+        dist          = dist.unaryExpr([](const Scalar _x) {
+          return static_cast<Scalar>(0.5) * fasterlog(_x + 1e-8);
+        });
         const Index j = sampler_n(dist);
 
         x = X.col(j).eval();
@@ -519,7 +543,8 @@ estimate_mixture_of_columns(const Mat& X, const cluster_options_t& options) {
       }
 
       _elbo /= static_cast<Scalar>(N * D);
-      TLOG("Greedy- [" << std::setw(5) << 0 << "] [" << std::setw(10) << _elbo << "]");
+      TLOG("Greedy- [" << std::setw(5) << 0 << "] [" << std::setw(10) << _elbo
+                       << "]");
       elbo.push_back(_elbo);
     }
   } else {
@@ -534,7 +559,8 @@ estimate_mixture_of_columns(const Mat& X, const cluster_options_t& options) {
       _elbo += components[k].elbo(X.col(i));
     }
     _elbo /= static_cast<Scalar>(N * D);
-    TLOG("baseline[" << std::setw(5) << 0 << "] [" << std::setw(10) << _elbo << "]");
+    TLOG("baseline[" << std::setw(5) << 0 << "] [" << std::setw(10) << _elbo
+                     << "]");
     elbo.push_back(_elbo);
   }
 
@@ -567,7 +593,8 @@ estimate_mixture_of_columns(const Mat& X, const cluster_options_t& options) {
       }
 
       _elbo /= static_cast<Scalar>(N * D);
-      TLOG("Burn-in [" << std::setw(5) << (b + 1) << "] [" << std::setw(10) << _elbo << "]");
+      TLOG("Burn-in [" << std::setw(5) << (b + 1) << "] [" << std::setw(10)
+                       << _elbo << "]");
       elbo.push_back(_elbo);
     }
   }
@@ -640,7 +667,8 @@ estimate_mixture_of_columns(const Mat& X, const cluster_options_t& options) {
 
     _elbo /= static_cast<Scalar>(N * D);
     const Index tt = 1 + t + options.burnin_iter;
-    TLOG("VB Iter [" << std::setw(5) << tt << "] [" << std::setw(10) << _elbo << "]");
+    TLOG("VB Iter [" << std::setw(5) << tt << "] [" << std::setw(10) << _elbo
+                     << "]");
   }
 
   Mat C(D, K);
@@ -687,7 +715,9 @@ simulate_gaussian_mixture(const Index n   = 300,     // sample size
 
   // sample data with random jittering
   Mat X(p, n);
-  X = (centroid * Z).unaryExpr([&](const Scalar x) { return x + sd * rnorm(gen); }).eval();
+  X = (centroid * Z)
+          .unaryExpr([&](const Scalar x) { return x + sd * rnorm(gen); })
+          .eval();
   return std::make_tuple(X, membership, centroid);
 }
 
@@ -729,12 +759,17 @@ parse_cluster_options(const int argc,      //
       "--luiter (-l)           : # of LU iterations (default: 3)\n"
       "--out (-o)              : Output file header (default: output)\n"
       "--out_data (-D)         : Output clustering data (default: false)\n"
+      "--log_scale (-L)        : Treat data in a logarithm scale (default: "
+      "true)\n"
+      "--raw_scale (-R)        : Treat data in an actual scale (default: "
+      "false)\n"
       "--verbose (-O)          : Output more words (default: false)\n"
       "\n"
       "[Options for DBSCAN]\n"
       "\n"
       "--knn (-k)              : K nearest neighbors (default: 10)\n"
-      "--epsilon (-e)          : maximum cosine distance cutoff (default: 1.0)\n"
+      "--epsilon (-e)          : maximum cosine distance cutoff (default: "
+      "1.0)\n"
       "--bilink (-m)           : # of bidirectional links (default: 10)\n"
       "--nlist (-f)            : # nearest neighbor lists (default: 10)\n"
       "--min_size (-s)         : minimum size to report (default: 10)\n"
@@ -748,59 +783,66 @@ parse_cluster_options(const int argc,      //
       "--burnin (-B)           : burn-in (Gibbs) iterations (default: 10)\n"
       "--min_vbiter (-v)       : minimum VB iterations (default: 5)\n"
       "--max_vbiter (-V)       : maximum VB iterations (default: 100)\n"
-      "--convergence (-T)      : epsilon value for checking convergence (default: eps = 1e-8)\n"
+      "--convergence (-T)      : epsilon value for checking convergence "
+      "(default: eps = 1e-8)\n"
       "--kmeanspp (-i)         : Kmeans++ initialization (default: false)\n"
       "\n"
       "[Details for kNN graph]\n"
       "\n"
       "(M)\n"
-      "The number of bi-directional links created for every new element during construction.\n"
-      "Reasonable range for M is 2-100. Higher M work better on datasets with high intrinsic\n"
-      "dimensionality and/or high recall, while low M work better for datasets with low intrinsic\n"
-      "dimensionality and/or low recalls.\n"
+      "The number of bi-directional links created for every new element  \n"
+      "during construction. Reasonable range for M is 2-100. Higher M work \n"
+      "better on datasets with intrinsic dimensionality and/or high recall, \n"
+      "while low M works better for datasets intrinsic dimensionality and/or\n"
+      "low recalls. \n"
       "\n"
       "(N)\n"
-      "The size of the dynamic list for the nearest neighbors (used during the search). A higher \n"
-      "value leads to more accurate but slower search. This cannot be set lower than the number \n"
-      "of queried nearest neighbors k. The value ef of can be anything between k and the size of \n"
-      "the dataset.\n"
+      "The size of the dynamic list for the nearest neighbors (used during \n"
+      "the search). A higher more accurate but slower search. This cannot be \n"
+      "set lower than the number nearest neighbors k. The value ef of can be \n"
+      "anything between of the dataset. [Reference] Malkov, Yu, and Yashunin. "
       "\n"
-      "[Reference]\n"
-      "Malkov, Yu, and Yashunin. `Efficient and robust approximate nearest neighbor search using\n"
-      "Hierarchical Navigable Small World graphs.` preprint: https://arxiv.org/abs/1603.09320\n"
+      "`Efficient and robust approximate nearest neighbor search using \n"
+      "Hierarchical Navigable Small World graphs.` \n"
       "\n"
-      "See also:\n"
-      "https://github.com/nmslib/hnswlib\n"
-      "\n";
+      "preprint: "
+      "https://arxiv.org/abs/1603.09320 See also: "
+      "https://github.com/nmslib/hnswlib";
 
-  const char* const short_opts = "M:d:c:k:e:K:B:v:V:T:u:r:l:m:f:s:t:o:n:DPOih";
+  const char* const short_opts =
+      "M:d:c:k:e:K:B:v:V:T:u:LR"
+      "r:l:m:f:s:t:o:w:n:DPOih";
 
-  const option long_opts[] = {{"mtx", required_argument, nullptr, 'd'},               //
-                              {"data", required_argument, nullptr, 'd'},              //
-                              {"method", required_argument, nullptr, 'M'},            //
-                              {"col", required_argument, nullptr, 'c'},               //
-                              {"knn", required_argument, nullptr, 'k'},               //
-                              {"epsilon", required_argument, nullptr, 'e'},           //
-                              {"trunc", required_argument, nullptr, 'K'},             //
-                              {"burnin", required_argument, nullptr, 'B'},            //
-                              {"min_vbiter", required_argument, nullptr, 'v'},        //
-                              {"max_vbiter", required_argument, nullptr, 'V'},        //
-                              {"convergence", required_argument, nullptr, 'T'},       //
-                              {"tau", required_argument, nullptr, 'u'},               //
-                              {"rank", required_argument, nullptr, 'r'},              //
-                              {"luiter", required_argument, nullptr, 'l'},            //
-                              {"bilink", required_argument, nullptr, 'm'},            //
-                              {"nlist", required_argument, nullptr, 'f'},             //
-                              {"out", required_argument, nullptr, 'o'},               //
-                              {"num_levels", required_argument, nullptr, 'n'},        //
-                              {"min_size", required_argument, nullptr, 's'},          //
-                              {"embedding_epochs", required_argument, nullptr, 't'},  //
-                              {"out_data", no_argument, nullptr, 'D'},                //
-                              {"prune_knn", no_argument, nullptr, 'P'},               //
-                              {"verbose", no_argument, nullptr, 'O'},                 //
-                              {"kmeanspp", no_argument, nullptr, 'i'},                //
-                              {"help", no_argument, nullptr, 'h'},                    //
-                              {nullptr, no_argument, nullptr, 0}};
+  const option long_opts[] = {
+      {"mtx", required_argument, nullptr, 'd'},               //
+      {"data", required_argument, nullptr, 'd'},              //
+      {"method", required_argument, nullptr, 'M'},            //
+      {"col", required_argument, nullptr, 'c'},               //
+      {"knn", required_argument, nullptr, 'k'},               //
+      {"epsilon", required_argument, nullptr, 'e'},           //
+      {"trunc", required_argument, nullptr, 'K'},             //
+      {"burnin", required_argument, nullptr, 'B'},            //
+      {"min_vbiter", required_argument, nullptr, 'v'},        //
+      {"max_vbiter", required_argument, nullptr, 'V'},        //
+      {"convergence", required_argument, nullptr, 'T'},       //
+      {"tau", required_argument, nullptr, 'u'},               //
+      {"rank", required_argument, nullptr, 'r'},              //
+      {"luiter", required_argument, nullptr, 'l'},            //
+      {"bilink", required_argument, nullptr, 'm'},            //
+      {"nlist", required_argument, nullptr, 'f'},             //
+      {"out", required_argument, nullptr, 'o'},               //
+      {"row_weight", required_argument, nullptr, 'w'},        //
+      {"num_levels", required_argument, nullptr, 'n'},        //
+      {"min_size", required_argument, nullptr, 's'},          //
+      {"embedding_epochs", required_argument, nullptr, 't'},  //
+      {"out_data", no_argument, nullptr, 'D'},                //
+      {"prune_knn", no_argument, nullptr, 'P'},               //
+      {"verbose", no_argument, nullptr, 'O'},                 //
+      {"log_scale", no_argument, nullptr, 'L'},               //
+      {"raw_scale", no_argument, nullptr, 'R'},               //
+      {"kmeanspp", no_argument, nullptr, 'i'},                //
+      {"help", no_argument, nullptr, 'h'},                    //
+      {nullptr, no_argument, nullptr, 0}};
 
   while (true) {
     const auto opt = getopt_long(argc,                      //
@@ -863,6 +905,9 @@ parse_cluster_options(const int argc,      //
       case 'o':
         options.out = std::string(optarg);
         break;
+      case 'w':
+        options.row_weight_file = std::string(optarg);
+        break;
       case 'D':
         options.out_data = true;
         break;
@@ -877,6 +922,14 @@ parse_cluster_options(const int argc,      //
         break;
       case 'i':
         options.kmeanspp = true;
+        break;
+      case 'L':
+        options.log_scale = true;
+        options.raw_scale = false;
+        break;
+      case 'R':
+        options.log_scale = false;
+        options.raw_scale = true;
         break;
       case 't':
         options.embedding_epochs = std::stoi(optarg);

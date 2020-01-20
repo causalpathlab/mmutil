@@ -15,7 +15,8 @@ struct col_data_normalizer_t {
   using index_t  = Index;
   using scalar_t = Scalar;
 
-  explicit col_data_normalizer_t(const std::string _target, const std::vector<scalar_t>& _scale)
+  explicit col_data_normalizer_t(const std::string _target,
+                                 const std::vector<scalar_t>& _scale)
       : target_filename(_target),
         col_scale(_scale) {
     elem_check = 0;
@@ -75,7 +76,7 @@ write_normalized(const std::string mtx_file,  // input file
   const Vec& s1           = collector.Col_S1;
   const Vec& s2           = collector.Col_S2;
   std::vector<Scalar> _s1 = std_vector(s1);
-  const Scalar _med       = std::max(_s1[_s1.size() / 2], static_cast<Scalar>(1.0));
+  const Scalar _med = std::max(_s1[_s1.size() / 2], static_cast<Scalar>(1.0));
 
   Vec Deg(s1.size());
   Deg = s2.cwiseQuotient((s1 / _med).cwiseProduct(s1 / _med));
@@ -96,16 +97,21 @@ write_normalized(const std::string mtx_file,  // input file
 }
 
 template <typename Derived>
-SpMat
+inline SpMat
 normalize_to_median(const Eigen::SparseMatrixBase<Derived>& xx) {
 
   const Derived& X = xx.derived();
   const Vec deg    = X.transpose() * Mat::Ones(X.cols(), 1);
 
+  Index _argmin, _argmax;
+  const Scalar _min_deg = deg.minCoeff(&_argmin);
+  const Scalar _max_deg = deg.maxCoeff(&_argmax);
+
   std::vector<typename Derived::Scalar> _deg = std_vector(deg);
-  TLOG("search the median degree [0, " << _deg.size() << ")");
+  TLOG("search the median degree in [" << _min_deg << ", " << _max_deg << ")");
   std::nth_element(_deg.begin(), _deg.begin() + _deg.size() / 2, _deg.end());
-  const Scalar median = std::max(_deg[_deg.size() / 2], static_cast<Scalar>(1.0));
+  const Scalar median =
+      std::max(_deg[_deg.size() / 2], static_cast<Scalar>(1.0));
 
   TLOG("Targeting the median degree " << median);
 
@@ -121,7 +127,7 @@ normalize_to_median(const Eigen::SparseMatrixBase<Derived>& xx) {
 }
 
 template <typename Derived>
-Mat
+inline Mat
 scale_by_degree(const Eigen::MatrixBase<Derived>& xx, const Scalar _tau) {
 
   const Derived& X = xx.derived();

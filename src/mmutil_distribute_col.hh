@@ -18,7 +18,8 @@ distribute_col(const std::string mtx_file,         // matrix market
   col_stat_collector_t collector;
   visit_matrix_market_file(mtx_file, collector);
   const Index max_row = collector.max_row, max_col = collector.max_col;
-  ASSERT(_column_membership.size() >= max_col, "Insufficient number of columns");
+  ASSERT(_column_membership.size() >= max_col,
+         "Insufficient number of columns");
 
   std::vector<Scalar> nnz_col(max_col);
   std_vector(collector.Col_N, nnz_col);

@@ -73,20 +73,28 @@ parse_match_options(const int argc,      //
       "[Details]\n"
       "\n"
       "(M)\n"
-      "The number of bi-directional links created for every new element during construction.\n"
-      "Reasonable range for M is 2-100. Higher M work better on datasets with high intrinsic\n"
-      "dimensionality and/or high recall, while low M work better for datasets with low intrinsic\n"
+      "The number of bi-directional links created for every new element during "
+      "construction.\n"
+      "Reasonable range for M is 2-100. Higher M work better on datasets with "
+      "high intrinsic\n"
+      "dimensionality and/or high recall, while low M work better for datasets "
+      "with low intrinsic\n"
       "dimensionality and/or low recalls.\n"
       "\n"
       "(N)\n"
-      "The size of the dynamic list for the nearest neighbors (used during the search). A higher \n"
-      "value leads to more accurate but slower search. This cannot be set lower than the number \n"
-      "of queried nearest neighbors k. The value ef of can be anything between k and the size of \n"
+      "The size of the dynamic list for the nearest neighbors (used during the "
+      "search). A higher \n"
+      "value leads to more accurate but slower search. This cannot be set "
+      "lower than the number \n"
+      "of queried nearest neighbors k. The value ef of can be anything between "
+      "k and the size of \n"
       "the dataset.\n"
       "\n"
       "[Reference]\n"
-      "Malkov, Yu, and Yashunin. `Efficient and robust approximate nearest neighbor search using\n"
-      "Hierarchical Navigable Small World graphs.` preprint: https://arxiv.org/abs/1603.09320\n"
+      "Malkov, Yu, and Yashunin. `Efficient and robust approximate nearest "
+      "neighbor search using\n"
+      "Hierarchical Navigable Small World graphs.` preprint: "
+      "https://arxiv.org/abs/1603.09320\n"
       "\n"
       "See also:\n"
       "https://github.com/nmslib/hnswlib\n"
@@ -475,7 +483,8 @@ prune_mutual_knn(const TVEC& knn_index) {
 
   std::vector<std::tuple<Index, Index, Scalar> > mutual_knn_index;
   mutual_knn_index.reserve(knn_index.size());
-  std::copy_if(knn_index.begin(), knn_index.end(), std::back_inserter(mutual_knn_index), is_mutual);
+  std::copy_if(knn_index.begin(), knn_index.end(),
+               std::back_inserter(mutual_knn_index), is_mutual);
 
   return mutual_knn_index;
 }
@@ -507,7 +516,8 @@ build_knn_named(const TVec& out_index,      //
     Index i, j;
     Scalar d;
     std::tie(i, j, d) = tt;
-    out_named.push_back(std::make_tuple(col_src_names.at(i), col_tgt_names.at(j), d));
+    out_named.push_back(
+        std::make_tuple(col_src_names.at(i), col_tgt_names.at(j), d));
   }
 
   return out_named;
@@ -531,7 +541,8 @@ build_knn_named(const TVec& out_index,      //
     Scalar d;
     std::tie(i, j, d) = tt;
     if (valid_src.count(i) > 0 && valid_tgt.count(j) > 0) {
-      out_named.push_back(std::make_tuple(col_src_names.at(i), col_tgt_names.at(j), d));
+      out_named.push_back(
+          std::make_tuple(col_src_names.at(i), col_tgt_names.at(j), d));
     }
   }
 

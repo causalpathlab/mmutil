@@ -11,28 +11,46 @@ inline Mat
 create_clustering_data(const SpMat& X, const cluster_options_t& options) {
 
   using std::ignore;
+  using std::string;
   using std::tie;
   using std::tuple;
   using std::vector;
 
-  const float tau     = options.tau;
+  const Scalar tau    = options.tau;
   const Index lu_iter = options.lu_iter;
   const Index rank    = options.rank;
   const Index N       = X.cols();
+  const bool _log     = options.log_scale;
 
-  Mat U;
-  tie(U, ignore, ignore) = take_spectrum_laplacian(X, tau, rank, lu_iter);
+  RandomizedSVD<Mat> svd(rank, lu_iter);
+  if (options.verbose) svd.set_verbose();
 
-  Mat Data(U.cols(), U.rows());
-  Data = standardize(U).transpose();
+  if (file_exists(options.row_weight_file)) {
+    TLOG("Apply inverse weights on the rows");
+    const string weight_file = options.row_weight_file;
+    vector<Scalar> _w;
+    CHECK(read_vector_file(weight_file, _w));
+    const Vec ww = eigen_vector(_w);
+
+    const Mat xx = make_feature_normalized_laplacian(X, ww, tau, _log);
+    svd.compute(xx);
+    Mat Data = standardize(svd.matrixU()).transpose().eval();
+    return Data;
+  }
+
+  const Mat xx = make_scaled_regularized(X, tau, _log);
+  svd.compute(xx);
+  Mat Data = standardize(svd.matrixU()).transpose().eval();
   return Data;
 }
 
 template <typename Derived, typename S>
 inline std::vector<std::tuple<S, Index> >
-create_argmax_pair(const Eigen::MatrixBase<Derived>& Z, const std::vector<S>& samples) {
+create_argmax_pair(const Eigen::MatrixBase<Derived>& Z,
+                   const std::vector<S>& samples) {
 
-  ASSERT(Z.cols() == samples.size(), "#samples should correspond the columns of Z");
+  ASSERT(Z.cols() == samples.size(),
+         "#samples should correspond the columns of Z");
 
   auto _argmax = [&](const Index j) {
     Index ret;
@@ -44,14 +62,16 @@ create_argmax_pair(const Eigen::MatrixBase<Derived>& Z, const std::vector<S>& sa
   std::vector<std::tuple<S, Index> > membership;
   membership.reserve(Z.cols());
   std::iota(index.begin(), index.end(), 0);
-  std::transform(index.begin(), index.end(), std::back_inserter(membership), _argmax);
+  std::transform(index.begin(), index.end(), std::back_inserter(membership),
+                 _argmax);
 
   return membership;
 }
 
 template <typename S>
 inline std::vector<std::tuple<S, Index> >
-create_argmax_pair(const std::vector<Index>& argmax, const std::vector<S>& samples) {
+create_argmax_pair(const std::vector<Index>& argmax,
+                   const std::vector<S>& samples) {
 
   const Index N = argmax.size();
   ASSERT(N == samples.size(), "#samples should correspond the columns of Z");

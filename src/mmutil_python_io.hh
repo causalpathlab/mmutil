@@ -79,8 +79,9 @@ mmutil_read_triplets_numpy(PyObject* self, PyObject* args) {
     const Index pos   = max_col * i + j;
     data[pos]         = w;
     if ((++elem) % INTERVAL == 0) {
-      std::cerr << "\r" << std::setw(30) << "Adding " << std::setw(10) << (elem / INTERVAL)
-                << " x 1M triplets (total " << std::setw(10) << (num_elements / INTERVAL) << ")"
+      std::cerr << "\r" << std::setw(30) << "Adding " << std::setw(10)
+                << (elem / INTERVAL) << " x 1M triplets (total "
+                << std::setw(10) << (num_elements / INTERVAL) << ")"
                 << std::flush;
     }
   }
@@ -105,7 +106,8 @@ mmutil_read_triplets(PyObject* self, PyObject* args) {
   TLOG("Reading " << mtx_file);
   std::tie(Tvec, max_row, max_col) = read_matrix_market_file(mtx_file);
   const Index num_elements         = Tvec.size();
-  TLOG("Read    " << max_row << " x " << max_col << " with " << num_elements << " elements");
+  TLOG("Read    " << max_row << " x " << max_col << " with " << num_elements
+                  << " elements");
 
   PyObject* _max_row = PyLong_FromLong(max_row);
   PyObject* _max_col = PyLong_FromLong(max_col);
@@ -145,8 +147,9 @@ mmutil_read_triplets(PyObject* self, PyObject* args) {
     PyList_SetItem(values, elem, val);
 
     if ((elem + 1) % INTERVAL == 0) {
-      std::cerr << "\r" << std::setw(30) << "Adding " << std::setw(10) << (elem / INTERVAL)
-                << " x 1M triplets (total " << std::setw(10) << (num_elements / INTERVAL) << ")"
+      std::cerr << "\r" << std::setw(30) << "Adding " << std::setw(10)
+                << (elem / INTERVAL) << " x 1M triplets (total "
+                << std::setw(10) << (num_elements / INTERVAL) << ")"
                 << std::flush;
     }
 
@@ -172,8 +175,8 @@ mmutil_read_triplets(PyObject* self, PyObject* args) {
 
 template <typename OFS, typename T>
 void
-_write_numpy_array_stream(OFS& ofs, const T* data, const Index nrow, const Index ncol,
-                          const Index num_elements) {
+_write_numpy_array_stream(OFS& ofs, const T* data, const Index nrow,
+                          const Index ncol, const Index num_elements) {
 
   const std::string SEP(" ");
   const Index INTERVAL = 1e6;
@@ -195,8 +198,10 @@ _write_numpy_array_stream(OFS& ofs, const T* data, const Index nrow, const Index
       ofs << SEP << data[pos];
 
       // if ((++elem) % INTERVAL == 0) {
-      //   std::cerr << "\r" << std::setw(30) << "Writing " << std::setw(10) << (elem / INTERVAL)
-      //             << " x 1M elements (total " << std::setw(10) << (num_elements / INTERVAL) <<
+      //   std::cerr << "\r" << std::setw(30) << "Writing " << std::setw(10) <<
+      //   (elem / INTERVAL)
+      //             << " x 1M elements (total " << std::setw(10) <<
+      //             (num_elements / INTERVAL) <<
       //             ")"
       //             << std::flush;
       // }
@@ -208,8 +213,9 @@ _write_numpy_array_stream(OFS& ofs, const T* data, const Index nrow, const Index
 
 template <typename T>
 void
-_write_numpy_array_file(const std::string _filename, const T* data, const Index nrow,
-                        const Index ncol, const Index num_elements) {
+_write_numpy_array_file(const std::string _filename, const T* data,
+                        const Index nrow, const Index ncol,
+                        const Index num_elements) {
 
   if (file_exists(_filename)) {
     WLOG("File exists: " << _filename);

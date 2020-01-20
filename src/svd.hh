@@ -87,8 +87,9 @@ class RandomizedSVD {
   bool verbose;
 
   template <typename Derived>
-  void rand_subspace_iteration(Eigen::MatrixBase<Derived> const& X,  // data matrix
-                               const int rank_and_oversample) {      // rank + alpha
+  void rand_subspace_iteration(
+      Eigen::MatrixBase<Derived> const& X,  // data matrix
+      const int rank_and_oversample) {      // rank + alpha
 
     using Index    = typename Derived::Index;
     const Index nr = X.rows();
@@ -109,13 +110,13 @@ class RandomizedSVD {
 
       lu1.compute(X * Q);
       L.setIdentity();
-      L.block(0, 0, nr, rank_and_oversample).template triangularView<Eigen::StrictlyLower>() =
-          lu1.matrixLU();
+      L.block(0, 0, nr, rank_and_oversample)
+          .template triangularView<Eigen::StrictlyLower>() = lu1.matrixLU();
 
       lu2.compute(X.transpose() * L);
       Q.setIdentity();
-      Q.block(0, 0, nc, rank_and_oversample).template triangularView<Eigen::StrictlyLower>() =
-          lu2.matrixLU();
+      Q.block(0, 0, nc, rank_and_oversample)
+          .template triangularView<Eigen::StrictlyLower>() = lu2.matrixLU();
 
       if (verbose) TLOG("[Done ] LU iteration" << std::setw(10) << (i + 1));
     }

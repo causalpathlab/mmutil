@@ -29,8 +29,11 @@ copy_selected_columns(const std::string mtx_file,              //
   std::vector<Index> cols(max_col);
   std::iota(std::begin(cols), std::end(cols), 0);
   std::vector<Index> valid_cols;
-  auto _found = [&](const Index j) { return selected.count(full_column_names.at(j)) > 0; };
-  std::copy_if(cols.begin(), cols.end(), std::back_inserter(valid_cols), _found);
+  auto _found = [&](const Index j) {
+    return selected.count(full_column_names.at(j)) > 0;
+  };
+  std::copy_if(cols.begin(), cols.end(), std::back_inserter(valid_cols),
+               _found);
 
   TLOG("Found " << valid_cols.size() << " columns");
 

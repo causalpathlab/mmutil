@@ -23,7 +23,6 @@ print_help(const char* fname) {
   std::cerr << _desc << std::endl;
 }
 
-
 int
 main(const int argc, const char* argv[]) {
   if (argc < 5) {
@@ -31,7 +30,7 @@ main(const int argc, const char* argv[]) {
     return EXIT_FAILURE;
   }
 
-  using Str                    = std::string;
+  using Str = std::string;
   const Str mtx_file(argv[1]);
   const Str column_file(argv[2]);
   const Str select_file(argv[3]);
@@ -45,4 +44,3 @@ main(const int argc, const char* argv[]) {
 
   return EXIT_SUCCESS;
 }
-

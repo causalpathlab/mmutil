@@ -20,7 +20,8 @@ print_help(const char* fname) {
       "S(j,k) <- sum X(i,j) X(i,k) = D^(-1/2) A(j,k) D^(-1/2)\n"
       "\n";
 
-  std::cerr << "Normalize the columns of sparse count matrix file." << std::endl;
+  std::cerr << "Normalize the columns of sparse count matrix file."
+            << std::endl;
   std::cerr << fname << " mmutil_normalize_col TAU MTX OUT\n" << std::endl;
   std::cerr << _norm_help << std::endl;
 }

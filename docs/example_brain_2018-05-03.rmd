@@ -1,0 +1,174 @@
+---
+title: "Demonstration of single cell data processing on the brain data"
+author: "Yongjin Park"
+date: "`r Sys.time()`"
+---
+
+```{r include=FALSE}
+library("R.utils")
+library("lemon")
+source("Util-rmd.R")
+
+fig.dir = 'Fig/example/brain_2018-05-03/'
+dir.create(fig.dir, recursive = TRUE, showWarnings = FALSE)
+knitr::opts_chunk$set(fig.path = fig.dir, fig.width = 4, fig.height = 3)
+options(stringsAsFactors = FALSE)
+```
+
+We assume the following executable files are properly installed:
+
+* `mmutil_filter_row`
+
+* `mmutil_spectral_cluster_col`
+
+```{r}
+Sys.time()
+```
+
+## Preprocessing
+
+Create a working directory:
+
+```{bash}
+[ -d example/brain_2018-05-03/ ] || mkdir -p example/brain_2018-05-03/
+```
+
+### Select top `5000` most variable features
+
+```{bash}
+if ! [ -f example/brain_2018-05-03/top.mtx.gz ]; then
+    mmutil_filter_row 5000 \
+    data/brain_2018-05-03/filtered_count_matrix.mtx.gz \
+    data/brain_2018-05-03/features.tsv.gz \
+    example/brain_2018-05-03/top \
+    2> /dev/null
+fi
+
+# just copy the barcode file to be consistent
+if ! [ -f example/brain_2018-05-03/top.barcodes.tsv.gz ]; then
+    cp data/brain_2018-05-03/barcodes.tsv.gz example/brain_2018-05-03/top.barcodes.tsv.gz
+fi
+```
+
+Show the full spectrum of the feature scores:
+
+```{r fig_var_score}
+
+out.dir = "example/brain_2018-05-03/"
+
+var.scores = out.dir %&% "top.full_scores.gz" %>%
+    read_tsv(col_names="var", col_types="d") %>%
+    mutate(idx = 1:n())
+
+.gg.plot(var.scores, aes(x=idx, y=log(1 + var))) +
+    geom_vline(xintercept=5000, lty=2, col='red') +
+    geom_line(size=2) +
+    ylab("log(1 + variance)") +
+    xlab("ranked features")
+```
+
+## Run clustering
+
+Meta data to compare with the previous annotations:
+
+```{r}
+meta.file = "data/brain_2018-05-03/filtered_column_metadata.txt"
+meta.tab = fread(meta.file)
+```
+
+Let's visualize clustering results with the following function:
+
+```{r}
+.show.scatter = function(.argmax, .embed) {
+
+    argmax.tab = fread(.argmax) %>%
+        (function(x) { colnames(x) = c("TAG", "k"); x })
+
+    embedded.tab = fread(.embed) %>%
+        (function(x) { colnames(x) = c("e1", "e2"); x })
+
+    ## Show 2D embedding of those clusters of cells
+
+    .K = max(argmax.tab$k)
+    .lab = c("cluster" %&% 1:.K, "unassigned")
+
+    argmax.tab = argmax.tab[, k := factor(k, c(1:.K, -1), .lab)]
+
+    .dt = cbind(argmax.tab, embedded.tab) %>% na.omit()
+
+    p1 =
+        .gg.plot(.dt, aes(x=e1, y=e2, color=as.factor(k))) +
+        geom_point(size=.5)
+
+    print(p1)
+
+    ## Remove outlier cells
+    .dt2 = merge(.dt, meta.tab, by = "TAG")[k != "unassigned"]
+
+    p2 =
+        .gg.plot(.dt2, aes(x=e1, y=e2, color=broad.cell.type)) +
+        geom_point(size=.5)
+
+    print(p2)
+}
+```
+
+### Gaussian Mixture Model after spectral transformation
+
+```{bash}
+if ! [ -f example/brain_2018-05-03/gmm.argmax.gz ]; then
+    mmutil_spectral_cluster_col --mtx example/brain_2018-05-03/top.mtx.gz \
+                                --method GMM --trunc 10 --verbose --rank 5 \
+                                --col example/brain_2018-05-03/top.barcodes.tsv.gz \
+                                --out example/brain_2018-05-03/gmm 2> /dev/null
+fi
+```
+
+Read and show GMM estimation results:
+
+```{r fig_scatter_gmm}
+.show.scatter(out.dir %&% "/gmm.argmax.gz",
+              out.dir %&% "/gmm.embedded.gz")
+```
+
+### Density-based spectral clustering
+
+A strong distributional assumption of underlying data often result in
+poor clustering results while density-based non-parametric clustering
+methods robustly identify clusters of data points distributed in an
+arbitrary fashion.
+
+```{bash}
+if ! [ -f example/brain_2018-05-03/dbscan_level_1.argmax.gz ]; then
+    mmutil_spectral_cluster_col --mtx example/brain_2018-05-03/top.mtx.gz --rank 5 \
+                                --method DBSCAN --knn 50 --prune_knn --min_size 50 --verbose \
+                                --col example/brain_2018-05-03/top.barcodes.tsv.gz \
+                                --out example/brain_2018-05-03/dbscan 2> /dev/null
+fi
+```
+
+Read and show DBSCAN estimation at level 5:
+
+```{r fig_scatter_dbscan_5}
+.show.scatter(out.dir %&% "/dbscan_level_5.argmax.gz",
+              out.dir %&% "/dbscan_level_5.embedded.gz")
+```
+
+Read and show DBSCAN estimation at level 1:
+
+```{r fig_scatter_dbscan_1}
+.show.scatter(out.dir %&% "/dbscan_level_1.argmax.gz",
+              out.dir %&% "/dbscan_level_1.embedded.gz")
+```
+
+Read and show DBSCAN estimation at level 9:
+
+```{r fig_scatter_dbscan_9}
+.show.scatter(out.dir %&% "/dbscan_level_9.argmax.gz",
+              out.dir %&% "/dbscan_level_9.embedded.gz")
+```
+
+
+```{r}
+Sys.time()
+```

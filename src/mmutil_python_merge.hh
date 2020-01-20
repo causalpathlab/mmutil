@@ -37,10 +37,10 @@ mmutil_merge_files(PyObject* self, PyObject* args, PyObject* keywords) {
   if (!PyArg_ParseTupleAndKeywords(args, keywords, "sO!O!O!s|i",  //
                                    const_cast<char**>(kwlist),    //
                                    &_glob_row_file,               //
-                                   &PyList_Type, &mtxList,        // O! checks type
-                                   &PyList_Type, &rowList,        // O! checks type
-                                   &PyList_Type, &colList,        // O! checks type
-                                   &_out,                         //
+                                   &PyList_Type, &mtxList,  // O! checks type
+                                   &PyList_Type, &rowList,  // O! checks type
+                                   &PyList_Type, &colList,  // O! checks type
+                                   &_out,                   //
                                    &column_threshold)) {
     return NULL;
   }
@@ -60,7 +60,8 @@ mmutil_merge_files(PyObject* self, PyObject* args, PyObject* keywords) {
   PyObject* ret = PyDict_New();
 
   if (num_batches != row_files.size() && num_batches != col_files.size()) {
-    PyErr_SetString(PyExc_TypeError, "all the lists should contain the same number of elements");
+    PyErr_SetString(PyExc_TypeError,
+                    "all the lists should contain the same number of elements");
     return ret;
   }
 

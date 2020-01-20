@@ -3,7 +3,8 @@
 
 void
 print_help(const char* fname) {
-  std::cerr << "Find an eigen spectrum of regularized graph Laplacian" << std::endl;
+  std::cerr << "Find an eigen spectrum of regularized graph Laplacian"
+            << std::endl;
   std::cerr << "Output [U,D,V] of the corresponding SVD" << std::endl;
   std::cerr << "Ref. Qin and Rohe (2013)" << std::endl;
   std::cerr << std::endl;

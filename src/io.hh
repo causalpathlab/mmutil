@@ -52,7 +52,8 @@ is_file_gz(const std::string filename) {
 
 std::shared_ptr<std::ifstream>
 open_ifstream(const std::string filename) {
-  std::shared_ptr<std::ifstream> ret(new std::ifstream(filename.c_str(), std::ios::in));
+  std::shared_ptr<std::ifstream> ret(
+      new std::ifstream(filename.c_str(), std::ios::in));
   return ret;
 }
 
@@ -158,7 +159,8 @@ struct _triplet_reader_t {
 
   void eval_end() {
     if (Tvec.size() < max_elem) {
-      WLOG("This file may have lost elements : " << Tvec.size() << " vs. " << max_elem);
+      WLOG("This file may have lost elements : " << Tvec.size() << " vs. "
+                                                 << max_elem);
     }
     TLOG("Finished reading a list of triplets");
   }
@@ -169,8 +171,8 @@ struct _triplet_reader_t {
   TripletVec &Tvec;
 };
 
-using std_triplet_t          = std::tuple<std::ptrdiff_t, std::ptrdiff_t, float>;
-using std_triplet_reader_t   = _triplet_reader_t<std_triplet_t>;
+using std_triplet_t        = std::tuple<std::ptrdiff_t, std::ptrdiff_t, float>;
+using std_triplet_reader_t = _triplet_reader_t<std_triplet_t>;
 using eigen_triplet_reader_t = _triplet_reader_t<Eigen::Triplet<float> >;
 
 template <typename IFS, typename READER>
@@ -258,9 +260,10 @@ struct triplet_copier_remapped_rows_t {
 
   using index_map_t = std::unordered_map<index_t, index_t>;
 
-  explicit triplet_copier_remapped_rows_t(const std::string _filename,  // output filename
-                                          const index_map_t &_remap,    // valid rows
-                                          const index_t _nnz)
+  explicit triplet_copier_remapped_rows_t(
+      const std::string _filename,  // output filename
+      const index_map_t &_remap,    // valid rows
+      const index_t _nnz)
       : filename(_filename),
         remap(_remap),
         NNZ(_nnz) {
@@ -422,7 +425,8 @@ struct triplet_copier_remapped_cols_t {
 
 template <typename OFS, typename Derived>
 void
-write_matrix_market_stream(OFS &ofs, const Eigen::SparseMatrixBase<Derived> &out) {
+write_matrix_market_stream(OFS &ofs,
+                           const Eigen::SparseMatrixBase<Derived> &out) {
   ofs.precision(4);
 
   const Derived &M = out.derived();
@@ -444,10 +448,11 @@ write_matrix_market_stream(OFS &ofs, const Eigen::SparseMatrixBase<Derived> &out
       ofs << i << " " << j << " " << v << std::endl;
 
       if (++_num_triples % INTERVAL == 0) {
-        std::cerr << "\r" << std::left << std::setfill('.') << std::setw(30) << "Writing "
-                  << std::right << std::setfill(' ') << std::setw(10) << (_num_triples / INTERVAL)
-                  << " x 1M triplets (total " << std::setw(10) << (max_triples / INTERVAL) << ")"
-                  << std::flush;
+        std::cerr << "\r" << std::left << std::setfill('.') << std::setw(30)
+                  << "Writing " << std::right << std::setfill(' ')
+                  << std::setw(10) << (_num_triples / INTERVAL)
+                  << " x 1M triplets (total " << std::setw(10)
+                  << (max_triples / INTERVAL) << ")" << std::flush;
       }
     }
   }
@@ -681,8 +686,8 @@ read_data_stream(IFS &ifs, T &in) {
 #endif
 
   auto mtot = data.size();
-  ERR_RET(mtot != (nr * nc),
-          "# data points: " << mtot << " elements in " << nr << " x " << nc << " matrix");
+  ERR_RET(mtot != (nr * nc), "# data points: " << mtot << " elements in " << nr
+                                               << " x " << nc << " matrix");
   ERR_RET(mtot < 1, "empty file");
   ERR_RET(nr < 1, "zero number of rows; incomplete line?");
   in = Eigen::Map<T>(data.data(), nc, nr);
