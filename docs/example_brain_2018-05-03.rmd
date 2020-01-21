@@ -119,6 +119,7 @@ Let's visualize clustering results with the following function:
 if ! [ -f example/brain_2018-05-03/gmm.argmax.gz ]; then
     mmutil_spectral_cluster_col --mtx example/brain_2018-05-03/top.mtx.gz \
                                 --method GMM --trunc 10 --verbose --rank 5 \
+                                --kmeanspp --burnin 100 --log_scale \
                                 --col example/brain_2018-05-03/top.barcodes.tsv.gz \
                                 --out example/brain_2018-05-03/gmm 2> /dev/null
 fi

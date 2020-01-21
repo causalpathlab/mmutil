@@ -23,10 +23,6 @@ We assume the following executable files are properly installed:
 
 * `mmutil_spectral_cluster_col`
 
-```{r}
-Sys.time()
-```
-
 ## Preprocessing
 
 Create a working directory:
@@ -58,7 +54,7 @@ done
 if ! [ -f example/pancreas_2018-08-13/merged.mtx.gz ]; then
 
 	mmutil_merge_col \
-		example/pancreas_2018-08-13/genes.tsv.gz 100 \
+		example/pancreas_2018-08-13/genes.tsv.gz 500 \
 		example/pancreas_2018-08-13/merged \
 		$(echo $BATCHES | sed 's/ /\n/g' | awk '{ print "data/pancreas_2018-08-13/" $1 ".mtx.gz" FS  "example/pancreas_2018-08-13/" $1 "_genes.tsv.gz" FS "example/pancreas_2018-08-13/" $1 "_barcodes.tsv.gz" }')
 
@@ -220,7 +216,7 @@ done
 if ! [ -f example/pancreas_2018-08-13/merged_e14.mtx.gz ]; then
 
 	mmutil_merge_col \
-		example/pancreas_2018-08-13/genes.tsv.gz 0 \
+		example/pancreas_2018-08-13/genes.tsv.gz 500 \
 		example/pancreas_2018-08-13/merged_e14 \
 		$(echo $BATCHES | sed 's/ /\n/g' | awk '{ print "data/pancreas_2018-08-13/" $1 ".mtx.gz" FS  "example/pancreas_2018-08-13/" $1 "_genes.tsv.gz" FS "example/pancreas_2018-08-13/" $1 "_barcodes.tsv.gz" }')
 
@@ -265,30 +261,37 @@ arbitrary fashion.
 if ! [ -f example/pancreas_2018-08-13/dbscan_e14_level_1.argmax.gz ]; then
     mmutil_spectral_cluster_col --mtx example/pancreas_2018-08-13/merged_e14.mtx.gz \
 	                            --rank 5 --epsilon 0.05 --embedding_epochs 30 \
-                                --method DBSCAN --knn 50 --prune_knn \
-								--min_size 100 --log_scale --verbose \
+                                --method DBSCAN --knn 100 --prune_knn \
+								--min_size 10 --log_scale --verbose \
                                 --col example/pancreas_2018-08-13/merged_e14.barcodes.tsv.gz \
-                                --out example/pancreas_2018-08-13/dbscan 2> /dev/null
+                                --out example/pancreas_2018-08-13/dbscan_e14 2> /dev/null
 fi
 ```
 
 Read and show DBSCAN estimation at level 1:
 
-```{r fig_scatter_dbscan_1}
+```{r fig_scatter_dbscan_e14_1}
 .show.scatter(out.dir %&% "/dbscan_e14_level_1.argmax.gz",
               out.dir %&% "/dbscan_e14_level_1.embedded.gz")
 ```
 
 Read and show DBSCAN estimation at level 2:
 
-```{r fig_scatter_dbscan_2}
+```{r fig_scatter_dbscan_e14_2}
 .show.scatter(out.dir %&% "/dbscan_e14_level_2.argmax.gz",
               out.dir %&% "/dbscan_e14_level_2.embedded.gz")
 ```
 
 Read and show DBSCAN estimation at level 3:
 
-```{r fig_scatter_dbscan_3}
+```{r fig_scatter_dbscan_e14_3}
 .show.scatter(out.dir %&% "/dbscan_e14_level_3.argmax.gz",
               out.dir %&% "/dbscan_e14_level_3.embedded.gz")
+```
+
+Read and show DBSCAN estimation at level 8:
+
+```{r fig_scatter_dbscan_e14_8}
+.show.scatter(out.dir %&% "/dbscan_e14_level_8.argmax.gz",
+              out.dir %&% "/dbscan_e14_level_8.embedded.gz")
 ```
