@@ -18,8 +18,11 @@ filter_col_by_nnz(const Index column_threshold,   //
 
   col_stat_collector_t collector;
   visit_matrix_market_file(mtx_file, collector);
-  const Vec& nnz_col  = collector.Col_N;
+
+  const IntVec& nnz_col  = collector.Col_N;
+
   const Index max_row = collector.max_row, max_col = collector.max_col;
+
   ASSERT(column_names.size() >= max_col, "Insufficient number of columns");
 
   ///////////////////////////////////////////////////////

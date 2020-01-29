@@ -101,14 +101,21 @@ inline SpMat
 normalize_to_median(const Eigen::SparseMatrixBase<Derived>& xx) {
 
   const Derived& X = xx.derived();
-  const Vec deg    = X.transpose() * Mat::Ones(X.cols(), 1);
+
+  ///////////////////////
+  // degree of columns //
+  ///////////////////////
+
+  const Vec deg = X.transpose() * Mat::Ones(X.rows(), 1);
 
   Index _argmin, _argmax;
   const Scalar _min_deg = deg.minCoeff(&_argmin);
   const Scalar _max_deg = deg.maxCoeff(&_argmax);
 
   std::vector<typename Derived::Scalar> _deg = std_vector(deg);
+#ifdef DEBUG
   TLOG("search the median degree in [" << _min_deg << ", " << _max_deg << ")");
+#endif
   std::nth_element(_deg.begin(), _deg.begin() + _deg.size() / 2, _deg.end());
   const Scalar median =
       std::max(_deg[_deg.size() / 2], static_cast<Scalar>(1.0));
@@ -118,6 +125,29 @@ normalize_to_median(const Eigen::SparseMatrixBase<Derived>& xx) {
   const Vec degInverse = deg.unaryExpr([&median](const Scalar x) {
     const Scalar _one = 1.0;
     return median / std::max(x, _one);
+  });
+
+  SpMat ret(X.rows(), X.cols());
+  ret = X * degInverse.asDiagonal();
+
+  return ret;
+}
+
+template <typename Derived>
+inline SpMat
+normalize_to_fixed(const Eigen::SparseMatrixBase<Derived>& xx,
+                   const float target) {
+
+  const Derived& X = xx.derived();
+
+  ///////////////////////
+  // degree of columns //
+  ///////////////////////
+
+  const Vec deg        = X.transpose() * Mat::Ones(X.rows(), 1);
+  const Vec degInverse = deg.unaryExpr([&target](const Scalar x) {
+    const Scalar _one = 1.0;
+    return target / std::max(x, _one);
   });
 
   SpMat ret(X.rows(), X.cols());

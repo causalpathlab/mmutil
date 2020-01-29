@@ -81,6 +81,7 @@ visit_matrix_market_stream(IFS &ifs, FUN &fun) {
 
     if (c == comment) {
       state = S_COMMENT;
+      std::cerr << c;
       continue;
     }
 
@@ -110,8 +111,8 @@ visit_matrix_market_stream(IFS &ifs, FUN &fun) {
   // Read a list of triplets //
   /////////////////////////////
 
-  index_t row, col;
-  scalar_t weight;
+  index_t row = 0, col = 0;
+  scalar_t weight = 0.;
 
   auto read_triplet = [&]() {
     switch (num_cols) {
@@ -161,6 +162,7 @@ visit_matrix_market_stream(IFS &ifs, FUN &fun) {
 
     if (c == comment) {
       state = S_COMMENT;
+      WLOG("Found a commented line in the middle");
       continue;
     }
 
@@ -175,12 +177,10 @@ visit_matrix_market_stream(IFS &ifs, FUN &fun) {
       state = S_EOL;
 
       if (row <= 0 || row > max_row) {
-        WLOG("Ignore unexpected row" << std::setfill(' ') << std::setw(10)
-                                     << row);
+        WLOG("Ignore row" << std::setfill(' ') << std::setw(10) << row);
         continue;
       } else if (col <= 0 || col > max_col) {
-        WLOG("Ignore unexpected column" << std::setfill(' ') << std::setw(10)
-                                        << col);
+        WLOG("Ignore column" << std::setfill(' ') << std::setw(10) << col);
         continue;
       } else {
         // convert 1-based to 0-based

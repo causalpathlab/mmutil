@@ -20,7 +20,7 @@ copy_random_columns(const Index Nsample,          //
 
   col_stat_collector_t collector;
   visit_matrix_market_file(mtx_file, collector);
-  const Vec& nnz_col = collector.Col_N;
+  const IntVec& nnz_col = collector.Col_N;
 
   std::random_device rd;
   std::mt19937 rgen(rd());

@@ -30,6 +30,11 @@ struct match_options_t {
     tau  = 1.0;
     rank = 50;
     iter = 5;
+
+    prune_knn       = false;
+    raw_scale       = false;
+    log_scale       = true;
+    row_weight_file = "";
   }
 
   Str src_mtx;
@@ -45,6 +50,11 @@ struct match_options_t {
   Scalar tau;
   Index rank;
   Index iter;
+
+  bool prune_knn;
+  bool raw_scale;
+  bool log_scale;
+  std::string row_weight_file;
 };
 
 int
@@ -55,20 +65,24 @@ parse_match_options(const int argc,      //
   const char* _usage =
       "\n"
       "[Arguments]\n"
-      "--src_mtx (-s)  : Source MTX file\n"
-      "--src_col (-c)  : Source column file\n"
-      "--tgt_mtx (-t)  : Target MTX file\n"
-      "--tgt_col (-g)  : Target column file\n"
-      "--tgt_dict (-d) : Target dictionary file\n"
-      "--knn (-k)      : K nearest neighbors (default: 1)\n"
-      "--bilink (-m)   : # of bidirectional links (default: 10)\n"
-      "--nlist (-f)    : # nearest neighbor lists (default: 10)\n"
-      "--out (-o)      : Output file name\n"
+      "--src_mtx (-s)    : Source MTX file\n"
+      "--src_col (-c)    : Source column file\n"
+      "--tgt_mtx (-t)    : Target MTX file\n"
+      "--tgt_col (-g)    : Target column file\n"
+      "--tgt_dict (-d)   : Target dictionary file\n"
+      "--knn (-k)        : K nearest neighbors (default: 1)\n"
+      "--bilink (-m)     : # of bidirectional links (default: 10)\n"
+      "--nlist (-f)      : # nearest neighbor lists (default: 10)\n"
+      "--row_weight (-w) : Feature re-weighting (default: none)\n"
+      "--log_scale (-L)  : Data in a log-scale (default: true)\n"
+      "--raw_scale (-R)  : Data in a raw-scale (default: false)\n"
+      "--prune_knn (-P)  : prune kNN graph (reciprocal match)\n"
+      "--out (-o)        : Output file name\n"
       "\n"
       "[Arguments for spectral matching]\n"
-      "--tau (-u)      : Regularization parameter (default: tau = 1)\n"
-      "--rank (-r)     : The maximal rank of SVD (default: rank = 50)\n"
-      "--iter (-i)     : # of LU iterations (default: iter = 5)\n"
+      "--tau (-u)        : Regularization parameter (default: tau = 1)\n"
+      "--rank (-r)       : The maximal rank of SVD (default: rank = 50)\n"
+      "--iter (-i)       : # of LU iterations (default: iter = 5)\n"
       "\n"
       "[Details]\n"
       "\n"
@@ -100,21 +114,26 @@ parse_match_options(const int argc,      //
       "https://github.com/nmslib/hnswlib\n"
       "\n";
 
-  const char* const short_opts = "s:c:t:g:k:m:f:o:u:r:i:h";
+  const char* const short_opts = "s:c:t:g:k:m:f:o:u:r:i:w:PLRh";
 
-  const option long_opts[] = {{"src_mtx", required_argument, nullptr, 's'},  //
-                              {"src_col", required_argument, nullptr, 'c'},  //
-                              {"tgt_mtx", required_argument, nullptr, 't'},  //
-                              {"tgt_col", required_argument, nullptr, 'g'},  //
-                              {"knn", required_argument, nullptr, 'k'},      //
-                              {"bilink", required_argument, nullptr, 'm'},   //
-                              {"nlist", required_argument, nullptr, 'f'},    //
-                              {"out", required_argument, nullptr, 'o'},      //
-                              {"tau", required_argument, nullptr, 'u'},      //
-                              {"rank", required_argument, nullptr, 'r'},     //
-                              {"iter", required_argument, nullptr, 'i'},     //
-                              {"help", no_argument, nullptr, 'h'},           //
-                              {nullptr, no_argument, nullptr, 0}};
+  const option long_opts[] = {
+      {"src_mtx", required_argument, nullptr, 's'},     //
+      {"src_col", required_argument, nullptr, 'c'},     //
+      {"tgt_mtx", required_argument, nullptr, 't'},     //
+      {"tgt_col", required_argument, nullptr, 'g'},     //
+      {"knn", required_argument, nullptr, 'k'},         //
+      {"bilink", required_argument, nullptr, 'm'},      //
+      {"nlist", required_argument, nullptr, 'f'},       //
+      {"out", required_argument, nullptr, 'o'},         //
+      {"tau", required_argument, nullptr, 'u'},         //
+      {"rank", required_argument, nullptr, 'r'},        //
+      {"iter", required_argument, nullptr, 'i'},        //
+      {"row_weight", required_argument, nullptr, 'w'},  //
+      {"prune_knn", no_argument, nullptr, 'P'},         //
+      {"log_scale", no_argument, nullptr, 'L'},         //
+      {"raw_scale", no_argument, nullptr, 'R'},         //
+      {"help", no_argument, nullptr, 'h'},              //
+      {nullptr, no_argument, nullptr, 0}};
 
   while (true) {
     const auto opt = getopt_long(argc,                      //
@@ -159,6 +178,21 @@ parse_match_options(const int argc,      //
       case 'i':
         options.iter = std::stoi(optarg);
         break;
+      case 'P':
+        options.prune_knn = true;
+        break;
+      case 'w':
+        options.row_weight_file = std::string(optarg);
+        break;
+      case 'L':
+        options.log_scale = true;
+        options.raw_scale = false;
+        break;
+      case 'R':
+        options.log_scale = false;
+        options.raw_scale = true;
+        break;
+
       case 'h':  // -h or --help
       case '?':  // Unrecognized option
         std::cerr << _usage << std::endl;
@@ -494,7 +528,7 @@ find_nz_cols(const std::string mtx_file) {
   col_stat_collector_t collector;
   visit_matrix_market_file(mtx_file, collector);
   std::unordered_set<Index> valid;
-  const Vec& nn = collector.Col_N;
+  const IntVec& nn = collector.Col_N;
   for (Index j = 0; j < nn.size(); ++j) {
     if (nn(j) > 0.0) valid.insert(j);
   }

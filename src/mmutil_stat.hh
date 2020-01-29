@@ -54,7 +54,7 @@ struct row_stat_collector_t {
   Index max_elem;
   Vec Row_S1;
   Vec Row_S2;
-  Vec Row_N;
+  IntVec Row_N;
 };
 
 struct col_stat_collector_t {
@@ -89,10 +89,19 @@ struct col_stat_collector_t {
       Col_S2(col) += (weight * weight);
       Col_N(col)++;
     }
+#ifdef DEBUG
+    else {
+      TLOG("[" << row << ", " << col << ", " << weight << "]");
+      TLOG(max_row << " x " << max_col);
+    }
+#endif
   }
 
   void eval_end() {
 #ifdef DEBUG
+    TLOG("S1  : " << Col_S1.sum());
+    TLOG("S2  : " << Col_S2.sum());
+    TLOG("NNZ : " << Col_N.sum());
     TLOG("Finished reading a list of triplets");
 #endif
   }
@@ -102,7 +111,7 @@ struct col_stat_collector_t {
   Index max_elem;
   Vec Col_S1;
   Vec Col_S2;
-  Vec Col_N;
+  IntVec Col_N;
 };
 
 struct row_col_stat_collector_t {
@@ -161,11 +170,11 @@ struct row_col_stat_collector_t {
 
   Vec Row_S1;
   Vec Row_S2;
-  Vec Row_N;
+  IntVec Row_N;
 
   Vec Col_S1;
   Vec Col_S2;
-  Vec Col_N;
+  IntVec Col_N;
 };
 
 #endif

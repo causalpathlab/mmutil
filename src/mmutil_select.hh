@@ -22,7 +22,7 @@ copy_selected_columns(const std::string mtx_file,              //
 
   col_stat_collector_t collector;
   visit_matrix_market_file(mtx_file, collector);
-  const Vec& nnz_col  = collector.Col_N;
+  const IntVec& nnz_col  = collector.Col_N;
   const Index max_row = collector.max_row, max_col = collector.max_col;
   ASSERT(full_column_names.size() >= max_col, "Insufficient number of columns");
 
