@@ -32,6 +32,7 @@ create_clustering_data(const SpMat& X, const cluster_options_t& options) {
     CHECK(read_vector_file(weight_file, _w));
     const Vec ww = eigen_vector(_w);
 
+    ASSERT(ww.rows() == X.rows(), "Must have the same number of rows");
     const Mat xx = make_feature_normalized_laplacian(X, ww, tau, _log);
     svd.compute(xx);
     Mat Data = standardize(svd.matrixU()).transpose().eval();
