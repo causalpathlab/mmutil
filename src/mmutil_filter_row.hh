@@ -26,7 +26,8 @@ compute_coeffvar_mtx_row(const std::string mtx_file) {
   Vec ret = ((s2 - s1.cwiseProduct(s1 / n)) / std::max(n - 1.0, 1.0))
                 .cwiseSqrt()
                 .binaryExpr(mu, [](const Scalar& s, const Scalar& m) -> Scalar {
-                  return s / (m + 1e-8);
+                  if (std::abs(m) < 1.0) return 0.0;
+                  return s / std::abs(m);
                 });
 
   std::vector<Index> Nvec;

@@ -498,7 +498,7 @@ parse_spectral_options(const int argc,      //
       "Li, Kwok, Lu (2010), Making Large-Scale Nystrom Approximation Possible\n"
       "\n";
 
-  const char* const short_opts = "d:m:u:r:i:c:w:S:B:LRM:ho:";
+  const char* const short_opts = "d:m:u:r:i:C:w:S:B:LRM:ho:";
 
   const option long_opts[] = {
       {"mtx", required_argument, nullptr, 'd'},              //

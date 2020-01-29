@@ -570,7 +570,7 @@ parse_match_options(const int argc,      //
       "https://github.com/nmslib/hnswlib\n"
       "\n";
 
-  const char* const short_opts = "s:c:t:g:k:m:f:o:u:r:i:w:S:B:PLRM:h";
+  const char* const short_opts = "s:c:t:g:k:m:f:o:u:r:i:w:C:S:B:PLRM:h";
 
   const option long_opts[] = {
       {"src_mtx", required_argument, nullptr, 's'},          //
@@ -585,6 +585,7 @@ parse_match_options(const int argc,      //
       {"rank", required_argument, nullptr, 'r'},             //
       {"iter", required_argument, nullptr, 'i'},             //
       {"row_weight", required_argument, nullptr, 'w'},       //
+      {"col_norm", required_argument, nullptr, 'C'},         //
       {"prune_knn", no_argument, nullptr, 'P'},              //
       {"log_scale", no_argument, nullptr, 'L'},              //
       {"raw_scale", no_argument, nullptr, 'R'},              //
