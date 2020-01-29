@@ -34,7 +34,7 @@ main(const int argc, const char* argv[]) {
   ERR_RET(!file_exists(mtx_file), "missing the mtx file");
   ERR_RET(!file_exists(feature_file), "missing the feature file");
 
-  filter_row_by_sd(Ntop, mtx_file, feature_file, output);
+  filter_row_by_coeffvar(Ntop, mtx_file, feature_file, output);
 
   return EXIT_SUCCESS;
 }

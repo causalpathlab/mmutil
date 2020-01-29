@@ -13,6 +13,23 @@ main(const int argc, const char* argv[]) {
   ERR_RET(!file_exists(mtx_src_file), "No source data file");
   ERR_RET(!file_exists(mtx_tgt_file), "No target data file");
 
+  /////////////////////////////
+  // fliter out zero columns //
+  /////////////////////////////
+
+  using valid_set_t = std::unordered_set<Index>;
+  using str_vec_t   = std::vector<std::string>;
+  str_vec_t col_src_names, col_tgt_names;
+  valid_set_t valid_src, valid_tgt;
+  Index Nsrc, Ntgt;
+
+  std::tie(valid_src, Nsrc, col_src_names) =
+      find_nz_col_names(mtx_src_file, mtx_tgt_file);
+  std::tie(valid_tgt, Ntgt, col_tgt_names) =
+      find_nz_col_names(mtx_tgt_file, mtx_tgt_file);
+
+  TLOG("Filter out total zero columns");
+
   const std::string out_file(mopt.out);
 
   std::vector<std::tuple<Index, Index, Scalar> > out_index;
@@ -28,28 +45,6 @@ main(const int argc, const char* argv[]) {
                         out_index);
 
   CHK_ERR_RET(knn, "Failed to search kNN");
-
-  /////////////////////////////
-  // fliter out zero columns //
-  /////////////////////////////
-
-  auto valid_src = find_nz_cols(mtx_src_file);
-  auto valid_tgt = find_nz_cols(mtx_tgt_file);
-
-  TLOG("Filter out total zero columns");
-
-  ///////////////////////////////
-  // give names to the columns //
-  ///////////////////////////////
-
-  const std::string col_src_file(mopt.src_col);
-  const std::string col_tgt_file(mopt.tgt_col);
-
-  std::vector<std::string> col_src_names;
-  std::vector<std::string> col_tgt_names;
-
-  CHECK(read_vector_file(col_src_file, col_src_names));
-  CHECK(read_vector_file(col_tgt_file, col_tgt_names));
 
   std::vector<std::tuple<std::string, std::string, Scalar> > out_named;
 

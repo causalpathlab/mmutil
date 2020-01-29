@@ -10,68 +10,79 @@ main(const int argc, const char* argv[]) {
 
   const std::string mtx_src_file(options.src_mtx);
   const std::string mtx_tgt_file(options.tgt_mtx);
+  const std::string wfile = options.row_weight_file;
 
   ERR_RET(!file_exists(mtx_src_file), "No source data file");
   ERR_RET(!file_exists(mtx_tgt_file), "No target data file");
 
-  const float tau  = options.tau;
-  const Index iter = options.iter;
-  const Index rank = options.rank;
-  const std::string out_file(options.out);
+  /////////////////////////////
+  // fliter out zero columns //
+  /////////////////////////////
+
+  using valid_set_t = std::unordered_set<Index>;
+  using str_vec_t   = std::vector<std::string>;
+  str_vec_t col_src_names, col_tgt_names;
+  valid_set_t valid_src, valid_tgt;
+  Index Nsrc, Ntgt;
+
+  std::tie(valid_src, Nsrc, col_src_names) =
+      find_nz_col_names(mtx_src_file, mtx_tgt_file);
+  std::tie(valid_tgt, Ntgt, col_tgt_names) =
+      find_nz_col_names(mtx_tgt_file, mtx_tgt_file);
+
+  TLOG("Filter out total zero columns");
+
+  Vec weights;
+  if (file_exists(wfile)) {
+    std::vector<Scalar> ww;
+    CHECK(read_vector_file(wfile, ww));
+    weights = eigen_vector(ww);
+  }
+
+  ///////////////////////////////////////////////
+  // step 1. learn spectral on the target data //
+  ///////////////////////////////////////////////
+
+  Mat u, v, d;
+  std::tie(u, v, d) = take_spectrum_nystrom(mtx_tgt_file, weights, options);
+
+  TLOG("Target matrix: " << u.rows() << " x " << u.cols());
+
+  /////////////////////////////////////////////////////
+  // step 2. project source data onto the same space //
+  /////////////////////////////////////////////////////
+
+  Mat proj = v * d.cwiseInverse().asDiagonal();  // feature x rank
+
+  Mat u_src = _nystrom_proj(mtx_src_file, weights, proj, options);
+
+  TLOG("Source matrix: " << u_src.rows() << " x " << u_src.cols());
+
+  //////////////////////////////
+  // step 3. search kNN pairs //
+  //////////////////////////////
+
+  ERR_RET(u_src.cols() != u.cols(), "Found different number of features: "
+                                        << u_src.cols() << " vs. " << u.cols());
+
+  u_src.transposeInPlace();  // Column-major
+  u.transposeInPlace();      //
+
+  u_src.colwise().normalize();  // Normalize for cosine distance
+  u.colwise().normalize();      //
 
   std::vector<std::tuple<Index, Index, Scalar> > out_index;
 
-  const SpMat Src = build_eigen_sparse(mtx_src_file);
-  const SpMat Tgt = build_eigen_sparse(mtx_tgt_file);
+  TLOG("Running kNN search ...");
 
-  const Index Nsrc = Src.cols();
-  const Index Ntgt = Tgt.cols();
-
-  ERR_RET(Src.rows() != Tgt.rows(),
-          "Found different number of rows between the source & target data.");
-
-  const SpMat SrcTgt = hcat(Src, Tgt);
-
-  Mat U;
-  std::tie(U, std::ignore, std::ignore) =
-      take_spectrum_laplacian(SrcTgt, tau, rank, iter);
-
-  // must normalize before the search
-  U = U.rowwise().normalized().eval();
-
-  Mat src_u = U.topRows(Nsrc).transpose().eval();     // col = data point
-  Mat tgt_u = U.bottomRows(Ntgt).transpose().eval();  // col = data point
-
-  auto knn = search_knn(SrcDataT(src_u.data(), src_u.rows(), src_u.cols()),
-                        TgtDataT(tgt_u.data(), tgt_u.rows(), tgt_u.cols()),
+  auto knn = search_knn(SrcDataT(u_src.data(), u_src.rows(), u_src.cols()),
+                        TgtDataT(u.data(), u.rows(), u.cols()),
                         KNN(options.knn),        //
                         BILINK(options.bilink),  //
                         NNLIST(options.nlist),   //
                         out_index);
 
   CHK_ERR_RET(knn, "Failed to search kNN");
-
-  /////////////////////////////
-  // fliter out zero columns //
-  /////////////////////////////
-
-  auto valid_src = find_nz_cols(mtx_src_file);
-  auto valid_tgt = find_nz_cols(mtx_tgt_file);
-
-  TLOG("Filter out total zero columns");
-
-  ///////////////////////////////
-  // give names to the columns //
-  ///////////////////////////////
-
-  const std::string col_src_file(options.src_col);
-  const std::string col_tgt_file(options.tgt_col);
-
-  std::vector<std::string> col_src_names;
-  std::vector<std::string> col_tgt_names;
-
-  CHECK(read_vector_file(col_src_file, col_src_names));
-  CHECK(read_vector_file(col_tgt_file, col_tgt_names));
 
   std::vector<std::tuple<std::string, std::string, Scalar> > out_named;
 
@@ -84,6 +95,8 @@ main(const int argc, const char* argv[]) {
           std::make_tuple(col_src_names.at(i), col_tgt_names.at(j), d));
     }
   }
+
+  const std::string out_file(options.out);
 
   write_tuple_file(out_file, out_named);
 

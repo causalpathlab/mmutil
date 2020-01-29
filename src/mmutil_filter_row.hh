@@ -9,7 +9,7 @@
 ////////////////////////
 
 inline auto
-compute_sd_mtx_row(const std::string mtx_file) {
+compute_coeffvar_mtx_row(const std::string mtx_file) {
   row_stat_collector_t collector;
   visit_matrix_market_file(mtx_file, collector);
 
@@ -21,9 +21,13 @@ compute_sd_mtx_row(const std::string mtx_file) {
   const Vec& s2  = collector.Row_S2;
   const Scalar n = static_cast<Scalar>(collector.max_col);
 
-  Vec ret = s2 - s1.cwiseProduct(s1 / n);
-  ret     = ret / std::max(n - 1.0, 1.0);
-  ret     = ret.cwiseSqrt();
+  Vec mu = s1 / n;
+
+  Vec ret = ((s2 - s1.cwiseProduct(s1 / n)) / std::max(n - 1.0, 1.0))
+                .cwiseSqrt()
+                .binaryExpr(mu, [](const Scalar& s, const Scalar& m) -> Scalar {
+                  return s / (m + 1e-8);
+                });
 
   std::vector<Index> Nvec;
   std_vector(collector.Row_N, Nvec);
@@ -31,10 +35,10 @@ compute_sd_mtx_row(const std::string mtx_file) {
 }
 
 void
-filter_row_by_sd(const Index Ntop,                //
-                 const std::string mtx_file,      //
-                 const std::string feature_file,  //
-                 const std::string output) {
+filter_row_by_coeffvar(const Index Ntop,                //
+                       const std::string mtx_file,      //
+                       const std::string feature_file,  //
+                       const std::string output) {
 
   using Str         = std::string;
   using copier_t    = triplet_copier_remapped_rows_t<Index, Scalar>;
@@ -47,7 +51,8 @@ filter_row_by_sd(const Index Ntop,                //
   Vec row_scores;
   Index max_row, max_col;
   std::vector<Index> Nvec;
-  std::tie(row_scores, Nvec, max_row, max_col) = compute_sd_mtx_row(mtx_file);
+  std::tie(row_scores, Nvec, max_row, max_col) =
+      compute_coeffvar_mtx_row(mtx_file);
 
   /////////////////////
   // Prioritize rows //

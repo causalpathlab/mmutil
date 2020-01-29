@@ -14,10 +14,10 @@
 struct spectral_options_t {
   using Str = std::string;
 
-  typedef enum { UNIFORM, VARIANCE, MEAN } sampling_method_t;
-  const std::vector<std::string> METHOD_NAMES;
+  typedef enum { UNIFORM, CV, MEAN } sampling_method_t;
+  const std::vector<Str> METHOD_NAMES;
 
-  spectral_options_t() : METHOD_NAMES{"UNIFORM", "VARIANCE", "MEAN"} {
+  spectral_options_t() : METHOD_NAMES{"UNIFORM", "CV", "MEAN"} {
 
     mtx = "";
     out = "output.txt.gz";
@@ -224,12 +224,20 @@ take_spectrum_laplacian(                          //
   return std::make_tuple(U, V, D);
 }
 
-template <typename Derived>
+template <typename Derived, typename Derived2, typename options_t>
+inline Mat
+_nystrom_proj(const std::string mtx_file,                  // matrix file
+              const Eigen::MatrixBase<Derived>& _weights,  // row weights
+              const Eigen::MatrixBase<Derived2>& _proj,    // projection matrix
+              const options_t& options                     // options
+);
+
+template <typename Derived, typename options_t>
 inline std::tuple<Mat, Mat, Mat>
 take_spectrum_nystrom(
     const std::string mtx_file,                  // matrix file
     const Eigen::MatrixBase<Derived>& _weights,  // row weights
-    const spectral_options_t& options            // options
+    const options_t& options                     // options
 ) {
 
   const Scalar tau       = options.tau;
@@ -260,16 +268,22 @@ take_spectrum_nystrom(
 
   std::vector<Index> index_r(N);
 
-  if (options.nystrom_sample_method == spectral_options_t::VARIANCE) {
+  if (options.nystrom_sample_method == options_t::CV) {
     const Scalar n = static_cast<Scalar>(collector.max_row);
 
-    Vec sd = s2 - s1.cwiseProduct(s1 / n);
-    sd     = sd / std::max(n - 1.0, 1.0);
-    sd     = sd.cwiseSqrt();
+    // coefficient of variation
 
-    index_r = eigen_argsort_descending(sd);
+    Vec mu = s1 / n;
+    Vec score =
+        ((s2 - s1.cwiseProduct(mu)) / std::max(n - 1.0, 1.0))
+            .cwiseSqrt()
+            .binaryExpr(mu, [](const Scalar& s, const Scalar& m) -> Scalar {
+              return s / (m + 1e-8);
+            });
 
-  } else if (options.nystrom_sample_method == spectral_options_t::MEAN) {
+    index_r = eigen_argsort_descending(score);
+
+  } else if (options.nystrom_sample_method == options_t::MEAN) {
     const Scalar n = static_cast<Scalar>(collector.max_row);
 
     Vec mu  = s1 / n;
@@ -306,7 +320,7 @@ take_spectrum_nystrom(
   ww.setOnes();
 
   if (_weights.size() > 0) {
-    ww == _weights.derived();
+    ww = _weights.derived();
   }
 
   TLOG("Found a stochastic X [" << X.rows() << " x " << X.cols() << "]");
@@ -379,6 +393,82 @@ take_spectrum_nystrom(
   return std::make_tuple(U, vv, dd);
 }
 
+template <typename Derived, typename Derived2, typename options_t>
+inline Mat
+_nystrom_proj(const std::string mtx_file,                  // matrix file
+              const Eigen::MatrixBase<Derived>& _weights,  // row weights
+              const Eigen::MatrixBase<Derived2>& _proj,    // projection matrix
+              const options_t& options                     // options
+) {
+
+  using _reader_t = eigen_triplet_reader_remapped_cols_t;
+
+  const Scalar tau       = options.tau;
+  const Scalar norm      = options.col_norm;
+  const Index rank       = options.rank;
+  const Index batch_size = options.nystrom_batch;
+  const bool take_ln     = options.log_scale;
+
+  col_stat_collector_t collector;
+  visit_matrix_market_file(mtx_file, collector);
+  const Index N         = collector.max_col;
+  const Index D         = collector.max_row;
+  const IntVec& nnz_col = collector.Col_N;
+  const Derived2 proj   = _proj.derived();
+
+  ASSERT(proj.rows() == collector.max_row,
+         "Projection matrix should have the same number of rows");
+
+  Vec ww(D, 1);
+  ww.setOnes();
+
+  if (_weights.size() > 0) {
+    ww = _weights.derived();
+  }
+
+  Mat U(N, rank);
+  U.setZero();
+
+  for (Index lb = 0; lb < N; lb += batch_size) {
+
+    _reader_t::index_map_t Remap;
+    const Index ub = std::min(N, batch_size + lb);
+
+    TLOG("Projection on the batch [" << lb << ", " << ub << ")");
+
+    Index new_index = 0;
+    Index NNZ       = 0;
+
+    for (Index old_index = lb; old_index < ub; ++old_index) {
+      Remap[old_index] = new_index;
+      NNZ += nnz_col(old_index);
+      new_index++;
+    }
+
+#ifdef DEBUG
+    TLOG("Non zeros = " << NNZ << ", " << new_index);
+#endif
+
+    _reader_t::TripletVec Tvec;
+    _reader_t reader(Tvec, Remap, NNZ);
+
+    visit_matrix_market_file(mtx_file, reader);
+
+    SpMat xx(reader.max_row, ub - lb);
+
+    xx.setFromTriplets(Tvec.begin(), Tvec.end());
+
+    Mat xx_t = make_normalized_laplacian(xx, ww, tau, norm, take_ln);
+    Index i  = 0;
+    for (Index j = lb; j < ub; ++j) {
+      U.row(j) += xx_t.row(i) * proj;
+      i++;
+    }
+  }
+
+  return U;
+}
+
 int
 parse_spectral_options(const int argc,      //
                        const char* argv[],  //
@@ -393,10 +483,11 @@ parse_spectral_options(const int argc,      //
       "--rank (-r)            : The maximal rank of SVD (default: rank = 50)\n"
       "--iter (-i)            : # of LU iterations (default: iter = 5)\n"
       "--row_weight (-w)      : Feature re-weighting (default: none)\n"
-      "--col_norm (-c)        : Column normalization (default: 10000)\n"
+      "--col_norm (-C)        : Column normalization (default: 10000)\n"
       "--nystrom_sample (-S)  : Nystrom sample size (default: 10000)\n"
       "--nystrom_batch (-B)   : Nystrom batch size (default: 10000)\n"
-      "--sampling_method (-M) : Nystrom sampling method: UNIFORM (default), VARIANCE, MEAN\n"
+      "--sampling_method (-M) : Nystrom sampling method: UNIFORM (default), "
+      "CV, MEAN\n"
       "--log_scale (-L)       : Data in a log-scale (default: true)\n"
       "--raw_scale (-R)       : Data in a raw-scale (default: false)\n"
       "--out (-o)             : Output file name\n"
@@ -417,7 +508,7 @@ parse_spectral_options(const int argc,      //
       {"rank", required_argument, nullptr, 'r'},             //
       {"iter", required_argument, nullptr, 'i'},             //
       {"row_weight", required_argument, nullptr, 'w'},       //
-      {"col_norm", required_argument, nullptr, 'c'},         //
+      {"col_norm", required_argument, nullptr, 'C'},         //
       {"log_scale", no_argument, nullptr, 'L'},              //
       {"raw_scale", no_argument, nullptr, 'R'},              //
       {"nystrom_sample", required_argument, nullptr, 'S'},   //
@@ -445,7 +536,7 @@ parse_spectral_options(const int argc,      //
       case 'u':
         options.tau = std::stof(optarg);
         break;
-      case 'c':
+      case 'C':
         options.col_norm = std::stof(optarg);
         break;
       case 'r':
