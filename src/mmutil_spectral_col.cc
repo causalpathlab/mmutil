@@ -10,11 +10,8 @@ main(const int argc, const char* argv[]) {
 
   using Str = std::string;
 
-  const Str mtx_file     = options.mtx;
-  const Scalar tau_scale = options.tau;
-  const Index rank       = options.rank;
-  const Index iter       = options.iter;
-  const Str output       = options.out;
+  const Str mtx_file = options.mtx;
+  const Str output   = options.out;
 
   const Str wfile = options.row_weight_file;
   Vec weights;
@@ -30,15 +27,9 @@ main(const int argc, const char* argv[]) {
 
   Mat U, V, D;
 
-  std::tie(U, V, D) = take_spectrum_nystrom(options.mtx,             //
-                                            weights,                 //
-                                            options.tau,             //
-                                            options.col_norm,        //
-                                            options.rank,            //
-                                            options.iter,            //
-                                            options.nystrom_sample,  //
-                                            options.nystrom_batch,   //
-                                            options.log_scale);
+  std::tie(U, V, D) = take_spectrum_nystrom(options.mtx,  //
+                                            weights,      //
+                                            options);
 
   // SpMat X0 = build_eigen_sparse(mtx_file);
   // std::tie(U, V, D) = take_spectrum_laplacian(X0, tau_scale, rank, iter);

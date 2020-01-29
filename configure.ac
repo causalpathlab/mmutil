@@ -14,8 +14,10 @@ AC_C_RESTRICT
 AC_TYPE_SIZE_T
 AC_TYPE_UINT32_T
 
-AX_CXX_COMPILE_STDCXX([17], noext, mandatory)
-user_LDFLAGS="${user_LDFLAGS} -ltbb" # to use intel TBB
+AX_CXX_COMPILE_STDCXX([14], noext, mandatory)
+
+# AX_CXX_COMPILE_STDCXX([17], noext, mandatory)
+# user_LDFLAGS="${user_LDFLAGS} -ltbb" # to use intel TBB
 
 # Checks for programs.
 AC_PROG_CXX

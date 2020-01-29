@@ -1,7 +1,6 @@
 #include <algorithm>
 #include <eigen3/Eigen/Core>
 #include <eigen3/Eigen/Sparse>
-#include <execution>
 #include <functional>
 #include <vector>
 
@@ -94,18 +93,7 @@ eigen_argsort_descending(const Vec& data) {
   using Index = typename Vec::Index;
   std::vector<Index> index(data.size());
   std::iota(std::begin(index), std::end(index), 0);
-  std::sort(std::execution::seq, std::begin(index), std::end(index),
-            [&](Index lhs, Index rhs) { return data(lhs) > data(rhs); });
-  return index;
-}
-
-template <typename Vec>
-inline std::vector<typename Vec::Index>
-eigen_argsort_descending_par(const Vec& data) {
-  using Index = typename Vec::Index;
-  std::vector<Index> index(data.size());
-  std::iota(std::begin(index), std::end(index), 0);
-  std::sort(std::execution::seq, std::begin(index), std::end(index),
+  std::sort(std::begin(index), std::end(index),
             [&](Index lhs, Index rhs) { return data(lhs) > data(rhs); });
   return index;
 }

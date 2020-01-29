@@ -14,7 +14,10 @@
 struct spectral_options_t {
   using Str = std::string;
 
-  spectral_options_t() {
+  typedef enum { UNIFORM, VARIANCE, MEAN } sampling_method_t;
+  const std::vector<std::string> METHOD_NAMES;
+
+  spectral_options_t() : METHOD_NAMES{"UNIFORM", "VARIANCE", "MEAN"} {
 
     mtx = "";
     out = "output.txt.gz";
@@ -30,6 +33,8 @@ struct spectral_options_t {
 
     nystrom_sample = 10000;
     nystrom_batch  = 10000;
+
+    nystrom_sample_method = UNIFORM;
   }
 
   Str mtx;
@@ -46,108 +51,18 @@ struct spectral_options_t {
 
   Index nystrom_sample;
   Index nystrom_batch;
-};
 
-int
-parse_spectral_options(const int argc,      //
-                       const char* argv[],  //
-                       spectral_options_t& options) {
+  sampling_method_t nystrom_sample_method;
 
-  const char* _usage =
-      "\n"
-      "[Arguments]\n"
-      "--data (-d)           : MTX file (data)\n"
-      "--mtx (-d)            : MTX file (data)\n"
-      "--tau (-u)            : Regularization parameter (default: tau = 1)\n"
-      "--rank (-r)           : The maximal rank of SVD (default: rank = 50)\n"
-      "--iter (-i)           : # of LU iterations (default: iter = 5)\n"
-      "--row_weight (-w)     : Feature re-weighting (default: none)\n"
-      "--col_norm (-c)       : Column normalization (default: 10000)\n"
-      "--nystrom_sample (-S) : Nystrom sample size (default: 10000)\n"
-      "--nystrom_batch (-B)  : Nystrom batch size (default: 10000)\n"
-      "--log_scale (-L)      : Data in a log-scale (default: true)\n"
-      "--raw_scale (-R)      : Data in a raw-scale (default: false)\n"
-      "--out (-o)            : Output file name\n"
-      "\n"
-      "[Details]\n"
-      "Qin and Rohe (2013), Regularized Spectral Clustering under "
-      "Degree-corrected Stochastic Block Model\n"
-      "Li, Kwok, Lu (2010), Making Large-Scale Nystrom Approximation Possible\n"
-      "\n";
-
-  const char* const short_opts = "d:m:u:r:i:c:w:S:B:LRho:";
-
-  const option long_opts[] = {
-      {"mtx", required_argument, nullptr, 'd'},         //
-      {"data", required_argument, nullptr, 'd'},        //
-      {"out", required_argument, nullptr, 'o'},         //
-      {"tau", required_argument, nullptr, 'u'},         //
-      {"rank", required_argument, nullptr, 'r'},        //
-      {"iter", required_argument, nullptr, 'i'},        //
-      {"row_weight", required_argument, nullptr, 'w'},  //
-      {"col_norm", required_argument, nullptr, 'c'},    //
-      {"log_scale", no_argument, nullptr, 'L'},         //
-      {"raw_scale", no_argument, nullptr, 'R'},         //
-      {"help", no_argument, nullptr, 'h'},              //
-      {nullptr, no_argument, nullptr, 0}};
-
-  while (true) {
-    const auto opt = getopt_long(argc,                      //
-                                 const_cast<char**>(argv),  //
-                                 short_opts,                //
-                                 long_opts,                 //
-                                 nullptr);
-
-    if (-1 == opt) break;
-
-    switch (opt) {
-      case 'd':
-        options.mtx = std::string(optarg);
+  void set_sampling_method(const std::string _method) {
+    for (int j = 0; j < METHOD_NAMES.size(); ++j) {
+      if (METHOD_NAMES.at(j) == _method) {
+        nystrom_sample_method = static_cast<sampling_method_t>(j);
         break;
-      case 'o':
-        options.out = std::string(optarg);
-        break;
-      case 'u':
-        options.tau = std::stof(optarg);
-        break;
-      case 'c':
-        options.col_norm = std::stof(optarg);
-        break;
-      case 'r':
-        options.rank = std::stoi(optarg);
-        break;
-      case 'i':
-        options.iter = std::stoi(optarg);
-        break;
-      case 'w':
-        options.row_weight_file = std::string(optarg);
-        break;
-      case 'S':
-        options.nystrom_sample = std::stoi(optarg);
-        break;
-      case 'B':
-        options.nystrom_batch = std::stoi(optarg);
-        break;
-      case 'L':
-        options.log_scale = true;
-        options.raw_scale = false;
-        break;
-      case 'R':
-        options.log_scale = false;
-        options.raw_scale = true;
-        break;
-
-      case 'h':  // -h or --help
-      case '?':  // Unrecognized option
-        std::cerr << _usage << std::endl;
-        return EXIT_FAILURE;
-      default:  //
-                ;
+      }
     }
   }
-
-  return EXIT_SUCCESS;
-}
+};
 
 ////////////////////////////////////////////////////////////////////////////////
 // Why is this graph Laplacian?
@@ -248,10 +163,10 @@ make_normalized_laplacian(
     return x <= 0.0 ? 0.0 : std::sqrt(1.0 / x);
   };
 
-  const Mat _rows_denom = weights.unaryExpr(_row_fun);
+  const Mat _rr = weights.unaryExpr(_row_fun);
 
 #ifdef DEBUG
-  TLOG("rows_denom: " << _rows_denom.rows() << " x " << _rows_denom.cols());
+  TLOG("rows_denom: " << _rr.rows() << " x " << _rr.cols());
 #endif
 
   //////////////////////////////////////////////
@@ -266,15 +181,15 @@ make_normalized_laplacian(
     return _one / std::max(_one, std::sqrt(x + tau));
   };
 
-  const Mat _cols_denom = col_deg.unaryExpr(_col_fun);
+  const Mat _cc = col_deg.unaryExpr(_col_fun);
 
   ////////////////////
   // normalize them //
   ////////////////////
 
-  Mat ret =
-      (_rows_denom.asDiagonal() * X * _cols_denom.asDiagonal()).transpose();
-
+  Mat xx  = _rr.asDiagonal() * X * _cc.asDiagonal();
+  Mat ret = standardize(xx);
+  ret.transposeInPlace();
   return ret;
 }
 
@@ -314,43 +229,56 @@ inline std::tuple<Mat, Mat, Mat>
 take_spectrum_nystrom(
     const std::string mtx_file,                  // matrix file
     const Eigen::MatrixBase<Derived>& _weights,  // row weights
-    const Scalar tau,                            // regularization
-    const Scalar norm,                           // normalization
-    const int rank,                              // desired rank
-    const int iter         = 5,                  // should be enough
-    const Index Nsample    = 10000,              // #selected columns
-    const Index batch_size = 10000,              // batch size
-    const bool take_ln     = true                // log-transformation
+    const spectral_options_t& options            // options
 ) {
+
+  const Scalar tau       = options.tau;
+  const Scalar norm      = options.col_norm;
+  const Index rank       = options.rank;
+  const Index iter       = options.iter;
+  const Index Nsample    = options.nystrom_sample;
+  const Index batch_size = options.nystrom_batch;
+  const bool take_ln     = options.log_scale;
 
   TLOG("Collecting stats from the matrix file " << mtx_file);
 
   col_stat_collector_t collector;
   visit_matrix_market_file(mtx_file, collector);
-  const Vec& s1      = collector.Col_S1;
-  const Vec& s2      = collector.Col_S2;
+  const Vec& s1         = collector.Col_S1;
+  const Vec& s2         = collector.Col_S2;
   const IntVec& nnz_col = collector.Col_N;
 
   const Index N  = collector.max_col;
   const Index nn = std::min(N, Nsample);
 
-  TLOG("|nnz| = " << nnz_col.size());
-
   ///////////////////////////////////////
   // step 1 -- random column selection //
   ///////////////////////////////////////
-
-  const Index nnz_tot = nnz_col.sum();
-
-  TLOG("Randomly select " << nn << " columns (N: " << N << ", NNZ: " << nnz_tot
-                          << ")");
 
   std::random_device rd;
   std::mt19937 rgen(rd());
 
   std::vector<Index> index_r(N);
-  std::iota(index_r.begin(), index_r.end(), 0);
-  std::shuffle(index_r.begin(), index_r.end(), rgen);
+
+  if (options.nystrom_sample_method == spectral_options_t::VARIANCE) {
+    const Scalar n = static_cast<Scalar>(collector.max_row);
+
+    Vec sd = s2 - s1.cwiseProduct(s1 / n);
+    sd     = sd / std::max(n - 1.0, 1.0);
+    sd     = sd.cwiseSqrt();
+
+    index_r = eigen_argsort_descending(sd);
+
+  } else if (options.nystrom_sample_method == spectral_options_t::MEAN) {
+    const Scalar n = static_cast<Scalar>(collector.max_row);
+
+    Vec mu  = s1 / n;
+    index_r = eigen_argsort_descending(mu);
+
+  } else {
+    std::iota(index_r.begin(), index_r.end(), 0);
+    std::shuffle(index_r.begin(), index_r.end(), rgen);
+  }
 
   using _reader_t = eigen_triplet_reader_remapped_cols_t;
 
@@ -439,15 +367,124 @@ take_spectrum_nystrom(
     xx.setFromTriplets(Tvec.begin(), Tvec.end());
 
     Mat xx_t = make_normalized_laplacian(xx, ww, tau, norm, take_ln);
-    Index i = 0;
+    Index i  = 0;
     for (Index j = lb; j < ub; ++j) {
-      U.row(j) += xx_t.row(i++) * proj;
+      U.row(j) += xx_t.row(i) * proj;
+      i++;
     }
   }
 
   TLOG("Finished Nystrom Approx.");
 
   return std::make_tuple(U, vv, dd);
+}
+
+int
+parse_spectral_options(const int argc,      //
+                       const char* argv[],  //
+                       spectral_options_t& options) {
+
+  const char* _usage =
+      "\n"
+      "[Arguments]\n"
+      "--data (-d)            : MTX file (data)\n"
+      "--mtx (-d)             : MTX file (data)\n"
+      "--tau (-u)             : Regularization parameter (default: tau = 1)\n"
+      "--rank (-r)            : The maximal rank of SVD (default: rank = 50)\n"
+      "--iter (-i)            : # of LU iterations (default: iter = 5)\n"
+      "--row_weight (-w)      : Feature re-weighting (default: none)\n"
+      "--col_norm (-c)        : Column normalization (default: 10000)\n"
+      "--nystrom_sample (-S)  : Nystrom sample size (default: 10000)\n"
+      "--nystrom_batch (-B)   : Nystrom batch size (default: 10000)\n"
+      "--sampling_method (-M) : Nystrom sampling method: UNIFORM (default), VARIANCE, MEAN\n"
+      "--log_scale (-L)       : Data in a log-scale (default: true)\n"
+      "--raw_scale (-R)       : Data in a raw-scale (default: false)\n"
+      "--out (-o)             : Output file name\n"
+      "\n"
+      "[Details]\n"
+      "Qin and Rohe (2013), Regularized Spectral Clustering under "
+      "Degree-corrected Stochastic Block Model\n"
+      "Li, Kwok, Lu (2010), Making Large-Scale Nystrom Approximation Possible\n"
+      "\n";
+
+  const char* const short_opts = "d:m:u:r:i:c:w:S:B:LRM:ho:";
+
+  const option long_opts[] = {
+      {"mtx", required_argument, nullptr, 'd'},              //
+      {"data", required_argument, nullptr, 'd'},             //
+      {"out", required_argument, nullptr, 'o'},              //
+      {"tau", required_argument, nullptr, 'u'},              //
+      {"rank", required_argument, nullptr, 'r'},             //
+      {"iter", required_argument, nullptr, 'i'},             //
+      {"row_weight", required_argument, nullptr, 'w'},       //
+      {"col_norm", required_argument, nullptr, 'c'},         //
+      {"log_scale", no_argument, nullptr, 'L'},              //
+      {"raw_scale", no_argument, nullptr, 'R'},              //
+      {"nystrom_sample", required_argument, nullptr, 'S'},   //
+      {"nystrom_batch", required_argument, nullptr, 'B'},    //
+      {"sampling_method", required_argument, nullptr, 'M'},  //
+      {"help", no_argument, nullptr, 'h'},                   //
+      {nullptr, no_argument, nullptr, 0}};
+
+  while (true) {
+    const auto opt = getopt_long(argc,                      //
+                                 const_cast<char**>(argv),  //
+                                 short_opts,                //
+                                 long_opts,                 //
+                                 nullptr);
+
+    if (-1 == opt) break;
+
+    switch (opt) {
+      case 'd':
+        options.mtx = std::string(optarg);
+        break;
+      case 'o':
+        options.out = std::string(optarg);
+        break;
+      case 'u':
+        options.tau = std::stof(optarg);
+        break;
+      case 'c':
+        options.col_norm = std::stof(optarg);
+        break;
+      case 'r':
+        options.rank = std::stoi(optarg);
+        break;
+      case 'i':
+        options.iter = std::stoi(optarg);
+        break;
+      case 'w':
+        options.row_weight_file = std::string(optarg);
+        break;
+      case 'S':
+        options.nystrom_sample = std::stoi(optarg);
+        break;
+      case 'B':
+        options.nystrom_batch = std::stoi(optarg);
+        break;
+      case 'L':
+        options.log_scale = true;
+        options.raw_scale = false;
+        break;
+      case 'R':
+        options.log_scale = false;
+        options.raw_scale = true;
+        break;
+      case 'M':
+        options.set_sampling_method(std::string(optarg));
+        break;
+
+      case 'h':  // -h or --help
+      case '?':  // Unrecognized option
+        std::cerr << _usage << std::endl;
+        return EXIT_FAILURE;
+      default:  //
+                ;
+    }
+  }
+
+  return EXIT_SUCCESS;
 }
 
 #endif

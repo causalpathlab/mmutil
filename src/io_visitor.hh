@@ -73,15 +73,21 @@ visit_matrix_market_stream(IFS &ifs, FUN &fun) {
     if (state == S_COMMENT) {
       if (c == eol) {
         state = S_EOL;
+#ifdef DEBUG
         std::cerr << std::endl;
+#endif
       }
+#ifdef DEBUG
       std::cerr << c;
+#endif
       continue;
     }
 
     if (c == comment) {
       state = S_COMMENT;
+#ifdef DEBUG
       std::cerr << c;
+#endif
       continue;
     }
 

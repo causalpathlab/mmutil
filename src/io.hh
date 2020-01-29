@@ -3,7 +3,7 @@
 #include <cctype>
 #include <eigen3/Eigen/Core>
 #include <eigen3/Eigen/Sparse>
-#include <filesystem>
+// #include <filesystem> c++17
 #include <fstream>
 #include <iomanip>
 #include <iostream>
@@ -24,7 +24,8 @@
 
 bool
 file_exists(std::string filename) {
-  return std::filesystem::exists(std::filesystem::path(filename));
+  std::ifstream f(filename.c_str());
+  return f.good();
 }
 
 bool
