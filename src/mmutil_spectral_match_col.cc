@@ -8,12 +8,8 @@ main(const int argc, const char* argv[]) {
 
   CHECK(parse_match_options(argc, argv, options));
 
-  const std::string mtx_src_file(options.src_mtx);
-  const std::string mtx_tgt_file(options.tgt_mtx);
-  const std::string wfile = options.row_weight_file;
-
-  ERR_RET(!file_exists(mtx_src_file), "No source data file");
-  ERR_RET(!file_exists(mtx_tgt_file), "No target data file");
+  ERR_RET(!file_exists(options.src_mtx), "No source data file");
+  ERR_RET(!file_exists(options.tgt_mtx), "No target data file");
 
   /////////////////////////////
   // fliter out zero columns //
@@ -26,16 +22,16 @@ main(const int argc, const char* argv[]) {
   Index Nsrc, Ntgt;
 
   std::tie(valid_src, Nsrc, col_src_names) =
-      find_nz_col_names(mtx_src_file, mtx_tgt_file);
+      find_nz_col_names(options.src_mtx, options.src_col);
   std::tie(valid_tgt, Ntgt, col_tgt_names) =
-      find_nz_col_names(mtx_tgt_file, mtx_tgt_file);
+      find_nz_col_names(options.tgt_mtx, options.tgt_col);
 
   TLOG("Filter out total zero columns");
 
   Vec weights;
-  if (file_exists(wfile)) {
+  if (file_exists(options.row_weight_file)) {
     std::vector<Scalar> ww;
-    CHECK(read_vector_file(wfile, ww));
+    CHECK(read_vector_file(options.row_weight_file, ww));
     weights = eigen_vector(ww);
   }
 
@@ -44,7 +40,7 @@ main(const int argc, const char* argv[]) {
   ///////////////////////////////////////////////
 
   Mat u, v, d;
-  std::tie(u, v, d) = take_spectrum_nystrom(mtx_tgt_file, weights, options);
+  std::tie(u, v, d) = take_spectrum_nystrom(options.tgt_mtx, weights, options);
 
   TLOG("Target matrix: " << u.rows() << " x " << u.cols());
 
@@ -54,7 +50,7 @@ main(const int argc, const char* argv[]) {
 
   Mat proj = v * d.cwiseInverse().asDiagonal();  // feature x rank
 
-  Mat u_src = _nystrom_proj(mtx_src_file, weights, proj, options);
+  Mat u_src = _nystrom_proj(options.src_mtx, weights, proj, options);
 
   TLOG("Source matrix: " << u_src.rows() << " x " << u_src.cols());
 

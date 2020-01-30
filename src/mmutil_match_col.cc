@@ -3,15 +3,12 @@
 int
 main(const int argc, const char* argv[]) {
 
-  match_options_t mopt;
+  match_options_t options;
 
-  CHECK(parse_match_options(argc, argv, mopt));
+  CHECK(parse_match_options(argc, argv, options));
 
-  const std::string mtx_src_file(mopt.src_mtx);
-  const std::string mtx_tgt_file(mopt.tgt_mtx);
-
-  ERR_RET(!file_exists(mtx_src_file), "No source data file");
-  ERR_RET(!file_exists(mtx_tgt_file), "No target data file");
+  ERR_RET(!file_exists(options.src_mtx), "No source data file");
+  ERR_RET(!file_exists(options.tgt_mtx), "No target data file");
 
   /////////////////////////////
   // fliter out zero columns //
@@ -24,24 +21,24 @@ main(const int argc, const char* argv[]) {
   Index Nsrc, Ntgt;
 
   std::tie(valid_src, Nsrc, col_src_names) =
-      find_nz_col_names(mtx_src_file, mtx_tgt_file);
+      find_nz_col_names(options.src_mtx, options.src_col);
   std::tie(valid_tgt, Ntgt, col_tgt_names) =
-      find_nz_col_names(mtx_tgt_file, mtx_tgt_file);
+      find_nz_col_names(options.tgt_mtx, options.tgt_col);
 
   TLOG("Filter out total zero columns");
 
-  const std::string out_file(mopt.out);
+  const std::string out_file(options.out);
 
   std::vector<std::tuple<Index, Index, Scalar> > out_index;
 
-  const SpMat Src = build_eigen_sparse(mtx_src_file).transpose().eval();
-  const SpMat Tgt = build_eigen_sparse(mtx_tgt_file).transpose().eval();
+  const SpMat Src = build_eigen_sparse(options.src_mtx).transpose().eval();
+  const SpMat Tgt = build_eigen_sparse(options.tgt_mtx).transpose().eval();
 
-  auto knn = search_knn(SrcSparseRowsT(Src),  //
-                        TgtSparseRowsT(Tgt),  //
-                        KNN(mopt.knn),        //
-                        BILINK(mopt.bilink),  //
-                        NNLIST(mopt.nlist),   //
+  auto knn = search_knn(SrcSparseRowsT(Src),     //
+                        TgtSparseRowsT(Tgt),     //
+                        KNN(options.knn),        //
+                        BILINK(options.bilink),  //
+                        NNLIST(options.nlist),   //
                         out_index);
 
   CHK_ERR_RET(knn, "Failed to search kNN");
