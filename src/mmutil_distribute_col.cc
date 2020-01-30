@@ -34,6 +34,8 @@ main(const int argc, const char* argv[]) {
   ERR_RET(!file_exists(mtx_file), "missing the mtx file");
   ERR_RET(!file_exists(membership_file), "missing the mtx file");
 
+  distribute_col(mtx_file, membership_file, output);
+
   TLOG("Successfully distributed to all the data files.");
   return EXIT_SUCCESS;
 }
