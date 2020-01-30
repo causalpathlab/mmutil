@@ -4,11 +4,13 @@ bin_PROGRAMS = mmutil_merge_col \
     mmutil_select_row \
     mmutil_select_col \
     mmutil_distribute_col \
+    mmutil_aggregate_col \
     mmutil_rand_col \
     mmutil_rand_conv_col \
     mmutil_normalize_col \
     mmutil_spectral_col \
     mmutil_match_col \
+    mmutil_collapse_match \
     mmutil_spectral_match_col \
     mmutil_spectral_cluster_col
 
@@ -64,6 +66,10 @@ mmutil_distribute_col_SOURCES = mmutil_distribute_col.cc \
     mmutil_distribute_col.hh \
     $(common)
 
+mmutil_aggregate_col_SOURCES = mmutil_aggregate_col.cc \
+    mmutil_aggregate_col.hh \
+    $(common)
+
 mmutil_spectral_col_SOURCES = mmutil_spectral_col.cc \
     mmutil_normalize.hh \
     mmutil_spectral.hh \
@@ -81,6 +87,9 @@ mmutil_normalize_col_SOURCES = mmutil_normalize_col.cc \
 
 mmutil_match_col_SOURCES = mmutil_match_col.cc \
     mmutil_match.hh $(common) $(hnslib)
+
+mmutil_collapse_match_SOURCES = mmutil_collapse_match.cc \
+    mmutil_collapse_match.hh $(common)
 
 mmutil_spectral_match_col_SOURCES = mmutil_spectral_match_col.cc \
     mmutil_match.hh $(common) $(hnslib) $(math)
