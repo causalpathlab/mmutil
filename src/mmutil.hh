@@ -11,6 +11,7 @@
 
 #include "eigen_util.hh"
 #include "io.hh"
+#include "eigen_io.hh"
 #include "io_visitor.hh"
 #include "std_util.hh"
 #include "utils/math.hh"

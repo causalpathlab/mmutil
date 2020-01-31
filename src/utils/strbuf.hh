@@ -37,12 +37,12 @@ struct strbuf_t {
   const char *operator()() { return data; }
 
   template <typename T>
-  const T get() {
+  inline const T get() {
     return lexical_cast<T>();
   }
 
   template <typename T>
-  const T lexical_cast() {
+  inline const T lexical_cast() {
 #ifdef DEBUG
     ASSERT(size() > 0, "empty strbuf_t");
 #endif
@@ -55,6 +55,11 @@ struct strbuf_t {
       iss >> var;
     }
     return var;
+  }
+
+  void take_string(std::string &str) {
+    str.clear();
+    str = data;
   }
 
   const float take_float() const {
