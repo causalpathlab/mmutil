@@ -24,7 +24,7 @@ struct spectral_options_t {
 
     tau      = 1.0;
     rank     = 50;
-    iter     = 5;
+    lu_iter  = 5;
     col_norm = 10000;
 
     raw_scale       = false;
@@ -42,7 +42,7 @@ struct spectral_options_t {
 
   Scalar tau;
   Index rank;
-  Index iter;
+  Index lu_iter;
   Scalar col_norm;
 
   bool raw_scale;
@@ -204,14 +204,14 @@ take_spectrum_laplacian(                          //
     const Eigen::SparseMatrixBase<Derived>& _X0,  // sparse data
     const float tau_scale,                        // regularization
     const int rank,                               // desired rank
-    const int iter = 5                            // should be enough
+    const int lu_iter = 5                         // should be enough
 ) {
 
   const Mat XtTau = make_scaled_regularized(_X0, tau_scale);
 
   TLOG("Running SVD on X [" << XtTau.rows() << " x " << XtTau.cols() << "]");
 
-  RandomizedSVD<Mat> svd(rank, iter);
+  RandomizedSVD<Mat> svd(rank, lu_iter);
   svd.set_verbose();
   svd.compute(XtTau);
 
@@ -243,7 +243,7 @@ take_spectrum_nystrom(
   const Scalar tau       = options.tau;
   const Scalar norm      = options.col_norm;
   const Index rank       = options.rank;
-  const Index iter       = options.iter;
+  const Index lu_iter    = options.lu_iter;
   const Index Nsample    = options.nystrom_sample;
   const Index batch_size = options.nystrom_batch;
   const bool take_ln     = options.log_scale;
@@ -329,7 +329,7 @@ take_spectrum_nystrom(
   // step 2 -- svd on much smaller examples //
   ////////////////////////////////////////////
 
-  RandomizedSVD<Mat> svd(rank, iter);
+  RandomizedSVD<Mat> svd(rank, lu_iter);
   {
     // nn x feature
     Mat xx_t = make_normalized_laplacian(X, ww, tau, norm, take_ln);
@@ -481,7 +481,7 @@ parse_spectral_options(const int argc,      //
       "--mtx (-d)             : MTX file (data)\n"
       "--tau (-u)             : Regularization parameter (default: tau = 1)\n"
       "--rank (-r)            : The maximal rank of SVD (default: rank = 50)\n"
-      "--iter (-i)            : # of LU iterations (default: iter = 5)\n"
+      "--iter (-l)            : # of LU iterations (default: iter = 5)\n"
       "--row_weight (-w)      : Feature re-weighting (default: none)\n"
       "--col_norm (-C)        : Column normalization (default: 10000)\n"
       "--nystrom_sample (-S)  : Nystrom sample size (default: 10000)\n"
@@ -498,7 +498,7 @@ parse_spectral_options(const int argc,      //
       "Li, Kwok, Lu (2010), Making Large-Scale Nystrom Approximation Possible\n"
       "\n";
 
-  const char* const short_opts = "d:m:u:r:i:C:w:S:B:LRM:ho:";
+  const char* const short_opts = "d:m:u:r:l:C:w:S:B:LRM:ho:";
 
   const option long_opts[] = {
       {"mtx", required_argument, nullptr, 'd'},              //
@@ -506,7 +506,7 @@ parse_spectral_options(const int argc,      //
       {"out", required_argument, nullptr, 'o'},              //
       {"tau", required_argument, nullptr, 'u'},              //
       {"rank", required_argument, nullptr, 'r'},             //
-      {"iter", required_argument, nullptr, 'i'},             //
+      {"lu_iter", required_argument, nullptr, 'l'},          //
       {"row_weight", required_argument, nullptr, 'w'},       //
       {"col_norm", required_argument, nullptr, 'C'},         //
       {"log_scale", no_argument, nullptr, 'L'},              //
@@ -542,8 +542,8 @@ parse_spectral_options(const int argc,      //
       case 'r':
         options.rank = std::stoi(optarg);
         break;
-      case 'i':
-        options.iter = std::stoi(optarg);
+      case 'l':
+        options.lu_iter = std::stoi(optarg);
         break;
       case 'w':
         options.row_weight_file = std::string(optarg);

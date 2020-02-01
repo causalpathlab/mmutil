@@ -32,7 +32,7 @@ struct match_options_t {
 
     tau      = 1.0;
     rank     = 50;
-    iter     = 5;
+    lu_iter  = 5;
     col_norm = 10000;
 
     prune_knn       = false;
@@ -58,7 +58,7 @@ struct match_options_t {
 
   Scalar tau;
   Index rank;
-  Index iter;
+  Index lu_iter;
   Scalar col_norm;
 
   bool prune_knn;
@@ -534,7 +534,7 @@ parse_match_options(const int argc,      //
       "[Arguments for spectral matching]\n"
       "--tau (-u)            : Regularization parameter (default: tau = 1)\n"
       "--rank (-r)           : The maximal rank of SVD (default: rank = 50)\n"
-      "--iter (-i)           : # of LU iterations (default: iter = 5)\n"
+      "--lu_iter (-i)           : # of LU iterations (default: lu_iter = 5)\n"
       "--nystrom_sample (-S) : Nystrom sample size (default: 10000)\n"
       "--nystrom_batch (-B)  : Nystrom batch size (default: 10000)\n"
       "--sampling_method (-M) : Nystrom sampling method: UNIFORM (default), "
@@ -570,7 +570,7 @@ parse_match_options(const int argc,      //
       "https://github.com/nmslib/hnswlib\n"
       "\n";
 
-  const char* const short_opts = "s:c:t:g:k:m:f:o:u:r:i:w:C:S:B:PLRM:h";
+  const char* const short_opts = "s:c:t:g:k:m:f:o:u:r:l:w:C:S:B:PLRM:h";
 
   const option long_opts[] = {
       {"src_mtx", required_argument, nullptr, 's'},          //
@@ -583,7 +583,7 @@ parse_match_options(const int argc,      //
       {"out", required_argument, nullptr, 'o'},              //
       {"tau", required_argument, nullptr, 'u'},              //
       {"rank", required_argument, nullptr, 'r'},             //
-      {"iter", required_argument, nullptr, 'i'},             //
+      {"lu_iter", required_argument, nullptr, 'l'},          //
       {"row_weight", required_argument, nullptr, 'w'},       //
       {"col_norm", required_argument, nullptr, 'C'},         //
       {"prune_knn", no_argument, nullptr, 'P'},              //
@@ -638,8 +638,8 @@ parse_match_options(const int argc,      //
       case 'r':
         options.rank = std::stoi(optarg);
         break;
-      case 'i':
-        options.iter = std::stoi(optarg);
+      case 'l':
+        options.lu_iter = std::stoi(optarg);
         break;
       case 'P':
         options.prune_knn = true;

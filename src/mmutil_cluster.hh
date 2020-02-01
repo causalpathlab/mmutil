@@ -23,7 +23,12 @@ struct cluster_options_t {
   typedef enum { DBSCAN, GAUSSIAN_MIXTURE } method_t;
   const std::vector<std::string> METHOD_NAMES;
 
-  explicit cluster_options_t() : METHOD_NAMES{"DBSCAN", "GMM"} {
+  typedef enum { UNIFORM, CV, MEAN } sampling_method_t;
+  const std::vector<std::string> SAMPLING_METHOD_NAMES;
+
+  explicit cluster_options_t()
+      : METHOD_NAMES{"DBSCAN", "GMM"},
+        SAMPLING_METHOD_NAMES{"UNIFORM", "CV", "MEAN"} {
 
     K             = 3;
     Alpha         = 1.0;
@@ -53,8 +58,14 @@ struct cluster_options_t {
     prune_knn        = false;
     raw_scale        = false;
     log_scale        = true;
+    col_norm         = 10000;
 
     row_weight_file = "";
+
+    nystrom_sample = 10000;
+    nystrom_batch  = 10000;
+
+    nystrom_sample_method = UNIFORM;
 
     verbose = false;
   }
@@ -96,12 +107,27 @@ struct cluster_options_t {
 
   bool raw_scale;
   bool log_scale;
+  Scalar col_norm;
 
   void set_method(const std::string _method) {
     for (int j = 0; j < METHOD_NAMES.size(); ++j) {
       if (METHOD_NAMES.at(j) == _method) {
         method = static_cast<method_t>(j);
         TLOG("Use this clustering method: " << _method);
+        break;
+      }
+    }
+  }
+
+  Index nystrom_sample;
+  Index nystrom_batch;
+
+  sampling_method_t nystrom_sample_method;
+
+  void set_sampling_method(const std::string _method) {
+    for (int j = 0; j < METHOD_NAMES.size(); ++j) {
+      if (METHOD_NAMES.at(j) == _method) {
+        nystrom_sample_method = static_cast<sampling_method_t>(j);
         break;
       }
     }
@@ -756,12 +782,17 @@ parse_cluster_options(const int argc,      //
       "--col (-c)              : Column file\n"
       "--tau (-u)              : Regularization parameter (default: 1)\n"
       "--rank (-r)             : The maximal rank of SVD (default: 10)\n"
-      "--luiter (-l)           : # of LU iterations (default: 3)\n"
+      "--lu_iter (-l)           : # of LU iterations (default: 3)\n"
       "--out (-o)              : Output file header (default: output)\n"
       "--row_weight (-w)       : Feature re-weighting (default: none)\n"
+      "--col_norm (-C)        : Column normalization (default: 10000)\n"
       "--out_data (-D)         : Output clustering data (default: false)\n"
       "--log_scale (-L)        : Data in a log-scale (default: true)\n"
       "--raw_scale (-R)        : Data in a raw-scale (default: false)\n"
+      "--nystrom_sample (-S)  : Nystrom sample size (default: 10000)\n"
+      "--nystrom_batch (-B)   : Nystrom batch size (default: 10000)\n"
+      "--sampling_method (-N) : Nystrom sampling method: UNIFORM (default), "
+      "CV, MEAN\n"
       "--verbose (-O)          : Output more words (default: false)\n"
       "\n"
       "[Options for DBSCAN]\n"
@@ -779,12 +810,17 @@ parse_cluster_options(const int argc,      //
       "[Options for Gaussian mixture models]\n"
       "\n"
       "--trunc (-K)            : maximum truncation-level of clustering\n"
-      "--burnin (-B)           : burn-in (Gibbs) iterations (default: 10)\n"
+      "--burnin (-I)           : burn-in (Gibbs) iterations (default: 10)\n"
       "--min_vbiter (-v)       : minimum VB iterations (default: 5)\n"
       "--max_vbiter (-V)       : maximum VB iterations (default: 100)\n"
       "--convergence (-T)      : epsilon value for checking convergence "
       "(default: eps = 1e-8)\n"
       "--kmeanspp (-i)         : Kmeans++ initialization (default: false)\n"
+      "\n"
+      "[Details]\n"
+      "Qin and Rohe (2013), Regularized Spectral Clustering under "
+      "Degree-corrected Stochastic Block Model\n"
+      "Li, Kwok, Lu (2010), Making Large-Scale Nystrom Approximation Possible\n"
       "\n"
       "[Details for kNN graph]\n"
       "\n"
@@ -809,8 +845,9 @@ parse_cluster_options(const int argc,      //
       "https://github.com/nmslib/hnswlib";
 
   const char* const short_opts =
-      "M:d:c:k:e:K:B:v:V:T:u:LR"
-      "r:l:m:f:s:t:o:w:n:DPOih";
+      "M:d:c:k:e:K:I:v:V:T:u:LR"
+      "r:l:m:f:s:t:o:w:C:n:DPOih"
+      "S:B:N:";
 
   const option long_opts[] = {
       {"mtx", required_argument, nullptr, 'd'},               //
@@ -820,17 +857,18 @@ parse_cluster_options(const int argc,      //
       {"knn", required_argument, nullptr, 'k'},               //
       {"epsilon", required_argument, nullptr, 'e'},           //
       {"trunc", required_argument, nullptr, 'K'},             //
-      {"burnin", required_argument, nullptr, 'B'},            //
+      {"burnin", required_argument, nullptr, 'I'},            //
       {"min_vbiter", required_argument, nullptr, 'v'},        //
       {"max_vbiter", required_argument, nullptr, 'V'},        //
       {"convergence", required_argument, nullptr, 'T'},       //
       {"tau", required_argument, nullptr, 'u'},               //
       {"rank", required_argument, nullptr, 'r'},              //
-      {"luiter", required_argument, nullptr, 'l'},            //
+      {"lu_iter", required_argument, nullptr, 'l'},           //
       {"bilink", required_argument, nullptr, 'm'},            //
       {"nlist", required_argument, nullptr, 'f'},             //
       {"out", required_argument, nullptr, 'o'},               //
       {"row_weight", required_argument, nullptr, 'w'},        //
+      {"col_norm", required_argument, nullptr, 'C'},          //
       {"num_levels", required_argument, nullptr, 'n'},        //
       {"min_size", required_argument, nullptr, 's'},          //
       {"embedding_epochs", required_argument, nullptr, 't'},  //
@@ -839,6 +877,9 @@ parse_cluster_options(const int argc,      //
       {"verbose", no_argument, nullptr, 'O'},                 //
       {"log_scale", no_argument, nullptr, 'L'},               //
       {"raw_scale", no_argument, nullptr, 'R'},               //
+      {"nystrom_sample", required_argument, nullptr, 'S'},    //
+      {"nystrom_batch", required_argument, nullptr, 'B'},     //
+      {"sampling_method", required_argument, nullptr, 'N'},   //
       {"kmeanspp", no_argument, nullptr, 'i'},                //
       {"help", no_argument, nullptr, 'h'},                    //
       {nullptr, no_argument, nullptr, 0}};
@@ -868,7 +909,7 @@ parse_cluster_options(const int argc,      //
       case 'K':
         options.K = std::stoi(optarg);
         break;
-      case 'B':
+      case 'I':
         options.burnin_iter = std::stoi(optarg);
         break;
       case 'v':
@@ -919,8 +960,17 @@ parse_cluster_options(const int argc,      //
       case 'M':
         options.set_method(std::string(optarg));
         break;
+      case 'N':
+        options.set_sampling_method(std::string(optarg));
+        break;
       case 'i':
         options.kmeanspp = true;
+        break;
+      case 'S':
+        options.nystrom_sample = std::stoi(optarg);
+        break;
+      case 'B':
+        options.nystrom_batch = std::stoi(optarg);
         break;
       case 'L':
         options.log_scale = true;
@@ -929,6 +979,9 @@ parse_cluster_options(const int argc,      //
       case 'R':
         options.log_scale = false;
         options.raw_scale = true;
+        break;
+      case 'C':
+        options.col_norm = std::stof(optarg);
         break;
       case 't':
         options.embedding_epochs = std::stoi(optarg);

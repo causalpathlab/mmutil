@@ -2,46 +2,29 @@
 #include "mmutil_cluster.hh"
 #include "mmutil_match.hh"
 #include "mmutil_spectral.hh"
-#include "svd.hh"
 
 #ifndef MMUTIL_SPECTRAL_CLUSTER_COL_HH
 #define MMUTIL_SPECTRAL_CLUSTER_COL_HH
 
 inline Mat
-create_clustering_data(const SpMat& X, const cluster_options_t& options) {
+create_clustering_data(const cluster_options_t& options) {
 
   using std::ignore;
-  using std::string;
-  using std::tie;
-  using std::tuple;
-  using std::vector;
 
-  const Scalar tau    = options.tau;
-  const Index lu_iter = options.lu_iter;
-  const Index rank    = options.rank;
-  const Index N       = X.cols();
-  const bool _log     = options.log_scale;
-
-  RandomizedSVD<Mat> svd(rank, lu_iter);
-  if (options.verbose) svd.set_verbose();
-
+  Vec weights;
   if (file_exists(options.row_weight_file)) {
-    TLOG("Apply inverse weights on the rows");
-    const string weight_file = options.row_weight_file;
-    vector<Scalar> _w;
-    CHECK(read_vector_file(weight_file, _w));
-    const Vec ww = eigen_vector(_w);
-
-    ASSERT(ww.rows() == X.rows(), "Must have the same number of rows");
-    const Mat xx = make_normalized_laplacian(X, ww, tau, _log);
-    svd.compute(xx);
-    Mat Data = standardize(svd.matrixU()).transpose().eval();
-    return Data;
+    std::vector<Scalar> ww;
+    CHECK(read_vector_file(options.row_weight_file, ww));
+    weights = eigen_vector(ww);
   }
 
-  const Mat xx = make_scaled_regularized(X, tau, _log);
-  svd.compute(xx);
-  Mat Data = standardize(svd.matrixU()).transpose().eval();
+  Mat U;
+  std::tie(U, ignore, ignore) = take_spectrum_nystrom(options.mtx,  //
+                                                      weights,      //
+                                                      options);
+
+  Mat Data = standardize(U).transpose().eval();
+  // Mat Data = svd.matrixU().rowwise().normalized().transpose().eval();
   return Data;
 }
 
@@ -110,6 +93,107 @@ create_argmax_vector(const Eigen::MatrixBase<Derived>& Z) {
   std::transform(index.begin(), index.end(), std::back_inserter(ret), _argmax);
 
   return ret;
+}
+
+void
+run_mixture_model(const Mat& Data, const cluster_options_t& options) {
+  const Index N = Data.cols();
+
+  using std::string;
+  using std::vector;
+
+  Mat Z, C;
+  using F0 = trunc_dpm_t<Mat>;
+  using F  = multi_gaussian_component_t<Mat>;
+  vector<Scalar> score;
+
+  tie(Z, C, score) = estimate_mixture_of_columns<F0, F>(Data, options);
+
+  ////////////////////////
+  // output argmax file //
+  ////////////////////////
+
+  if (file_exists(options.col)) {
+    vector<string> samples;
+    CHECK(read_vector_file(options.col, samples));
+    auto argmax = create_argmax_pair(Z, samples);
+    write_tuple_file(options.out + ".argmax.gz", argmax);
+  } else {
+    vector<Index> samples(N);
+    std::iota(samples.begin(), samples.end(), 0);
+    auto argmax = create_argmax_pair(Z, samples);
+    write_tuple_file(options.out + ".argmax.gz", argmax);
+  }
+
+  /////////////////////
+  // show statistics //
+  /////////////////////
+
+  if (options.verbose) {
+    Vec nn               = Z * Mat::Ones(N, 1);
+    vector<Scalar> count = std_vector(nn);
+    print_histogram(count, std::cout);
+    std::cout << std::flush;
+  }
+
+  write_data_file(options.out + ".centroid.gz", C);
+
+  if (options.out_data) {
+    write_data_file(options.out + ".data.gz", Data);
+  }
+
+  //////////////////////////////////////
+  // output low-dimensional embedding //
+  //////////////////////////////////////
+
+  TLOG("Embedding the clustering results");
+  vector<Index> argmax = create_argmax_vector(Z);
+
+  Mat xx = embed_by_centroid(Data, argmax, options);
+
+  write_data_file(options.out + ".embedded.gz", xx);
+
+  TLOG("Done fitting a mixture model");
+}
+
+void
+run_dbscan(const Mat& Data, const cluster_options_t& options) {
+
+  const Index N = Data.cols();
+
+  using std::string;
+  using std::vector;
+
+  vector<vector<Index> > membership;
+  estimate_dbscan_of_columns(Data, membership, options);
+
+  // cluster membership and embedding results
+  Index l = 0;
+  for (const vector<Index>& z : membership) {
+
+    const Index k_max = *std::max_element(z.begin(), z.end()) + 1;
+    if (k_max < 1) continue;
+
+    string output = options.out + "_level_" + std::to_string(++l);
+
+    TLOG("Writing " << output);
+
+    if (file_exists(options.col)) {
+      vector<string> samples;
+      CHECK(read_vector_file(options.col, samples));
+      auto argmax = create_argmax_pair(z, samples);
+      write_tuple_file(output + ".argmax.gz", argmax);
+    } else {
+      vector<Index> samples(N);
+      std::iota(samples.begin(), samples.end(), 0);
+      auto argmax = create_argmax_pair(z, samples);
+      write_tuple_file(output + ".argmax.gz", argmax);
+    }
+
+    Mat xx = embed_by_centroid(Data, z, options);
+
+    write_data_file(output + ".embedded.gz", xx);
+  }
 }
 
 #endif
