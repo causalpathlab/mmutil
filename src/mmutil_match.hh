@@ -205,7 +205,9 @@ search_knn(const SrcSparseRowsT _SrcRows,  //
   }
 
   // Construct KnnAlg interface
-  hnswlib::InnerProductSpace vecspace(vecdim);
+  // hnswlib::InnerProductSpace vecspace(vecdim);
+  hnswlib::L2Space vecspace(vecdim);
+
   KnnAlg alg(&vecspace, vecsize, param_bilink, param_nnlist);
   alg.ef_ = param_nnlist;
 
@@ -327,7 +329,9 @@ search_knn(const SrcDataT _SrcData,  //
   }
 
   // Construct KnnAlg interface
-  hnswlib::InnerProductSpace vecspace(vecdim);
+  // hnswlib::InnerProductSpace vecspace(vecdim);
+  hnswlib::L2Space vecspace(vecdim);
+
   KnnAlg alg(&vecspace, vecsize, param_bilink, param_nnlist);
   alg.ef_ = param_nnlist;
 

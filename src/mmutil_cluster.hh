@@ -41,7 +41,7 @@ struct cluster_options_t {
     nlist         = 10;
     kmeanspp      = false;
     knn           = 50;
-    cosine_cutoff = 1.0;
+    knn_cutoff = 1.0;
     levels        = 10;
 
     out      = "output";
@@ -93,7 +93,7 @@ struct cluster_options_t {
 
   bool kmeanspp;         // initialization by kmeans++
   Index knn;             // number of nearest neighbors
-  Scalar cosine_cutoff;  // cosine distance cutoff
+  Scalar knn_cutoff;  // cosine distance cutoff
   Index levels;          // number of eps levels
 
   bool out_data;  // output clustering data
@@ -430,18 +430,16 @@ estimate_dbscan_of_columns(const Mat& X,                                  //
 
   TLOG("Constructing kNN graph ... N=" << N << ", knn=" << options.knn);
 
-  Mat uu = X.colwise().normalized().eval();  // each col is data point
-
   const Index nnlist = std::max(options.knn + 1, options.nlist);
   const Index bilink =
-      std::max(std::min(options.bilink, uu.rows() - 1), static_cast<Index>(2));
+      std::max(std::min(options.bilink, X.rows() - 1), static_cast<Index>(2));
 
   std::vector<std::tuple<Index, Index, Scalar> > knn_index;
-  auto _knn = search_knn(SrcDataT(uu.data(), uu.rows(), uu.cols()),  //
-                         TgtDataT(uu.data(), uu.rows(), uu.cols()),  //
-                         KNN(options.knn + 1),                       // itself
-                         BILINK(bilink),                             //
-                         NNLIST(nnlist),                             //
+  auto _knn = search_knn(SrcDataT(X.data(), X.rows(), X.cols()),  //
+                         TgtDataT(X.data(), X.rows(), X.cols()),  //
+                         KNN(options.knn + 1),                    // itself
+                         BILINK(bilink),                          //
+                         NNLIST(nnlist),                          //
                          knn_index);
 
   if (_knn != EXIT_SUCCESS) {
@@ -458,7 +456,8 @@ estimate_dbscan_of_columns(const Mat& X,                                  //
 
     const Scalar rr =
         static_cast<Scalar>(l) / static_cast<Scalar>(options.levels);
-    const Scalar cutoff = options.cosine_cutoff * rr;
+
+    const Scalar cutoff = options.knn_cutoff * rr;
 
     UGraph G;
     build_boost_graph(mutual_knn_index, G, cutoff);
@@ -911,7 +910,7 @@ parse_cluster_options(const int argc,      //
         options.knn = std::stoi(optarg);
         break;
       case 'e':
-        options.cosine_cutoff = std::stof(optarg);
+        options.knn_cutoff = std::stof(optarg);
         break;
       case 'K':
         options.K = std::stoi(optarg);
