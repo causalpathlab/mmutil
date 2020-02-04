@@ -22,6 +22,13 @@ main(const int argc, const char* argv[]) {
     return EXIT_FAILURE;
   }
 
+  // avoid too small or too large values
+  const Scalar lb = -4, ub = 4;
+
+  Data = Data.unaryExpr([&lb, &ub](const Scalar& x) -> Scalar {
+    return std::min(std::max(x, lb), ub);
+  });
+
   if (options.method == cluster_options_t::DBSCAN) {
     run_dbscan(Data, options);
     return EXIT_SUCCESS;

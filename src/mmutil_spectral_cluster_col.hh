@@ -102,9 +102,11 @@ run_mixture_model(const Mat& Data, const cluster_options_t& options) {
   using std::string;
   using std::vector;
 
-  Mat Z, C;
+
   using F0 = trunc_dpm_t<Mat>;
   using F  = multi_gaussian_component_t<Mat>;
+
+  Mat Z, C;
   vector<Scalar> score;
 
   tie(Z, C, score) = estimate_mixture_of_columns<F0, F>(Data, options);

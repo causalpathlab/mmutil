@@ -41,7 +41,7 @@ struct cluster_options_t {
     nlist         = 10;
     kmeanspp      = false;
     knn           = 50;
-    knn_cutoff = 1.0;
+    knn_cutoff    = 1.0;
     levels        = 10;
 
     out      = "output";
@@ -91,10 +91,10 @@ struct cluster_options_t {
   Index embedding_dim;     // final embedding dimensionality
   Index embedding_epochs;  // number of iterations
 
-  bool kmeanspp;         // initialization by kmeans++
-  Index knn;             // number of nearest neighbors
+  bool kmeanspp;      // initialization by kmeans++
+  Index knn;          // number of nearest neighbors
   Scalar knn_cutoff;  // cosine distance cutoff
-  Index levels;          // number of eps levels
+  Index levels;       // number of eps levels
 
   bool out_data;  // output clustering data
 
@@ -532,14 +532,17 @@ estimate_mixture_of_columns(const Mat& X, const cluster_options_t& options) {
       Vec dist(N);
 
       for (Index k = 0; k < K; ++k) {
+
         dist = (X.colwise() - x)
                    .cwiseProduct(X.colwise() - x)
                    .colwise()
                    .sum()
                    .transpose();
-        dist          = dist.unaryExpr([](const Scalar _x) {
+
+        dist = dist.unaryExpr([](const Scalar _x) {
           return static_cast<Scalar>(0.5) * fasterlog(_x + 1e-8);
         });
+
         const Index j = sampler_n(dist);
 
         x = X.col(j).eval();

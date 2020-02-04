@@ -68,6 +68,7 @@ brain.color = read_tsv("brain_colors.txt")
 
     p1 =
         .gg.plot(.dt, aes(x=e1, y=e2, color=as.factor(k))) +
+        theme(legend.position = "none") +
         geom_point(size=.5)
 
     print(p1)
@@ -77,12 +78,13 @@ brain.color = read_tsv("brain_colors.txt")
 
     .color = .dt2[, .(broad.cell.type)] %>%
         unique() %>%
-        left_join(brain.color)
+        left_join(brain.color, by = "broad.cell.type")
 
     .dt2[, celltype := factor(broad.cell.type, .color$broad.cell.type)]
 
     p2 =
         .gg.plot(.dt2, aes(x=e1, y=e2, color=celltype)) +
+        theme(legend.position = c(0,1), legend.justification = c(0,1)) +
         geom_point(size=.5) +
         scale_color_manual(values = .color$hex)
 
@@ -95,13 +97,21 @@ out.dir = "example/brain_2018-05-03"
 ```
 
 ### Gaussian Mixture Model after spectral transformation
+```{bash}
+if ! [ -f example/brain_2018-05-03/temp.u.gz ] ; then
+	mmutil_spectral_col --mtx data/brain_2018-05-03/filtered_count_matrix.mtx.gz \
+       --rank 50 --log_scale --sampling_method CV --col_norm 100000 --out temp 
+fi
+```
 
 ```{bash}
 if ! [ -f example/brain_2018-05-03/gmm.argmax.gz ]; then
 	
-    mmutil_spectral_cluster_col --mtx data/brain_2018-05-03/filtered_count_matrix.mtx.gz \
-                                --method GMM --trunc 50 --verbose --rank 5 --col_norm 100000 \
-                                --kmeanspp --burnin 100 --sampling_method CV --log_scale \
+	zcat example/brain_2018-05-03/temp.u.gz | cut -f 2-20 -d ' ' | gzip > example/brain_2018-05-03/temp.20.u.gz
+
+    mmutil_spectral_cluster_col --sdata example/brain_2018-05-03/temp.20.u.gz \
+                                --method GMM --trunc 50 --verbose \
+                                --kmeanspp --burnin 500 --embedding_epochs 50 \
                                 --out example/brain_2018-05-03/gmm 2>/dev/null
 fi
 ```
@@ -123,40 +133,22 @@ arbitrary fashion.
 ```{bash}
 if ! [ -f example/brain_2018-05-03/dbscan_level_1.argmax.gz ]; then
 
-	mmutil_spectral_col --mtx data/brain_2018-05-03/filtered_count_matrix.mtx.gz \
-       --rank 10 --log_scale --sampling_method CV --col_norm 100000 --out temp 
+	zcat example/brain_2018-05-03/temp.u.gz | cut -f 2-20 -d ' ' | gzip > example/brain_2018-05-03/temp.20.u.gz
 
-	zcat temp.u.gz | cut -f 2-5 -d ' ' | gzip > temp.5.u.gz
-
-    mmutil_spectral_cluster_col --sdata temp.5.u.gz \
-      --method DBSCAN --knn 100 --prune_knn --epsilon 0.05 --num_levels 10 --min_size 50 \
+    mmutil_spectral_cluster_col --sdata example/brain_2018-05-03/temp.20.u.gz \
+      --method DBSCAN --knn 100 --nlist 100 --bilink 10 --epsilon 5.0 \
+      --num_levels 10 --min_size 5 --embedding_epochs 50 \
 	  --verbose --out example/brain_2018-05-03/dbscan 2> /dev/null
 
 fi
 ```
 
-Read and show DBSCAN estimation at level 5:
+Read and show DBSCAN estimation at multiple resolutions:
 
-```{r fig_scatter_dbscan_5}
-.show.scatter(out.dir %&% "/dbscan_level_5.argmax.gz",
-              out.dir %&% "/dbscan_level_5.embedded.gz")
+```{r fig_scatter_dbscan}
+for(j in 1:10){
+    .show.scatter(out.dir %&% "/dbscan_level_" %&% j %&% ".argmax.gz",
+                  out.dir %&% "/dbscan_level_" %&% j %&% ".embedded.gz")
+}
 ```
 
-Read and show DBSCAN estimation at level 1:
-
-```{r fig_scatter_dbscan_1}
-.show.scatter(out.dir %&% "/dbscan_level_1.argmax.gz",
-              out.dir %&% "/dbscan_level_1.embedded.gz")
-```
-
-Read and show DBSCAN estimation at level 9:
-
-```{r fig_scatter_dbscan_9}
-.show.scatter(out.dir %&% "/dbscan_level_9.argmax.gz",
-              out.dir %&% "/dbscan_level_9.embedded.gz")
-```
-
-
-```{r}
-Sys.time()
-```
