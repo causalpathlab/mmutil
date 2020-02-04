@@ -717,7 +717,7 @@ read_data_stream(IFS &ifs, T &in) {
       if (state == S_WORD) {
         val = strbuf.lexical_cast<elem_t>();
 
-        if (!isfinite(val)) nmissing++;
+        if (!std::isfinite(val)) nmissing++;
 
         data.push_back(val);
         strbuf.clear();
@@ -731,7 +731,7 @@ read_data_stream(IFS &ifs, T &in) {
       if (state == S_WORD) {
         val = strbuf.lexical_cast<elem_t>();
 
-        if (!isfinite(val)) nmissing++;
+        if (!std::isfinite(val)) nmissing++;
 
         data.push_back(val);
         strbuf.clear();

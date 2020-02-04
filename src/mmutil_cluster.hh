@@ -81,6 +81,7 @@ struct cluster_options_t {
   Index nlist;
 
   std::string out;
+  std::string spectral_file;
   std::string mtx;
   std::string col;
 
@@ -778,20 +779,21 @@ parse_cluster_options(const int argc,      //
       "[Arguments]\n"
       "--data (-d)             : MTX file (data)\n"
       "--mtx (-d)              : MTX file (data)\n"
+      "--sdata (-s)            : Spectral feature file (column x factor)\n"
       "--method (-M)           : A clustering method {DBSCAN,GMM}\n"
       "--col (-c)              : Column file\n"
       "--tau (-u)              : Regularization parameter (default: 1)\n"
       "--rank (-r)             : The maximal rank of SVD (default: 10)\n"
-      "--lu_iter (-l)           : # of LU iterations (default: 3)\n"
+      "--lu_iter (-l)          : # of LU iterations (default: 3)\n"
       "--out (-o)              : Output file header (default: output)\n"
       "--row_weight (-w)       : Feature re-weighting (default: none)\n"
-      "--col_norm (-C)        : Column normalization (default: 10000)\n"
+      "--col_norm (-C)         : Column normalization (default: 10000)\n"
       "--out_data (-D)         : Output clustering data (default: false)\n"
       "--log_scale (-L)        : Data in a log-scale (default: true)\n"
       "--raw_scale (-R)        : Data in a raw-scale (default: false)\n"
-      "--nystrom_sample (-S)  : Nystrom sample size (default: 10000)\n"
-      "--nystrom_batch (-B)   : Nystrom batch size (default: 10000)\n"
-      "--sampling_method (-N) : Nystrom sampling method: UNIFORM (default), "
+      "--nystrom_sample (-S)   : Nystrom sample size (default: 10000)\n"
+      "--nystrom_batch (-B)    : Nystrom batch size (default: 10000)\n"
+      "--sampling_method (-N)  : Nystrom sampling method: UNIFORM (default), "
       "CV, MEAN\n"
       "--verbose (-O)          : Output more words (default: false)\n"
       "\n"
@@ -802,7 +804,7 @@ parse_cluster_options(const int argc,      //
       "1.0)\n"
       "--bilink (-m)           : # of bidirectional links (default: 10)\n"
       "--nlist (-f)            : # nearest neighbor lists (default: 10)\n"
-      "--min_size (-s)         : minimum size to report (default: 10)\n"
+      "--min_size (-z)         : minimum size to report (default: 10)\n"
       "--num_levels (-n)       : number of DBSCAN levels (default: 10)\n"
       "--prune_knn (-P)        : prune kNN graph (reciprocal match)\n"
       "--embedding_epochs (-t) : # of epochs for embedding\n"
@@ -814,7 +816,7 @@ parse_cluster_options(const int argc,      //
       "--min_vbiter (-v)       : minimum VB iterations (default: 5)\n"
       "--max_vbiter (-V)       : maximum VB iterations (default: 100)\n"
       "--convergence (-T)      : epsilon value for checking convergence "
-      "(default: eps = 1e-8)\n"
+      "(default                : eps = 1e-8)\n"
       "--kmeanspp (-i)         : Kmeans++ initialization (default: false)\n"
       "\n"
       "[Details]\n"
@@ -846,12 +848,14 @@ parse_cluster_options(const int argc,      //
 
   const char* const short_opts =
       "M:d:c:k:e:K:I:v:V:T:u:LR"
-      "r:l:m:f:s:t:o:w:C:n:DPOih"
+      "r:l:m:f:z:t:o:w:C:n:DPOih"
       "S:B:N:";
 
   const option long_opts[] = {
       {"mtx", required_argument, nullptr, 'd'},               //
+      {"sdata", required_argument, nullptr, 's'},             //
       {"data", required_argument, nullptr, 'd'},              //
+      {"sdata", required_argument, nullptr, 's'},             //
       {"method", required_argument, nullptr, 'M'},            //
       {"col", required_argument, nullptr, 'c'},               //
       {"knn", required_argument, nullptr, 'k'},               //
@@ -870,7 +874,7 @@ parse_cluster_options(const int argc,      //
       {"row_weight", required_argument, nullptr, 'w'},        //
       {"col_norm", required_argument, nullptr, 'C'},          //
       {"num_levels", required_argument, nullptr, 'n'},        //
-      {"min_size", required_argument, nullptr, 's'},          //
+      {"min_size", required_argument, nullptr, 'z'},          //
       {"embedding_epochs", required_argument, nullptr, 't'},  //
       {"out_data", no_argument, nullptr, 'D'},                //
       {"prune_knn", no_argument, nullptr, 'P'},               //
@@ -896,6 +900,9 @@ parse_cluster_options(const int argc,      //
     switch (opt) {
       case 'd':
         options.mtx = std::string(optarg);
+        break;
+      case 's':
+        options.spectral_file = std::string(optarg);
         break;
       case 'c':
         options.col = std::string(optarg);
@@ -939,7 +946,7 @@ parse_cluster_options(const int argc,      //
       case 'f':
         options.nlist = std::stoi(optarg);
         break;
-      case 's':
+      case 'z':
         options.min_size = std::stoi(optarg);
         break;
       case 'o':

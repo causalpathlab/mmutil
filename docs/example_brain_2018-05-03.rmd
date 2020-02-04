@@ -33,40 +33,6 @@ Create a working directory:
 [ -d example/brain_2018-05-03/ ] || mkdir -p example/brain_2018-05-03/
 ```
 
-### Select top `5000` most variable features
-
-```{bash}
-if ! [ -f example/brain_2018-05-03/top.mtx.gz ]; then
-    mmutil_filter_row 5000 \
-    data/brain_2018-05-03/filtered_count_matrix.mtx.gz \
-    data/brain_2018-05-03/features.tsv.gz \
-    example/brain_2018-05-03/top \
-    2> /dev/null
-fi
-
-# just copy the barcode file to be consistent
-if ! [ -f example/brain_2018-05-03/top.barcodes.tsv.gz ]; then
-    cp data/brain_2018-05-03/barcodes.tsv.gz example/brain_2018-05-03/top.barcodes.tsv.gz
-fi
-```
-
-Show the full spectrum of the feature scores:
-
-```{r fig_var_score}
-
-out.dir = "example/brain_2018-05-03/"
-
-var.scores = out.dir %&% "top.full_scores.gz" %>%
-    read_tsv(col_names="var", col_types="d") %>%
-    mutate(idx = 1:n())
-
-.gg.plot(var.scores, aes(x=idx, y=log(1 + var))) +
-    geom_vline(xintercept=5000, lty=2, col='red') +
-    geom_line(size=2) +
-    ylab("log(1 + variance)") +
-    xlab("ranked features")
-```
-
 ## Run clustering
 
 Meta data to compare with the previous annotations:
@@ -82,7 +48,9 @@ Let's visualize clustering results with the following function:
 .show.scatter = function(.argmax, .embed) {
 
     argmax.tab = fread(.argmax) %>%
-        (function(x) { colnames(x) = c("TAG", "k"); x })
+        (function(x) { colnames(x) = c("col", "k"); x })
+
+    argmax.tab = argmax.tab[, TAG := meta.tab$TAG]
 
     embedded.tab = fread(.embed) %>%
         (function(x) { colnames(x) = c("e1", "e2"); x })
@@ -117,11 +85,11 @@ Let's visualize clustering results with the following function:
 
 ```{bash}
 if ! [ -f example/brain_2018-05-03/gmm.argmax.gz ]; then
-    mmutil_spectral_cluster_col --mtx example/brain_2018-05-03/top.mtx.gz \
+	
+    mmutil_spectral_cluster_col --mtx data/brain_2018-05-03/filtered_count_matrix.mtx.gz \
                                 --method GMM --trunc 10 --verbose --rank 5 \
                                 --kmeanspp --burnin 100 --log_scale \
-                                --col example/brain_2018-05-03/top.barcodes.tsv.gz \
-                                --out example/brain_2018-05-03/gmm 2> /dev/null
+                                --out example/brain_2018-05-03/gmm 2>/dev/null
 fi
 ```
 
@@ -141,18 +109,18 @@ arbitrary fashion.
 
 ```{bash}
 if ! [ -f example/brain_2018-05-03/dbscan_level_1.argmax.gz ]; then
-    mmutil_spectral_cluster_col --mtx example/brain_2018-05-03/top.mtx.gz --rank 5 \
+    mmutil_spectral_cluster_col --mtx data/brain_2018-05-03/filtered_count_matrix.mtx.gz \
+		                        --rank 5 \
                                 --method DBSCAN --knn 50 --prune_knn --min_size 50 --verbose \
-                                --col example/brain_2018-05-03/top.barcodes.tsv.gz \
                                 --out example/brain_2018-05-03/dbscan 2> /dev/null
 fi
 ```
 
 Read and show DBSCAN estimation at level 5:
 
-```{r fig_scatter_dbscan_5}
-.show.scatter(out.dir %&% "/dbscan_level_5.argmax.gz",
-              out.dir %&% "/dbscan_level_5.embedded.gz")
+```{r fig_scatter_dbscan_6}
+.show.scatter(out.dir %&% "/dbscan_level_6.argmax.gz",
+              out.dir %&% "/dbscan_level_6.embedded.gz")
 ```
 
 Read and show DBSCAN estimation at level 1:

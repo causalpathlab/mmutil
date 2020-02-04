@@ -9,9 +9,17 @@ main(const int argc, const char* argv[]) {
   const std::string mtx_file(options.mtx);
   const std::string output(options.out);
 
-  ERR_RET(!file_exists(options.mtx), "No MTX data file");
+  Mat Data;
 
-  Mat Data = create_clustering_data(options);
+  if (file_exists(options.mtx)) {
+    Data = create_clustering_data(options);
+  } else if (file_exists(options.spectral_file)) {
+    read_data_file(options.spectral_file, Data);
+    Data.transposeInPlace();
+  } else {
+    TLOG("No input file exits. Try " << argv[0] << " -h");
+    return EXIT_FAILURE;
+  }
 
   if (options.method == cluster_options_t::DBSCAN) {
     run_dbscan(Data, options);

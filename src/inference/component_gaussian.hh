@@ -53,7 +53,7 @@ struct multi_gaussian_component_t {
     s2 = 0;
     mu.setZero();
     mu_prec = a0 / b0 / scale;
-    tau = a0 / b0;
+    tau     = a0 / b0;
     posterior_update();
   }
 
@@ -262,7 +262,7 @@ struct multi_gaussian_component_t {
     const Scalar a = a0 + (n + 1.0) * d * 0.5;
     const Scalar b = b0 + R * 0.5;
 
-    tau   = a / b;  // posterior precision
+    tau   = std::min(a / b, tau_max);  // posterior precision
     lntau = fasterdigamma(a) - fasterlog(b);
   }
 
@@ -281,7 +281,8 @@ struct multi_gaussian_component_t {
   Scalar lntau;    // log variational precision
   Scalar musq;     // E[mu^T mu]
 
-  const Scalar ln2pi = fasterlog(2.0 * M_PI);
+  const Scalar ln2pi   = fasterlog(2.0 * M_PI);
+  const Scalar tau_max = 1e6;  // to prevent NaN
 };
 
 #endif
