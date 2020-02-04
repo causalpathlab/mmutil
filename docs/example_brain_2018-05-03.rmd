@@ -100,7 +100,7 @@ out.dir = "example/brain_2018-05-03"
 ```{bash}
 if ! [ -f example/brain_2018-05-03/temp.u.gz ] ; then
 	mmutil_spectral_col --mtx data/brain_2018-05-03/filtered_count_matrix.mtx.gz \
-       --rank 50 --log_scale --sampling_method CV --col_norm 100000 --out temp 
+       --rank 50 --log_scale --sampling_method CV --col_norm 100000 --out example/brain_2018-05-03/temp 
 fi
 ```
 

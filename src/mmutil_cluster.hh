@@ -269,8 +269,10 @@ embed_by_centroid(const Mat& X,                    //
     return Mat{};
   }
 
-  Mat _cc(D, kk);  // take the means
-  Vec _nn(kk);     // denominator
+  const Index n_rand_clust = 3;  // extra clusters for randomness
+
+  Mat _cc(D, kk + n_rand_clust);  // take the means
+  Vec _nn(kk + n_rand_clust);     // denominator
   _cc.setZero();
   _nn.setOnes();
 
@@ -282,6 +284,34 @@ embed_by_centroid(const Mat& X,                    //
     }
   }
 
+  /////////////////////////////
+  // create random clusters  //
+  /////////////////////////////
+
+  std::random_device rd;
+  std::mt19937 rgen(rd());
+
+  std::vector<Index> rand_i(N);
+  std::iota(rand_i.begin(), rand_i.end(), 0);
+  std::shuffle(rand_i.begin(), rand_i.end(), rgen);
+
+  const Index n_rand = (1 + N / kk) * n_rand_clust;
+
+  if (options.verbose) {
+    TLOG("Generating some cluster of random points");
+  }
+
+  for (Index r = 0; r < n_rand; ++r) {
+    const Index j = r % N;
+    const Index k = kk + (r % n_rand_clust);
+    _cc.col(k) += X.col(j);
+    _nn(k) += 1.0;
+  }
+
+  ////////////////////////////
+  // normalize the centroid //
+  ////////////////////////////
+
   Mat C = _cc * (_nn.cwiseInverse().asDiagonal());  // D x K
 
   // We might add stochastic noise
@@ -291,12 +321,15 @@ embed_by_centroid(const Mat& X,                    //
   };
 
   const Index nepochs = options.embedding_epochs;
-  const Index rank    = std::min(options.embedding_dim, kk);
+  const Index dd      = std::min(options.embedding_dim, kk);
+  const Index rank    = dd + 1;
 
-  TLOG("Start embedding, epochs = " << nepochs << ", rank = " << rank);
+  if (options.verbose) {
+    TLOG("Start embedding, epochs = " << nepochs << ", rank = " << rank);
+  }
 
-  Mat CC = scale_by_degree(C, options.tau);  // D x K
-  Mat XX = scale_by_degree(X, options.tau);  // D x N
+  Mat CC = scale_by_degree(C, options.tau);
+  Mat XX = scale_by_degree(X, options.tau);
 
   ///////////////////////////
   // shatter the centroids //
@@ -311,26 +344,36 @@ embed_by_centroid(const Mat& X,                    //
   for (Index t = 0; t < nepochs; ++t) {
     const Scalar rate =
         1.0 - static_cast<Scalar>(t) / static_cast<Scalar>(nepochs);
-    for (Index k = 0; k < kk; ++k) {
+
+    for (Index k = 0; k < kk; ++k) {  // don't move the random one
+
       grad_D.setZero();
-      for (Index l = 0; l < kk; ++l) {
+      for (Index l = 0; l < (kk + 1); ++l) {
         if (k == l) continue;
         const Scalar qq = _sigmoid(CC.col(l).dot(CC.col(k)));
         grad_D += CC.col(l) * qq;
       }
+
       CC.col(k) += rate * grad_D / static_cast<Scalar>(kk);
     }
   }
 
+  // Initial embedding of X --> [rank x k] and [rank x n]
   RandomizedSVD<Mat> svd(rank, options.lu_iter);
+  if (options.verbose) {
+    svd.set_verbose();
+  }
   svd.compute(CC);
 
-  // Initial embedding of X --> [rank x k] and [rank x n]
-  Mat Cd = svd.matrixV().transpose();
-  // Vec dd = svd.singularValues().cwiseInverse();
-  Mat Xd = (svd.matrixU().transpose() * XX).eval();
+  Mat Cd = svd.matrixV().rightCols(dd);
+  Cd.transposeInPlace();
 
-  TLOG("Built initial embedding: " << Xd.rows() << " x " << Xd.cols());
+  Mat uu = svd.matrixU().rightCols(dd);
+  Mat Xd = uu.transpose() * XX;
+
+  if (options.verbose) {
+    TLOG("Built initial embedding: " << Xd.rows() << " x " << Xd.cols());
+  }
 
   if (kk < 2) {
     Xd.transposeInPlace();
@@ -341,9 +384,8 @@ embed_by_centroid(const Mat& X,                    //
   // Move data points //
   //////////////////////
 
-  Vec grad_rank(rank);
-  Vec pr(kk);
-  const Scalar _d = static_cast<Scalar>(rank);
+  Vec grad_rank(dd);
+  Vec pr(kk + 1);
 
   for (Index t = 0; t < nepochs; ++t) {
 
@@ -361,7 +403,7 @@ embed_by_centroid(const Mat& X,                    //
       const Scalar pp = _sigmoid(-Cd.col(k).dot(Xd.col(j)));
       grad_rank -= Cd.col(k) * pp * static_cast<Scalar>((kk - 1));
 
-      for (Index l = 0; l < kk; ++l) {
+      for (Index l = 0; l < (kk + 1); ++l) {
         if (l == k) continue;
         const Scalar qq = _sigmoid(Cd.col(l).dot(Xd.col(j)));
         grad_rank += Cd.col(l) * qq;
@@ -371,7 +413,9 @@ embed_by_centroid(const Mat& X,                    //
     }
   }
 
-  TLOG("Done with the refinement: [" << Xd.rows() << " x " << Xd.cols() << "]");
+  if (options.verbose) {
+    TLOG("Done the refinement: [" << Xd.rows() << " x " << Xd.cols() << "]");
+  }
   Xd.transposeInPlace();
   return Xd;
 }
