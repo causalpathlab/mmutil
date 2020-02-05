@@ -35,6 +35,8 @@ struct spectral_options_t {
     nystrom_batch  = 10000;
 
     nystrom_sample_method = UNIFORM;
+
+    rand_seed = 1;
   }
 
   Str mtx;
@@ -53,6 +55,8 @@ struct spectral_options_t {
   Index nystrom_batch;
 
   sampling_method_t nystrom_sample_method;
+
+  int rand_seed;
 
   void set_sampling_method(const std::string _method) {
     for (int j = 0; j < METHOD_NAMES.size(); ++j) {
@@ -484,6 +488,7 @@ parse_spectral_options(const int argc,      //
       "--iter (-l)            : # of LU iterations (default: iter = 5)\n"
       "--row_weight (-w)      : Feature re-weighting (default: none)\n"
       "--col_norm (-C)        : Column normalization (default: 10000)\n"
+      "--rand_seed (-s)       : Random seed (default: 1)\n"
       "--nystrom_sample (-S)  : Nystrom sample size (default: 10000)\n"
       "--nystrom_batch (-B)   : Nystrom batch size (default: 10000)\n"
       "--sampling_method (-M) : Nystrom sampling method: UNIFORM (default), "
@@ -498,7 +503,7 @@ parse_spectral_options(const int argc,      //
       "Li, Kwok, Lu (2010), Making Large-Scale Nystrom Approximation Possible\n"
       "\n";
 
-  const char* const short_opts = "d:m:u:r:l:C:w:S:B:LRM:ho:";
+  const char* const short_opts = "d:m:u:r:l:C:w:S:s:B:LRM:ho:";
 
   const option long_opts[] = {
       {"mtx", required_argument, nullptr, 'd'},              //
@@ -511,6 +516,7 @@ parse_spectral_options(const int argc,      //
       {"col_norm", required_argument, nullptr, 'C'},         //
       {"log_scale", no_argument, nullptr, 'L'},              //
       {"raw_scale", no_argument, nullptr, 'R'},              //
+      {"rand_seed", required_argument, nullptr, 's'},        //
       {"nystrom_sample", required_argument, nullptr, 'S'},   //
       {"nystrom_batch", required_argument, nullptr, 'B'},    //
       {"sampling_method", required_argument, nullptr, 'M'},  //
@@ -550,6 +556,9 @@ parse_spectral_options(const int argc,      //
         break;
       case 'S':
         options.nystrom_sample = std::stoi(optarg);
+        break;
+      case 's':
+        options.rand_seed = std::stoi(optarg);
         break;
       case 'B':
         options.nystrom_batch = std::stoi(optarg);
