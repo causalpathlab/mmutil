@@ -22,17 +22,20 @@ struct mat_stat_collector_t {
     S1.resize(kk, D);
     S2.resize(kk, D);
     N.resize(kk, D);
-    z_j.resize(kk, 1);
 
     S1.setZero();
     S2.setZero();
     N.setZero();
 
+    // to check empty columns
+    Vec _nnz_col = Z.transpose() * Mat::Ones(Z.rows(), 1);
+    std_vector(_nnz_col, nnz_col);
+
     TLOG("Start aggregating the statistics: " << kk << " x " << D);
   }
 
   void eval(const index_t i, const index_t j, const scalar_t x_ij) {
-    if (j < nn && j >= 0) {
+    if (j < nn && j >= 0 && nnz_col.at(j) > 0) {
       S1.col(i) += Z.col(j) * x_ij;
       S2.col(i) += Z.col(j) * x_ij * x_ij;
       N.col(i) += Z.col(j);
@@ -48,7 +51,9 @@ struct mat_stat_collector_t {
   Mat S1;
   Mat S2;
   Mat N;
-  Vec z_j;
+
+ private:
+  std::vector<Index> nnz_col;
 };
 
 void
@@ -86,7 +91,7 @@ aggregate_col(const std::string mtx_file,         //
                              eigen_io::col_index_map_t(k_index),  //
                              Zsparse);
 
-  if(Zsparse.rows() == 0 || Zsparse.cols() == 0) {
+  if (Zsparse.rows() == 0 || Zsparse.cols() == 0) {
     WLOG("Empty latent membership matrix");
     return;
   }
