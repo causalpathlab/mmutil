@@ -806,7 +806,8 @@ read_data_file(const std::string filename) {
 template <typename OFS, typename Derived>
 void
 write_data_stream(OFS &ofs, const Eigen::MatrixBase<Derived> &out) {
-  ofs.precision(4);
+
+  // ofs.precision(4); --> this may be too strong
 
   const Derived &M = out.derived();
   using Index      = typename Derived::Index;
@@ -821,7 +822,8 @@ write_data_stream(OFS &ofs, const Eigen::MatrixBase<Derived> &out) {
 template <typename OFS, typename Derived>
 void
 write_data_stream(OFS &ofs, const Eigen::SparseMatrixBase<Derived> &out) {
-  ofs.precision(4);
+
+  // ofs.precision(4); --> this may be too strong
 
   const Derived &M = out.derived();
   using Index      = typename Derived::Index;
