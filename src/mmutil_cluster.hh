@@ -20,7 +20,7 @@
 
 struct cluster_options_t {
 
-  typedef enum { DBSCAN, GAUSSIAN_MIXTURE } method_t;
+  typedef enum { DBSCAN, GAUSSIAN_MIXTURE } clustering_method_t;
   const std::vector<std::string> METHOD_NAMES;
 
   typedef enum { UNIFORM, CV, MEAN } sampling_method_t;
@@ -62,10 +62,10 @@ struct cluster_options_t {
 
     row_weight_file = "";
 
-    nystrom_sample = 10000;
+    initial_sample = 10000;
     nystrom_batch  = 10000;
 
-    nystrom_sample_method = UNIFORM;
+    sampling_method = UNIFORM;
 
     verbose = false;
   }
@@ -98,7 +98,7 @@ struct cluster_options_t {
 
   bool out_data;  // output clustering data
 
-  method_t method;
+  clustering_method_t method;
   bool prune_knn;
 
   std::string row_weight_file;
@@ -113,22 +113,22 @@ struct cluster_options_t {
   void set_method(const std::string _method) {
     for (int j = 0; j < METHOD_NAMES.size(); ++j) {
       if (METHOD_NAMES.at(j) == _method) {
-        method = static_cast<method_t>(j);
+        method = static_cast<clustering_method_t>(j);
         TLOG("Use this clustering method: " << _method);
         break;
       }
     }
   }
 
-  Index nystrom_sample;
+  Index initial_sample;
   Index nystrom_batch;
 
-  sampling_method_t nystrom_sample_method;
+  sampling_method_t sampling_method;
 
   void set_sampling_method(const std::string _method) {
     for (int j = 0; j < METHOD_NAMES.size(); ++j) {
       if (METHOD_NAMES.at(j) == _method) {
-        nystrom_sample_method = static_cast<sampling_method_t>(j);
+        sampling_method = static_cast<sampling_method_t>(j);
         break;
       }
     }
@@ -837,7 +837,7 @@ parse_cluster_options(const int argc,      //
       "--out_data (-D)         : Output clustering data (default: false)\n"
       "--log_scale (-L)        : Data in a log-scale (default: true)\n"
       "--raw_scale (-R)        : Data in a raw-scale (default: false)\n"
-      "--nystrom_sample (-S)   : Nystrom sample size (default: 10000)\n"
+      "--initial_sample (-S)   : Nystrom sample size (default: 10000)\n"
       "--nystrom_batch (-B)    : Nystrom batch size (default: 10000)\n"
       "--sampling_method (-N)  : Nystrom sampling method: UNIFORM (default), "
       "CV, MEAN\n"
@@ -927,7 +927,7 @@ parse_cluster_options(const int argc,      //
       {"verbose", no_argument, nullptr, 'O'},                 //
       {"log_scale", no_argument, nullptr, 'L'},               //
       {"raw_scale", no_argument, nullptr, 'R'},               //
-      {"nystrom_sample", required_argument, nullptr, 'S'},    //
+      {"initial_sample", required_argument, nullptr, 'S'},    //
       {"nystrom_batch", required_argument, nullptr, 'B'},     //
       {"sampling_method", required_argument, nullptr, 'N'},   //
       {"kmeanspp", no_argument, nullptr, 'i'},                //
@@ -1020,7 +1020,7 @@ parse_cluster_options(const int argc,      //
         options.kmeanspp = true;
         break;
       case 'S':
-        options.nystrom_sample = std::stoi(optarg);
+        options.initial_sample = std::stoi(optarg);
         break;
       case 'B':
         options.nystrom_batch = std::stoi(optarg);

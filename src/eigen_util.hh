@@ -133,6 +133,76 @@ row_score_sd(const Eigen::SparseMatrixBase<Derived>& _xx) {
   return ret;
 }
 
+template <typename Derived, typename ROWS>
+inline Eigen::SparseMatrix<typename Derived::Scalar, Eigen::RowMajor,
+                           std::ptrdiff_t>
+row_sub(const Eigen::SparseMatrixBase<Derived>& _mat, const ROWS& sub_rows) {
+
+  using SpMat = typename Eigen::SparseMatrix<typename Derived::Scalar,
+                                             Eigen::RowMajor, std::ptrdiff_t>;
+
+  using Index      = typename SpMat::Index;
+  using Scalar     = typename SpMat::Scalar;
+  const SpMat& mat = _mat.derived();
+
+  SpMat ret(sub_rows.size(), mat.cols());
+
+  using ET = Eigen::Triplet<Scalar>;
+
+  std::vector<ET> triples;
+
+  Index rr = 0;
+
+  for (Index r : sub_rows) {
+
+    if (r < 0 || r >= mat.rows()) continue;
+
+    for (typename SpMat::InnerIterator it(mat, r); it; ++it) {
+      triples.push_back(ET(rr, it.col(), it.value()));
+    }
+
+    ++rr;
+  }
+
+  ret.reserve(triples.size());
+  ret.setFromTriplets(triples.begin(), triples.end());
+
+  return ret;
+}
+
+template <typename Derived, typename ROWS>
+inline Eigen::Matrix<typename Derived::Scalar,  //
+                     Eigen::Dynamic,            //
+                     Eigen::Dynamic,            //
+                     Eigen::ColMajor>
+row_sub(const Eigen::MatrixBase<Derived>& _mat, const ROWS& sub_rows) {
+
+  using Mat = typename Eigen::Matrix<typename Derived::Scalar,  //
+                                     Eigen::Dynamic,            //
+                                     Eigen::Dynamic,            //
+                                     Eigen::ColMajor>;
+
+  using Index    = typename Mat::Index;
+  using Scalar   = typename Mat::Scalar;
+  const Mat& mat = _mat.derived();
+
+  Mat ret(sub_rows.size(), mat.cols());
+  ret.setZero();
+
+  Index rr = 0;
+
+  for (Index r : sub_rows) {
+
+    if (r < 0 || r >= mat.rows()) continue;
+
+    ret.row(rr) += mat.row(r);
+
+    ++rr;
+  }
+
+  return ret;
+}
+
 template <typename Derived>
 inline Eigen::SparseMatrix<typename Derived::Scalar, Eigen::RowMajor,
                            std::ptrdiff_t>

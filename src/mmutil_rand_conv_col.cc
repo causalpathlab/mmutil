@@ -30,7 +30,7 @@ main(const int argc, const char* argv[]) {
   const Str output(argv[4]);
 
   ERR_RET(!file_exists(mtx_file), "missing the mtx file");
-  const SpMat RefMat = build_eigen_sparse(mtx_file);
+  const SpMat RefMat = read_eigen_sparse(mtx_file);
 
   // sample triplets
   const Index Nref = RefMat.cols();

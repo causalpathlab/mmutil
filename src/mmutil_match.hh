@@ -40,10 +40,10 @@ struct match_options_t {
     log_scale       = true;
     row_weight_file = "";
 
-    nystrom_sample = 10000;
+    initial_sample = 10000;
     nystrom_batch  = 10000;
 
-    nystrom_sample_method = UNIFORM;
+    sampling_method = UNIFORM;
   }
 
   Str src_mtx;
@@ -66,15 +66,15 @@ struct match_options_t {
   bool log_scale;
   std::string row_weight_file;
 
-  Index nystrom_sample;
+  Index initial_sample;
   Index nystrom_batch;
 
-  sampling_method_t nystrom_sample_method;
+  sampling_method_t sampling_method;
 
   void set_sampling_method(const std::string _method) {
     for (int j = 0; j < METHOD_NAMES.size(); ++j) {
       if (METHOD_NAMES.at(j) == _method) {
-        nystrom_sample_method = static_cast<sampling_method_t>(j);
+        sampling_method = static_cast<sampling_method_t>(j);
         break;
       }
     }
@@ -539,7 +539,7 @@ parse_match_options(const int argc,      //
       "--tau (-u)            : Regularization parameter (default: tau = 1)\n"
       "--rank (-r)           : The maximal rank of SVD (default: rank = 50)\n"
       "--lu_iter (-i)           : # of LU iterations (default: lu_iter = 5)\n"
-      "--nystrom_sample (-S) : Nystrom sample size (default: 10000)\n"
+      "--initial_sample (-S) : Nystrom sample size (default: 10000)\n"
       "--nystrom_batch (-B)  : Nystrom batch size (default: 10000)\n"
       "--sampling_method (-M) : Nystrom sampling method: UNIFORM (default), "
       "CV, MEAN\n"
@@ -593,7 +593,7 @@ parse_match_options(const int argc,      //
       {"prune_knn", no_argument, nullptr, 'P'},              //
       {"log_scale", no_argument, nullptr, 'L'},              //
       {"raw_scale", no_argument, nullptr, 'R'},              //
-      {"nystrom_sample", required_argument, nullptr, 'S'},   //
+      {"initial_sample", required_argument, nullptr, 'S'},   //
       {"nystrom_batch", required_argument, nullptr, 'B'},    //
       {"sampling_method", required_argument, nullptr, 'M'},  //
       {"help", no_argument, nullptr, 'h'},                   //
@@ -652,7 +652,7 @@ parse_match_options(const int argc,      //
         options.row_weight_file = std::string(optarg);
         break;
       case 'S':
-        options.nystrom_sample = std::stoi(optarg);
+        options.initial_sample = std::stoi(optarg);
         break;
       case 'B':
         options.nystrom_batch = std::stoi(optarg);

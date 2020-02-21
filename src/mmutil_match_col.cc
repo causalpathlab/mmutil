@@ -31,8 +31,8 @@ main(const int argc, const char* argv[]) {
 
   std::vector<std::tuple<Index, Index, Scalar> > out_index;
 
-  const SpMat Src = build_eigen_sparse(options.src_mtx).transpose().eval();
-  const SpMat Tgt = build_eigen_sparse(options.tgt_mtx).transpose().eval();
+  const SpMat Src = read_eigen_sparse(options.src_mtx).transpose().eval();
+  const SpMat Tgt = read_eigen_sparse(options.tgt_mtx).transpose().eval();
 
   auto knn = search_knn(SrcSparseRowsT(Src),     //
                         TgtSparseRowsT(Tgt),     //

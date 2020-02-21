@@ -1,20 +1,25 @@
 bin_PROGRAMS = mmutil_merge_col \
+    mmutil_split_col \
     mmutil_filter_row \
     mmutil_filter_col \
     mmutil_select_row \
     mmutil_select_col \
-    mmutil_distribute_col \
     mmutil_aggregate_col \
     mmutil_rand_col \
     mmutil_rand_conv_col \
     mmutil_normalize_col \
     mmutil_spectral_col \
     mmutil_match_col \
+    mmutil_annotate_col \
     mmutil_propagate_membership \
     mmutil_spectral_match_col \
     mmutil_spectral_cluster_col
 
 math = svd.hh
+
+rbm = mmutil_rbm.hh \
+    inference/sampler.hh \
+    inference/adam.hh
 
 sgd = \
     inference/sgd_representation_gaussian.hh \
@@ -47,8 +52,30 @@ hnswlib = ext/hnswlib/bruteforce.h \
     ext/hnswlib/space_l2.h \
     ext/hnswlib/visited_list_pool.h
 
+#################
+# merge / split #
+#################
+
 mmutil_merge_col_SOURCES = mmutil_run_merge_col.cc \
     mmutil_merge_col.hh $(common)
+
+mmutil_split_col_SOURCES = mmutil_split_col.cc \
+    mmutil_split_col.hh \
+    $(common)
+
+##############
+# Annotation #
+##############
+
+mmutil_annotate_col_SOURCES = mmutil_annotate_col.hh \
+	mmutil_normalize.hh \
+	mmutil_spectral.hh \
+	mmutil_annotate_col.cc \
+        $(common)
+
+#####################
+# filter and select #
+#####################
 
 mmutil_filter_row_SOURCES = mmutil_filter_row.cc \
     mmutil_filter_row.hh $(common)
@@ -61,10 +88,6 @@ mmutil_select_row_SOURCES = mmutil_select_row.cc \
 
 mmutil_select_col_SOURCES = mmutil_select_col.cc \
     mmutil_select.hh $(common)
-
-mmutil_distribute_col_SOURCES = mmutil_distribute_col.cc \
-    mmutil_distribute_col.hh \
-    $(common)
 
 mmutil_aggregate_col_SOURCES = mmutil_aggregate_col.cc \
     mmutil_aggregate_col.hh \

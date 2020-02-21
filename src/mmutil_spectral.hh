@@ -31,10 +31,10 @@ struct spectral_options_t {
     log_scale       = true;
     row_weight_file = "";
 
-    nystrom_sample = 10000;
+    initial_sample = 10000;
     nystrom_batch  = 10000;
 
-    nystrom_sample_method = UNIFORM;
+    sampling_method = UNIFORM;
 
     rand_seed = 1;
   }
@@ -51,17 +51,17 @@ struct spectral_options_t {
   bool log_scale;
   Str row_weight_file;
 
-  Index nystrom_sample;
+  Index initial_sample;
   Index nystrom_batch;
 
-  sampling_method_t nystrom_sample_method;
+  sampling_method_t sampling_method;
 
   int rand_seed;
 
   void set_sampling_method(const std::string _method) {
     for (int j = 0; j < METHOD_NAMES.size(); ++j) {
       if (METHOD_NAMES.at(j) == _method) {
-        nystrom_sample_method = static_cast<sampling_method_t>(j);
+        sampling_method = static_cast<sampling_method_t>(j);
         break;
       }
     }
@@ -236,6 +236,59 @@ _nystrom_proj(const std::string mtx_file,                  // matrix file
               const options_t& options                     // options
 );
 
+template <typename T>
+std::tuple<SpMat, IntVec>
+nystrom_sample_columns(const std::string mtx_file, const T& options) {
+
+  TLOG("Collecting stats from the matrix file " << mtx_file);
+
+  col_stat_collector_t collector;
+
+  visit_matrix_market_file(mtx_file, collector);
+
+  const Vec& s1         = collector.Col_S1;
+  const Vec& s2         = collector.Col_S2;
+  const IntVec& nnz_col = collector.Col_N;
+
+  const Index N  = collector.max_col;
+  const Index nn = std::min(N, options.initial_sample);
+
+  std::random_device rd;
+  std::mt19937 rgen(rd());
+
+  std::vector<Index> index_r(N);
+
+  if (options.sampling_method == T::CV) {
+    const Scalar nn = static_cast<Scalar>(collector.max_row);
+    const Scalar mm = std::max(nn - 1.0, 1.0);
+
+    auto cv_fun = [](const Scalar& v, const Scalar& m) -> Scalar {
+      return std::sqrt(v) / (m + 1e-8);
+    };
+
+    Vec mu = s1 / nn;
+
+    Vec score = ((s2 - s1.cwiseProduct(mu)) / mm).binaryExpr(mu, cv_fun);
+
+    index_r = eigen_argsort_descending(score);
+
+  } else if (options.sampling_method == T::MEAN) {
+    const Scalar n = static_cast<Scalar>(collector.max_row);
+
+    Vec mu  = s1 / n;
+    index_r = eigen_argsort_descending(mu);
+
+  } else {
+    std::iota(index_r.begin(), index_r.end(), 0);
+    std::shuffle(index_r.begin(), index_r.end(), rgen);
+  }
+
+  std::vector<Index> subcol(nn);
+  std::copy(index_r.begin(), index_r.begin() + nn, subcol.begin());
+  SpMat X = read_eigen_sparse_subset_col(mtx_file, subcol);
+  return std::make_tuple(X, nnz_col);
+}
+
 template <typename Derived, typename options_t>
 inline std::tuple<Mat, Mat, Mat>
 take_spectrum_nystrom(
@@ -248,77 +301,18 @@ take_spectrum_nystrom(
   const Scalar norm      = options.col_norm;
   const Index rank       = options.rank;
   const Index lu_iter    = options.lu_iter;
-  const Index Nsample    = options.nystrom_sample;
+  const Index Nsample    = options.initial_sample;
   const Index batch_size = options.nystrom_batch;
   const bool take_ln     = options.log_scale;
 
-  TLOG("Collecting stats from the matrix file " << mtx_file);
-
-  col_stat_collector_t collector;
-  visit_matrix_market_file(mtx_file, collector);
-  const Vec& s1         = collector.Col_S1;
-  const Vec& s2         = collector.Col_S2;
-  const IntVec& nnz_col = collector.Col_N;
-
-  const Index N  = collector.max_col;
-  const Index nn = std::min(N, Nsample);
-
-  ///////////////////////////////////////
-  // step 1 -- random column selection //
-  ///////////////////////////////////////
-
-  std::random_device rd;
-  std::mt19937 rgen(rd());
-
-  std::vector<Index> index_r(N);
-
-  if (options.nystrom_sample_method == options_t::CV) {
-    const Scalar n = static_cast<Scalar>(collector.max_row);
-
-    // coefficient of variation
-
-    Vec mu = s1 / n;
-    Vec score =
-        ((s2 - s1.cwiseProduct(mu)) / std::max(n - 1.0, 1.0))
-            .cwiseSqrt()
-            .binaryExpr(mu, [](const Scalar& s, const Scalar& m) -> Scalar {
-              return s / (m + 1e-8);
-            });
-
-    index_r = eigen_argsort_descending(score);
-
-  } else if (options.nystrom_sample_method == options_t::MEAN) {
-    const Scalar n = static_cast<Scalar>(collector.max_row);
-
-    Vec mu  = s1 / n;
-    index_r = eigen_argsort_descending(mu);
-
-  } else {
-    std::iota(index_r.begin(), index_r.end(), 0);
-    std::shuffle(index_r.begin(), index_r.end(), rgen);
-  }
-
-  using _reader_t = eigen_triplet_reader_remapped_cols_t;
+  //////////////////////////
+  // step1 -- subsampling //
+  //////////////////////////
 
   SpMat X;
-
-  {
-    _reader_t::index_map_t Remap;
-    Index NNZ = 0;
-    for (Index new_index = 0; new_index < nn; ++new_index) {
-      const Index old_index = index_r.at(new_index);
-      Remap[old_index]      = new_index;
-      NNZ += nnz_col(old_index);
-    }
-
-    _reader_t::TripletVec Tvec;
-    _reader_t reader(Tvec, Remap, NNZ);
-    visit_matrix_market_file(mtx_file, reader);
-
-    X.resize(reader.max_row, nn);
-    X.reserve(Tvec.size());
-    X.setFromTriplets(Tvec.begin(), Tvec.end());
-  }
+  IntVec nnz_col;
+  std::tie(X, nnz_col) = nystrom_sample_columns(mtx_file, options);
+  const Index N        = nnz_col.size();
 
   Vec ww(X.rows(), 1);
   ww.setOnes();
@@ -354,6 +348,8 @@ take_spectrum_nystrom(
 
   Mat U(N, rank);
   U.setZero();
+
+  using _reader_t = eigen_triplet_reader_remapped_cols_t;
 
   for (Index lb = 0; lb < N; lb += batch_size) {
 
@@ -489,7 +485,7 @@ parse_spectral_options(const int argc,      //
       "--row_weight (-w)      : Feature re-weighting (default: none)\n"
       "--col_norm (-C)        : Column normalization (default: 10000)\n"
       "--rand_seed (-s)       : Random seed (default: 1)\n"
-      "--nystrom_sample (-S)  : Nystrom sample size (default: 10000)\n"
+      "--initial_sample (-S)  : Nystrom sample size (default: 10000)\n"
       "--nystrom_batch (-B)   : Nystrom batch size (default: 10000)\n"
       "--sampling_method (-M) : Nystrom sampling method: UNIFORM (default), "
       "CV, MEAN\n"
@@ -517,7 +513,7 @@ parse_spectral_options(const int argc,      //
       {"log_scale", no_argument, nullptr, 'L'},              //
       {"raw_scale", no_argument, nullptr, 'R'},              //
       {"rand_seed", required_argument, nullptr, 's'},        //
-      {"nystrom_sample", required_argument, nullptr, 'S'},   //
+      {"initial_sample", required_argument, nullptr, 'S'},   //
       {"nystrom_batch", required_argument, nullptr, 'B'},    //
       {"sampling_method", required_argument, nullptr, 'M'},  //
       {"help", no_argument, nullptr, 'h'},                   //
@@ -555,7 +551,7 @@ parse_spectral_options(const int argc,      //
         options.row_weight_file = std::string(optarg);
         break;
       case 'S':
-        options.nystrom_sample = std::stoi(optarg);
+        options.initial_sample = std::stoi(optarg);
         break;
       case 's':
         options.rand_seed = std::stoi(optarg);
@@ -588,3 +584,47 @@ parse_spectral_options(const int argc,      //
 }
 
 #endif
+
+// col_stat_collector_t collector;
+// visit_matrix_market_file(mtx_file, collector);
+// const Vec& s1         = collector.Col_S1;
+// const Vec& s2         = collector.Col_S2;
+// const IntVec& nnz_col = collector.Col_N;
+
+// const Index N  = collector.max_col;
+// const Index nn = std::min(N, Nsample);
+
+// ///////////////////////////////////////
+// // step 1 -- random column selection //
+// ///////////////////////////////////////
+
+// std::random_device rd;
+// std::mt19937 rgen(rd());
+
+// std::vector<Index> index_r(N);
+
+// if (options.sampling_method == options_t::CV) {
+//   const Scalar n = static_cast<Scalar>(collector.max_row);
+
+//   // coefficient of variation
+
+//   Vec mu = s1 / n;
+//   Vec score =
+//       ((s2 - s1.cwiseProduct(mu)) / std::max(n - 1.0, 1.0))
+//           .cwiseSqrt()
+//           .binaryExpr(mu, [](const Scalar& s, const Scalar& m) -> Scalar {
+//             return s / (m + 1e-8);
+//           });
+
+//   index_r = eigen_argsort_descending(score);
+
+// } else if (options.sampling_method == options_t::MEAN) {
+//   const Scalar n = static_cast<Scalar>(collector.max_row);
+
+//   Vec mu  = s1 / n;
+//   index_r = eigen_argsort_descending(mu);
+
+// } else {
+//   std::iota(index_r.begin(), index_r.end(), 0);
+//   std::shuffle(index_r.begin(), index_r.end(), rgen);
+// }

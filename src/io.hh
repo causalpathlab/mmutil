@@ -144,7 +144,7 @@ struct _triplet_reader_remapped_cols_t {
 
   explicit _triplet_reader_remapped_cols_t(TripletVec &_tvec,
                                            const index_map_t &_remap,
-                                           const index_t _nnz)
+                                           const index_t _nnz = 0)
       : Tvec(_tvec),
         remap(_remap),
         NNZ(_nnz) {
@@ -170,11 +170,11 @@ struct _triplet_reader_remapped_cols_t {
   }
 
   void eval_end() {
+#ifdef DEBUG
     if (Tvec.size() < NNZ) {
       WLOG("This file may have lost elements : " << Tvec.size() << " vs. "
                                                  << NNZ);
     }
-#ifdef DEBUG
     TLOG("Tvec : " << Tvec.size() << " vs. " << NNZ << " vs. " << max_elem);
 #endif
   }
@@ -295,7 +295,7 @@ read_eigen_matrix_market_stream(IFS &ifs) {
 Eigen::SparseMatrix<eigen_triplet_reader_t::scalar_t,  //
                     Eigen::RowMajor,                   //
                     std::ptrdiff_t>
-build_eigen_sparse(const std::string mtx_file) {
+read_eigen_sparse(const std::string mtx_file) {
 
   eigen_triplet_reader_t::TripletVec Tvec;
 
@@ -308,6 +308,34 @@ build_eigen_sparse(const std::string mtx_file) {
   std::tie(Tvec, max_row, max_col) = read_eigen_matrix_market_file(mtx_file);
 
   TLOG(max_row << " x " << max_col << ", M = " << Tvec.size());
+  return build_eigen_sparse(Tvec, max_row, max_col);
+}
+
+////////////////////////////////////////////////////////////////
+
+template <typename Vec>
+Eigen::SparseMatrix<eigen_triplet_reader_t::scalar_t,  //
+                    Eigen::RowMajor,                   //
+                    std::ptrdiff_t>
+read_eigen_sparse_subset_col(const std::string mtx_file,  //
+                             const Vec &subcol) {
+
+  using _reader_t = eigen_triplet_reader_remapped_cols_t;
+  using Index     = _reader_t::index_t;
+
+  _reader_t::index_map_t Remap;
+  for (Index new_index = 0; new_index < subcol.size(); ++new_index) {
+    const Index old_index = subcol.at(new_index);
+    Remap[old_index]      = new_index;
+  }
+
+  _reader_t::TripletVec Tvec;
+  _reader_t reader(Tvec, Remap, subcol.size() * 1e4);  // estimate NNZ
+  visit_matrix_market_file(mtx_file, reader);
+
+  const Index max_row = reader.max_row;
+  const Index max_col = subcol.size();
+
   return build_eigen_sparse(Tvec, max_row, max_col);
 }
 

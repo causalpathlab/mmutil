@@ -1,10 +1,10 @@
-#include "mmutil_distribute_col.hh"
+#include "mmutil_split_col.hh"
 
 void
 print_help(const char* fname) {
 
   const char* _desc =
-      "Distribute columns into multiple file sets\n"
+      "Split columns into multiple file sets\n"
       "\n"
       "[Arguments]\n"
       "MTX        : Matrix Market file <i> <j> <value>\n"
