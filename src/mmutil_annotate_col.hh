@@ -30,8 +30,12 @@ train_marker_genes(const Eigen::MatrixBase<Derived>& _L,
   const Derived& L  = _L.derived();
   const Derived2& X = _X.derived();
 
-  Mat xx = X;
-  Mat mu = L;  // gene x label parameters
+  auto add_eps = [](const Scalar& x) -> Scalar {
+    return x + 1e-8;
+  };  // avoid zeros
+
+  Mat xx = X.unaryExpr(add_eps);
+  Mat mu = L.unaryExpr(add_eps);
 
   mu.colwise().normalize();  // normalize for cosine similarity
   xx.colwise().normalize();  // normalize for cosine similarity
@@ -84,6 +88,7 @@ train_marker_genes(const Eigen::MatrixBase<Derived>& _L,
       mu.col(argmax) += rate * xj / nsize(argmax);
     }
 
+    mu = mu.unaryExpr(add_eps);
     mu.colwise().normalize();
 
     score_trace(iter) = score;
@@ -204,6 +209,7 @@ struct annotate_options_t {
 
     em_tol = 1e-4;
 
+    balance_marker_size = false;
     verbose = false;
   }
 
@@ -238,6 +244,7 @@ struct annotate_options_t {
     }
   }
 
+  bool balance_marker_size;
   bool verbose;
 };
 

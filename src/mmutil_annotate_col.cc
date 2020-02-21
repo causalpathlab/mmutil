@@ -40,28 +40,33 @@ main(const int argc, const char* argv[]) {
   };
 
   std::vector<Index> valid_rows;
-  Vec nn         = Ltot * Mat::Ones(Ltot.cols(), 1);
-  Vec lab_size   = Ltot.transpose() * Mat::Ones(Ltot.rows(), 1);
-  const Index sz = lab_size.minCoeff();
 
-  TLOG("Selecting " << sz << " markers for each label");
   // Step 1a. select rows by standard deviation
-  {
-    const Scalar nn = static_cast<Scalar>(stat.max_col);
-    const Scalar mm = std::max(nn - 1.0, 1.0);
+  if (options.balance_marker_size) {
+    Vec lab_size   = Ltot.transpose() * Mat::Ones(Ltot.rows(), 1);
+    const Index sz = lab_size.minCoeff();
+    TLOG("Selecting " << sz << " markers for each label");
+    {
+      const Scalar nn = static_cast<Scalar>(stat.max_col);
+      const Scalar mm = std::max(nn - 1.0, 1.0);
 
-    const Vec& s1 = stat.Row_S1;
-    const Vec& s2 = stat.Row_S2;
+      const Vec& s1 = stat.Row_S1;
+      const Vec& s2 = stat.Row_S2;
 
-    Vec mu     = s1 / nn;
-    Vec row_sd = ((s2 - s1.cwiseProduct(mu)) / mm).cwiseSqrt();
+      Vec mu     = s1 / nn;
+      Vec row_sd = ((s2 - s1.cwiseProduct(mu)) / mm).cwiseSqrt();
 
-    for (Index k = 0; k < Ltot.cols(); ++k) {  // each clust
-      Vec l_k    = row_sd.cwiseProduct(Ltot.col(k));
-      auto order = eigen_argsort_descending(l_k);
-      std::copy(order.begin(), order.begin() + sz,
-                std::back_inserter(valid_rows));
+      for (Index k = 0; k < Ltot.cols(); ++k) {  // each clust
+        Vec l_k    = row_sd.cwiseProduct(Ltot.col(k));
+        auto order = eigen_argsort_descending(l_k);
+        std::copy(order.begin(), order.begin() + sz,
+                  std::back_inserter(valid_rows));
+      }
     }
+  } else {
+    Vec col_size = Ltot * Mat::Ones(Ltot.cols(), 1);
+    for (Index r = 0; r < col_size.size(); ++r)
+      if (col_size(r) > 0) valid_rows.push_back(r);
   }
 
   std::vector<std::string> markers(valid_rows.size());
@@ -73,7 +78,9 @@ main(const int argc, const char* argv[]) {
       TLOG("Marker [" << r << "] " << rows.at(r));
     }
 
-  Mat L = Mat(row_sub(Ltot, valid_rows));
+  auto add_eps = [](const Scalar& x) -> Scalar { return x + 1e-8; };
+
+  Mat L = Mat(row_sub(Ltot, valid_rows)).unaryExpr(add_eps);
 
   // Step 1b. Select columns by high coefficient of variance
   std::vector<Index> subcols;
@@ -104,6 +111,7 @@ main(const int argc, const char* argv[]) {
     X = X.unaryExpr(log2_op);
   }
 
+  X = X.unaryExpr(add_eps);
   X.colwise().normalize();
 
   //////////////////////////////////////////
@@ -144,6 +152,7 @@ main(const int argc, const char* argv[]) {
       xx_b = xx_b.unaryExpr(log2_op);
     }
 
+    xx_b.unaryExpr(add_eps);
     xx_b.colwise().normalize();
 
     if (options.verbose) TLOG("Prediction by argmax assignment");
