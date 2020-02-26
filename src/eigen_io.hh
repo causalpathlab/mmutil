@@ -226,7 +226,7 @@ read_named_membership_file(const std::string membership_file,    //
 
   std::unordered_map<std::string, std::string> pi_jk;
 
-  read_pair_file(membership_file, pi_jk);
+  read_dict_file(membership_file, pi_jk);
 
   using Scalar = typename MATTYPE::Scalar;
   using Index  = typename MATTYPE::Index;

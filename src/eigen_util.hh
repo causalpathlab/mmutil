@@ -381,4 +381,19 @@ standardize(const Eigen::MatrixBase<Derived>& Xraw,
   return X;
 }
 
+template<typename Derived>
+void normalize_columns(Eigen::MatrixBase<Derived>& _mat) { 
+  using Index  = typename Derived::Index;
+  using Scalar = typename Derived::Scalar;
+  using RowVec = typename Eigen::internal::plain_row_type<Derived>::type;
+
+  Derived& mat = _mat.derived();
+  const Scalar eps = 1e-8;
+
+  for(Index c = 0; c < mat.cols(); ++c) {
+    const Scalar denom = std::max(mat.col(c).norm(), eps);
+    mat.col(c) /= denom;
+  }
+}
+
 #endif

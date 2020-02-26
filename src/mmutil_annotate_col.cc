@@ -18,11 +18,6 @@ main(const int argc, const char* argv[]) {
 
   std::tie(Ltot, rows, labels) = read_annotation_matched(options);
 
-  if (options.verbose)
-    for (auto l : labels) {
-      TLOG("Annotation Labels: " << l);
-    }
-
   std::vector<std::string> columns;
   CHECK(read_vector_file(options.col, columns));
 
@@ -35,84 +30,24 @@ main(const int argc, const char* argv[]) {
 
   ASSERT(stat.max_col <= columns.size(), "Needs column names");
 
-  auto cv_fun = [](const Scalar& v, const Scalar& m) -> Scalar {
-    return std::sqrt(v) / (m + 1e-8);
-  };
-
   std::vector<Index> valid_rows;
-
-  // Step 1a. select rows by standard deviation
-  if (options.balance_marker_size) {
-    Vec lab_size   = Ltot.transpose() * Mat::Ones(Ltot.rows(), 1);
-    const Index sz = lab_size.minCoeff();
-    TLOG("Selecting " << sz << " markers for each label");
-    {
-      const Scalar nn = static_cast<Scalar>(stat.max_col);
-      const Scalar mm = std::max(nn - 1.0, 1.0);
-
-      const Vec& s1 = stat.Row_S1;
-      const Vec& s2 = stat.Row_S2;
-
-      Vec mu     = s1 / nn;
-      Vec row_sd = ((s2 - s1.cwiseProduct(mu)) / mm).cwiseSqrt();
-
-      for (Index k = 0; k < Ltot.cols(); ++k) {  // each clust
-        Vec l_k    = row_sd.cwiseProduct(Ltot.col(k));
-        auto order = eigen_argsort_descending(l_k);
-        std::copy(order.begin(), order.begin() + sz,
-                  std::back_inserter(valid_rows));
-      }
-    }
-  } else {
-    Vec col_size = Ltot * Mat::Ones(Ltot.cols(), 1);
-    for (Index r = 0; r < col_size.size(); ++r)
-      if (col_size(r) > 0) valid_rows.push_back(r);
-  }
-
-  std::vector<std::string> markers(valid_rows.size());
-  std::for_each(valid_rows.begin(), valid_rows.end(),
-                [&](const auto r) { markers.emplace_back(rows.at(r)); });
-
-  if (options.verbose)
-    for (auto r : valid_rows) {
-      TLOG("Marker [" << r << "] " << rows.at(r));
-    }
-
-  auto add_eps = [](const Scalar& x) -> Scalar { return x + 1e-8; };
-
-  Mat L = Mat(row_sub(Ltot, valid_rows)).unaryExpr(add_eps);
-
-  // Step 1b. Select columns by high coefficient of variance
   std::vector<Index> subcols;
-  {
-    const Scalar nn = static_cast<Scalar>(stat.max_row);
-    const Scalar mm = std::max(nn - 1.0, 1.0);
 
-    const Vec& s1 = stat.Col_S1;
-    const Vec& s2 = stat.Col_S2;
-
-    Vec mu     = s1 / nn;
-    Vec col_cv = ((s2 - s1.cwiseProduct(mu)) / mm).binaryExpr(mu, cv_fun);
-
-    std::vector<Index> index_r = eigen_argsort_descending(col_cv);
-    const Index nsubsample     = std::min(stat.max_col, options.initial_sample);
-    subcols.resize(nsubsample);
-    std::copy(index_r.begin(), index_r.begin() + nsubsample, subcols.begin());
-  }
+  std::tie(valid_rows, subcols) = select_rows_columns(Ltot, stat, options);
 
   SpMat X0 = read_eigen_sparse_subset_col(options.mtx, subcols);
-  Mat X    = Mat(row_sub(X0, valid_rows));
+  Mat L = Mat(row_sub(Ltot, valid_rows));
+  Mat X = Mat(row_sub(X0, valid_rows));
 
   TLOG("Preprocessing X [" << X.rows() << " x " << X.cols() << "]");
 
-  auto log2_op = [](const Scalar& x) -> Scalar { return std::log2(0.5 + x); };
+  auto log2_op = [](const Scalar& x) -> Scalar { return std::log2(1.0 + x); };
 
   if (options.log_scale) {
     X = X.unaryExpr(log2_op);
   }
 
-  X = X.unaryExpr(add_eps);
-  X.colwise().normalize();
+  normalize_columns(X);
 
   //////////////////////////////////////////
   // step2 : Train marker gene parameters //
@@ -133,6 +68,9 @@ main(const int argc, const char* argv[]) {
   const Index N = stat.max_col;
 
   output.reserve(N);
+  Vec sj(mu.cols());
+
+  const Scalar eps = 1e-8;
 
   for (Index lb = 0; lb < N; lb += batch_size) {
 
@@ -144,34 +82,41 @@ main(const int argc, const char* argv[]) {
     if (options.verbose) TLOG("On the batch [" << lb << ", " << ub << ")");
 
     SpMat x0_b = read_eigen_sparse_subset_col(options.mtx, subcols_b);
-    Mat xx_b   = Mat(row_sub(x0_b, valid_rows));
+    Mat xx_b = Mat(row_sub(x0_b, valid_rows));
 
     TLOG("Preprocessing xx [" << xx_b.rows() << " x " << xx_b.cols() << "]");
+
+    Mat _col_norm = Mat::Ones(1, xx_b.rows()) * xx_b.cwiseProduct(xx_b);
+    _col_norm.transposeInPlace();
 
     if (options.log_scale) {
       xx_b = xx_b.unaryExpr(log2_op);
     }
 
-    xx_b.unaryExpr(add_eps);
-    xx_b.colwise().normalize();
+    normalize_columns(xx_b);
 
     if (options.verbose) TLOG("Prediction by argmax assignment");
 
-    Mat scoreMat = mu.transpose() * xx_b;
+    for (Index j = 0; j < xx_b.cols(); ++j) {
 
-    for (Index j = 0; j < scoreMat.cols(); ++j) {
+      sj = mu.transpose() * xx_b.col(j);
+
+      if (_col_norm(j) < eps) continue;
+
       Index argmax;
-      scoreMat.col(j).maxCoeff(&argmax);
-      Scalar score  = scoreMat(argmax, j);
+      const Scalar score = sj.maxCoeff(&argmax);
       const Index k = subcols_b.at(j);
 
-      output.emplace_back(
-          std::make_tuple(columns.at(k), labels.at(argmax), score));
+      output.emplace_back(columns.at(k), labels.at(argmax), score);
     }
   }
 
+  std::vector<std::string> markers;
+  markers.reserve(valid_rows.size());
+  std::for_each(valid_rows.begin(), valid_rows.end(),
+                [&](const auto r) { markers.emplace_back(rows.at(r)); });
+
   write_tuple_file(options.out + ".annot.gz", output);
-  write_data_file(options.out + ".marker_data.gz", mu);
   write_vector_file(options.out + ".marker_names.gz", markers);
   write_vector_file(options.out + ".label_names.gz", labels);
 

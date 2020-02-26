@@ -12,7 +12,7 @@ distribute_col(const std::string mtx_file,         // matrix market
   using Str = std::string;
 
   std::unordered_map<Str, Str> _column_membership;
-  CHECK(read_pair_file(membership_file, _column_membership));
+  CHECK(read_dict_file(membership_file, _column_membership));
 
   // Filter out zero count columns
   col_stat_collector_t collector;
