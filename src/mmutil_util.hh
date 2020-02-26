@@ -4,9 +4,6 @@
 #define MMUTIL_UTIL_HH_
 
 {
-
-
-
 }
 
 #endif

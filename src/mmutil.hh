@@ -9,9 +9,9 @@
 #include <numeric>
 #include <vector>
 
+#include "eigen_io.hh"
 #include "eigen_util.hh"
 #include "io.hh"
-#include "eigen_io.hh"
 #include "io_visitor.hh"
 #include "std_util.hh"
 #include "utils/math.hh"
@@ -21,12 +21,12 @@
 #define MMUTIL_HH_
 
 using Scalar = float;
-using SpMat  = Eigen::SparseMatrix<Scalar, Eigen::RowMajor, std::ptrdiff_t>;
-using Index  = SpMat::Index;
+using SpMat = Eigen::SparseMatrix<Scalar, Eigen::RowMajor, std::ptrdiff_t>;
+using Index = SpMat::Index;
 
-using Mat    = typename Eigen::Matrix<Scalar, Eigen::Dynamic, Eigen::Dynamic,
+using Mat = typename Eigen::Matrix<Scalar, Eigen::Dynamic, Eigen::Dynamic,
                                    Eigen::ColMajor>;
-using Vec    = typename Eigen::Matrix<Scalar, Eigen::Dynamic, 1>;
+using Vec = typename Eigen::Matrix<Scalar, Eigen::Dynamic, 1>;
 using IntMat = typename Eigen::Matrix<std::ptrdiff_t, Eigen::Dynamic,
                                       Eigen::Dynamic, Eigen::ColMajor>;
 using IntVec = typename Eigen::Matrix<std::ptrdiff_t, Eigen::Dynamic, 1>;
