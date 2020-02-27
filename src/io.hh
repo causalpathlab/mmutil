@@ -234,6 +234,67 @@ struct _triplet_reader_remapped_cols_t {
 };
 
 template <typename T>
+struct _triplet_reader_remapped_rows_cols_t {
+    using scalar_t = float;
+    using index_t = std::ptrdiff_t;
+    using Triplet = T;
+    using TripletVec = std::vector<T>;
+
+    using index_map_t = std::unordered_map<index_t, index_t>;
+
+    explicit _triplet_reader_remapped_rows_cols_t(TripletVec &_tvec,
+                                                  const index_map_t &_remap_row,
+                                                  const index_map_t &_remap_col,
+                                                  const index_t _nnz = 0)
+        : Tvec(_tvec)
+        , remap_row(_remap_row)
+        , remap_col(_remap_col)
+        , NNZ(_nnz)
+    {
+        max_row = 0;
+        max_col = 0;
+        max_elem = 0;
+        Tvec.clear();
+        Tvec.reserve(NNZ);
+        ASSERT(remap_row.size() > 0, "Empty Remap_Col");
+        ASSERT(remap_col.size() > 0, "Empty Remap_Col");
+    }
+
+    void set_dimension(const index_t r, const index_t c, const index_t e)
+    {
+        max_row = r;
+        max_col = c;
+        max_elem = e;
+    }
+
+    void eval(const index_t row, const index_t col, const scalar_t weight)
+    {
+        if (remap_col.count(col) > 0 && remap_row.count(row) > 0) {
+            Tvec.emplace_back(T(remap_row.at(row), remap_col.at(col), weight));
+        }
+    }
+
+    void eval_end()
+    {
+#ifdef DEBUG
+        if (Tvec.size() < NNZ) {
+            WLOG("This file may have lost elements : " << Tvec.size() << " vs. "
+                                                       << NNZ);
+        }
+        TLOG("Tvec : " << Tvec.size() << " vs. " << NNZ << " vs. " << max_elem);
+#endif
+    }
+
+    index_t max_row;
+    index_t max_col;
+    index_t max_elem;
+    TripletVec &Tvec;
+    const index_map_t &remap_row;
+    const index_map_t &remap_col;
+    const index_t NNZ;
+};
+
+template <typename T>
 struct _triplet_reader_t {
     using scalar_t = float;
     using index_t = std::ptrdiff_t;
@@ -287,6 +348,9 @@ using std_triplet_reader_remapped_cols_t =
 
 using eigen_triplet_reader_remapped_cols_t =
     _triplet_reader_remapped_cols_t<Eigen::Triplet<float>>;
+
+using eigen_triplet_reader_remapped_rows_cols_t =
+    _triplet_reader_remapped_rows_cols_t<Eigen::Triplet<float>>;
 
 template <typename IFS, typename READER>
 inline auto
@@ -395,6 +459,42 @@ read_eigen_sparse_subset_col(const std::string mtx_file, //
     return build_eigen_sparse(Tvec, max_row, max_col);
 }
 
+////////////////////////////////////////////////////////////////
+
+template <typename Vec>
+Eigen::SparseMatrix<eigen_triplet_reader_t::scalar_t, //
+                    Eigen::RowMajor, //
+                    std::ptrdiff_t>
+read_eigen_sparse_subset_rows_cols(const std::string mtx_file,
+                                   const Vec &subrow,
+                                   const Vec &subcol)
+{
+
+    using _reader_t = eigen_triplet_reader_remapped_rows_cols_t;
+    using Index = _reader_t::index_t;
+
+    _reader_t::index_map_t RemapCol;
+    for (Index new_index = 0; new_index < subcol.size(); ++new_index) {
+        const Index old_index = subcol.at(new_index);
+        RemapCol[old_index] = new_index;
+    }
+
+    _reader_t::index_map_t RemapRow;
+    for (Index new_index = 0; new_index < subrow.size(); ++new_index) {
+        const Index old_index = subrow.at(new_index);
+        RemapRow[old_index] = new_index;
+    }
+
+    _reader_t::TripletVec Tvec;
+    _reader_t reader(Tvec, RemapRow, RemapCol, subcol.size() * 1e4);
+    visit_matrix_market_file(mtx_file, reader);
+
+    const Index max_row = subrow.size();
+    const Index max_col = subcol.size();
+
+    return build_eigen_sparse(Tvec, max_row, max_col);
+}
+
 /////////////////////////////////////////
 // read and write triplets selectively //
 /////////////////////////////////////////
@@ -477,7 +577,8 @@ private:
     index_t find_new_max_row() const
     {
         index_t ret = 0;
-        std::for_each(remap.begin(), remap.end(), //
+        std::for_each(remap.begin(),
+                      remap.end(), //
                       [&ret](const auto &tt) {
                           index_t _old, _new;
                           std::tie(_old, _new) = tt;
@@ -568,7 +669,8 @@ private:
     index_t find_new_max_col() const
     {
         index_t ret = 0;
-        std::for_each(remap.begin(), remap.end(), //
+        std::for_each(remap.begin(),
+                      remap.end(), //
                       [&ret](const auto &tt) {
                           index_t _old, _new;
                           std::tie(_old, _new) = tt;

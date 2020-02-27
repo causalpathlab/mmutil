@@ -9,7 +9,7 @@ main(const int argc, const char *argv[])
 
     //////////////////////////////////////////////////////////
     // Read the annotation information to construct initial //
-    // type-specific marker gene profiles			  //
+    // type-specific marker gene profiles                   //
     //////////////////////////////////////////////////////////
 
     SpMat Ltot; // gene x label
@@ -25,19 +25,26 @@ main(const int argc, const char *argv[])
     // step 1 : Initial sampling for pretraining //
     ///////////////////////////////////////////////
 
+    TLOG("Collecting row- and column-wise statistics");
+
     row_col_stat_collector_t stat;
     visit_matrix_market_file(options.mtx, stat);
 
     ASSERT(stat.max_col <= columns.size(), "Needs column names");
 
-    std::vector<Index> valid_rows;
+    std::vector<Index> subrows;
     std::vector<Index> subcols;
 
-    std::tie(valid_rows, subcols) = select_rows_columns(Ltot, stat, options);
+    std::tie(subrows, subcols) = select_rows_columns(Ltot, stat, options);
 
-    SpMat X0 = read_eigen_sparse_subset_col(options.mtx, subcols);
-    Mat L = Mat(row_sub(Ltot, valid_rows));
-    Mat X = Mat(row_sub(X0, valid_rows));
+    TLOG("Training data [" << subrows.size() << " x " << subcols.size()
+                           << "] from [" << stat.max_row << " x "
+                           << stat.max_col << "]");
+
+    SpMat X0 =
+        read_eigen_sparse_subset_rows_cols(options.mtx, subrows, subcols);
+    Mat L = Mat(row_sub(Ltot, subrows));
+    Mat X = Mat(X0);
 
     TLOG("Preprocessing X [" << X.rows() << " x " << X.cols() << "]");
 
@@ -55,7 +62,9 @@ main(const int argc, const char *argv[])
 
     TLOG("Fine-tuning marker gene parameters");
 
-    Mat mu = train_marker_genes(L, X, options);
+    annot_model_t annot(L);
+
+    train_marker_genes(annot, X, options);
 
     /////////////////////////////////////////////////////
     // step3: Assign labels to all the cells (columns) //
@@ -68,9 +77,7 @@ main(const int argc, const char *argv[])
     const Index N = stat.max_col;
 
     output.reserve(N);
-    Vec sj(mu.cols());
-
-    const Scalar eps = 1e-8;
+    Vec zj(annot.ntype);
 
     for (Index lb = 0; lb < N; lb += batch_size) {
         const Index ub = std::min(N, batch_size + lb);
@@ -78,15 +85,12 @@ main(const int argc, const char *argv[])
 
         std::iota(subcols_b.begin(), subcols_b.end(), lb);
 
-        if (options.verbose)
-            TLOG("On the batch [" << lb << ", " << ub << ")");
+	TLOG("On the batch [" << lb << ", " << ub << ")");
 
-        SpMat x0_b = read_eigen_sparse_subset_col(options.mtx, subcols_b);
-        Mat xx_b = Mat(row_sub(x0_b, valid_rows));
+        SpMat x0_b =
+            read_eigen_sparse_subset_rows_cols(options.mtx, subrows, subcols_b);
 
-        TLOG("Preprocessing xx [" << xx_b.rows() << " x " << xx_b.cols()
-                                  << "]");
-
+        Mat xx_b = Mat(x0_b);
         Mat _col_norm = Mat::Ones(1, xx_b.rows()) * xx_b.cwiseProduct(xx_b);
         _col_norm.transposeInPlace();
 
@@ -96,31 +100,34 @@ main(const int argc, const char *argv[])
 
         normalize_columns(xx_b);
 
-        if (options.verbose)
-            TLOG("Prediction by argmax assignment");
-
         for (Index j = 0; j < xx_b.cols(); ++j) {
-            sj = mu.transpose() * xx_b.col(j);
-
-            if (_col_norm(j) < eps)
-                continue;
-
-            Index argmax;
-            const Scalar score = sj.maxCoeff(&argmax);
             const Index k = subcols_b.at(j);
 
-            output.emplace_back(columns.at(k), labels.at(argmax), score);
+            if (_col_norm(j) < 1e-4) {
+                if (options.verbose)
+                    WLOG("Ignore this zero-norm column: " << columns.at(k));
+                continue;
+            }
+
+	    const Vec& _score = annot.log_score(xx_b.col(j));
+            normalized_exp(_score, zj);
+            Index argmax;
+	    _score.maxCoeff(&argmax);
+            output.emplace_back(columns.at(k), labels.at(argmax), zj(argmax));
         }
     }
 
     std::vector<std::string> markers;
-    markers.reserve(valid_rows.size());
-    std::for_each(valid_rows.begin(), valid_rows.end(),
-                  [&](const auto r) { markers.emplace_back(rows.at(r)); });
+    markers.reserve(subrows.size());
+    std::for_each(subrows.begin(), subrows.end(), [&](const auto r) {
+        markers.emplace_back(rows.at(r));
+    });
 
     write_tuple_file(options.out + ".annot.gz", output);
+    write_data_file(options.out + ".marker_profile.gz", annot.mu);
     write_vector_file(options.out + ".marker_names.gz", markers);
     write_vector_file(options.out + ".label_names.gz", labels);
 
+    TLOG("Done");
     return EXIT_SUCCESS;
 }

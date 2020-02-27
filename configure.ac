@@ -37,7 +37,7 @@ AC_CHECK_HEADERS([zlib.h])
 # Checks for library functions.
 AC_CHECK_LIB([m],[exp])
 AX_CHECK_ZLIB([],[])
-AX_BOOST_BASE([1.45.0])
+AX_BOOST_BASE([1.65.0])
 
 AM_INIT_AUTOMAKE([-Wall foreign subdir-objects])
 

@@ -6,8 +6,8 @@ AlignConsecutiveDeclarations: false
 AlignEscapedNewlines: Left
 AlignOperands: false
 AlignTrailingComments: false
-AllowAllParametersOfDeclarationOnNextLine: true
-AllowAllParametersOfDeclarationOnNextLine: true
+ExperimentalAutoDetectBinPacking: false
+AllowAllParametersOfDeclarationOnNextLine: false
 AllowShortBlocksOnASingleLine: false
 AllowShortCaseLabelsOnASingleLine: false
 AllowShortFunctionsOnASingleLine: InlineOnly
@@ -16,8 +16,8 @@ AllowShortLoopsOnASingleLine: false
 AlwaysBreakAfterReturnType: TopLevelDefinitions
 AlwaysBreakBeforeMultilineStrings: false
 AlwaysBreakTemplateDeclarations: true
-BinPackArguments: true
-BinPackParameters: true
+BinPackArguments: false
+BinPackParameters: false
 BreakBeforeBinaryOperators: None
 BreakBeforeBraces: WebKit
 BreakBeforeTernaryOperators: false
