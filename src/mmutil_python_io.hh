@@ -175,8 +175,11 @@ mmutil_read_triplets(PyObject *self, PyObject *args)
 
 template <typename OFS, typename T>
 void
-_write_numpy_array_stream(OFS &ofs, const T *data, const Index nrow,
-                          const Index ncol, const Index num_elements)
+_write_numpy_array_stream(OFS &ofs,
+                          const T *data,
+                          const Index nrow,
+                          const Index ncol,
+                          const Index num_elements)
 {
     const std::string SEP(" ");
     const Index INTERVAL = 1e6;
@@ -216,8 +219,10 @@ _write_numpy_array_stream(OFS &ofs, const T *data, const Index nrow,
 
 template <typename T>
 void
-_write_numpy_array_file(const std::string _filename, const T *data,
-                        const Index nrow, const Index ncol,
+_write_numpy_array_file(const std::string _filename,
+                        const T *data,
+                        const Index nrow,
+                        const Index ncol,
                         const Index num_elements)
 {
     if (file_exists(_filename)) {
@@ -264,15 +269,17 @@ mmutil_write_numpy(PyObject *self, PyObject *args)
 
     switch (_npy_type) {
     case NPY_DOUBLE:
-        _write_numpy_array_file(std::string(_filename), //
+        _write_numpy_array_file(std::string(_filename),               //
                                 (double *)PyArray_DATA(input_contig), //
-                                nrow, ncol, //
+                                nrow,
+                                ncol,          //
                                 num_elements); //
         break;
     case NPY_FLOAT:
-        _write_numpy_array_file(std::string(_filename), //
+        _write_numpy_array_file(std::string(_filename),              //
                                 (float *)PyArray_DATA(input_contig), //
-                                nrow, ncol, //
+                                nrow,
+                                ncol,          //
                                 num_elements); //
         break;
     default:

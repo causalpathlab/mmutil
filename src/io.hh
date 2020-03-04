@@ -413,14 +413,14 @@ read_eigen_matrix_market_stream(IFS &ifs)
 //////////////////////////////////////////////////
 
 Eigen::SparseMatrix<eigen_triplet_reader_t::scalar_t, //
-                    Eigen::RowMajor, //
+                    Eigen::RowMajor,                  //
                     std::ptrdiff_t>
 read_eigen_sparse(const std::string mtx_file)
 {
     eigen_triplet_reader_t::TripletVec Tvec;
 
     using SpMat = Eigen::SparseMatrix<eigen_triplet_reader_t::scalar_t, //
-                                      Eigen::RowMajor, //
+                                      Eigen::RowMajor,                  //
                                       std::ptrdiff_t>;
 
     SpMat::Index max_row, max_col;
@@ -435,7 +435,7 @@ read_eigen_sparse(const std::string mtx_file)
 
 template <typename Vec>
 Eigen::SparseMatrix<eigen_triplet_reader_t::scalar_t, //
-                    Eigen::RowMajor, //
+                    Eigen::RowMajor,                  //
                     std::ptrdiff_t>
 read_eigen_sparse_subset_col(const std::string mtx_file, //
                              const Vec &subcol)
@@ -463,7 +463,7 @@ read_eigen_sparse_subset_col(const std::string mtx_file, //
 
 template <typename Vec>
 Eigen::SparseMatrix<eigen_triplet_reader_t::scalar_t, //
-                    Eigen::RowMajor, //
+                    Eigen::RowMajor,                  //
                     std::ptrdiff_t>
 read_eigen_sparse_subset_rows_cols(const std::string mtx_file,
                                    const Vec &subrow,
@@ -512,7 +512,7 @@ struct triplet_copier_remapped_rows_t {
 
     explicit triplet_copier_remapped_rows_t(
         const std::string _filename, // output filename
-        const index_map_t &_remap, // valid rows
+        const index_map_t &_remap,   // valid rows
         const index_t _nnz)
         : filename(_filename)
         , remap(_remap)
@@ -544,7 +544,7 @@ struct triplet_copier_remapped_rows_t {
     {
         if (remap.count(row) > 0) {
             const index_t i = remap.at(row) + 1; // fix zero-based to one-based
-            const index_t j = col + 1; // fix zero-based to one-based
+            const index_t j = col + 1;           // fix zero-based to one-based
             ofs << i << FS << j << FS << weight << std::endl;
             elem_check++;
         }
@@ -602,7 +602,7 @@ struct triplet_copier_remapped_cols_t {
     using index_map_t = std::unordered_map<index_t, index_t>;
 
     explicit triplet_copier_remapped_cols_t(const std::string _filename, //
-                                            const index_map_t &_remap, //
+                                            const index_map_t &_remap,   //
                                             const index_t _nnz)
         : filename(_filename)
         , remap(_remap)
@@ -635,7 +635,7 @@ struct triplet_copier_remapped_cols_t {
     void eval(const index_t row, const index_t col, const scalar_t weight)
     {
         if (remap.count(col) > 0) {
-            const index_t i = row + 1; // fix zero-based to one-based
+            const index_t i = row + 1;           // fix zero-based to one-based
             const index_t j = remap.at(col) + 1; // fix zero-based to one-based
             ofs << i << FS << j << FS << weight << std::endl;
             elem_check++;

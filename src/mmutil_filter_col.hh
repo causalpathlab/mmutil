@@ -5,8 +5,8 @@
 #define MMUTIL_FILTER_COL_HH_
 
 void
-filter_col_by_nnz(const Index column_threshold, //
-                  const std::string mtx_file, //
+filter_col_by_nnz(const Index column_threshold,  //
+                  const std::string mtx_file,    //
                   const std::string column_file, //
                   const std::string output)
 {
@@ -34,7 +34,9 @@ filter_col_by_nnz(const Index column_threshold, //
     std::vector<Index> valid_cols;
     const Scalar _cutoff = static_cast<Scalar>(column_threshold);
 
-    std::copy_if(cols.begin(), cols.end(), std::back_inserter(valid_cols),
+    std::copy_if(cols.begin(),
+                 cols.end(),
+                 std::back_inserter(valid_cols),
                  [&](const Index j) { return nnz_col(j) >= _cutoff; });
 
     TLOG("Found " << valid_cols.size()

@@ -9,10 +9,10 @@ struct rbm_t {
     explicit rbm_t() {}
 
     Mat bias_vis;
-    Mat bias_hid; //
+    Mat bias_hid;       //
     Mat weight_vis_hid; // #visible x #hidden
 
-    Mat hidden; // #batch x #hidden
+    Mat hidden;  // #batch x #hidden
     Mat visible; // #
 };
 

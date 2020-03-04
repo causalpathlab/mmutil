@@ -20,11 +20,11 @@ static PyObject *
 mmutil_merge_files(PyObject *self, PyObject *args, PyObject *keywords)
 {
     static const char *kwlist[] = { "glob_row_file", //
-                                    "mtx_files", //
-                                    "row_files", //
-                                    "col_files", //
-                                    "output", //
-                                    "threshold", //
+                                    "mtx_files",     //
+                                    "row_files",     //
+                                    "col_files",     //
+                                    "output",        //
+                                    "threshold",     //
                                     NULL };
 
     char *_glob_row_file;
@@ -34,13 +34,18 @@ mmutil_merge_files(PyObject *self, PyObject *args, PyObject *keywords)
     char *_out;
     int column_threshold = 0; // no thresholding
 
-    if (!PyArg_ParseTupleAndKeywords(args, keywords, "sO!O!O!s|i", //
+    if (!PyArg_ParseTupleAndKeywords(args,
+                                     keywords,
+                                     "sO!O!O!s|i",                //
                                      const_cast<char **>(kwlist), //
-                                     &_glob_row_file, //
-                                     &PyList_Type, &mtxList, // O! checks type
-                                     &PyList_Type, &rowList, // O! checks type
-                                     &PyList_Type, &colList, // O! checks type
-                                     &_out, //
+                                     &_glob_row_file,             //
+                                     &PyList_Type,
+                                     &mtxList, // O! checks type
+                                     &PyList_Type,
+                                     &rowList, // O! checks type
+                                     &PyList_Type,
+                                     &colList, // O! checks type
+                                     &_out,    //
                                      &column_threshold)) {
         return NULL;
     }
@@ -68,11 +73,11 @@ mmutil_merge_files(PyObject *self, PyObject *args, PyObject *keywords)
 
     TLOG("Total number of batches: " << num_batches);
 
-    int flag = run_merge_col(glob_row_file, //
+    int flag = run_merge_col(glob_row_file,    //
                              column_threshold, //
-                             output, //
-                             mtx_files, //
-                             row_files, //
+                             output,           //
+                             mtx_files,        //
+                             row_files,        //
                              col_files);
 
     if (flag != EXIT_SUCCESS) {

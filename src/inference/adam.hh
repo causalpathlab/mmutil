@@ -30,8 +30,11 @@ struct adam_t;
 
 template <typename Scalar, typename Index>
 void
-reset_adam(adam_t<Scalar, Scalar, Index> &adam, const Scalar r_m,
-           const Scalar r_v, const Index n1, const Index n2)
+reset_adam(adam_t<Scalar, Scalar, Index> &adam,
+           const Scalar r_m,
+           const Scalar r_v,
+           const Index n1,
+           const Index n2)
 {
     adam.G = 0;
     adam.M = 0;
@@ -40,8 +43,11 @@ reset_adam(adam_t<Scalar, Scalar, Index> &adam, const Scalar r_m,
 
 template <typename Mat, typename Scalar, typename Index>
 void
-reset_adam(adam_t<Mat, Scalar, Index> &adam, const Scalar r_m, const Scalar r_v,
-           const Index n1, const Index n2)
+reset_adam(adam_t<Mat, Scalar, Index> &adam,
+           const Scalar r_m,
+           const Scalar r_v,
+           const Index n1,
+           const Index n2)
 {
     adam.G.resize(n1, n2);
     adam.M.resize(n1, n2);
@@ -53,7 +59,8 @@ reset_adam(adam_t<Mat, Scalar, Index> &adam, const Scalar r_m, const Scalar r_v,
 
 template <typename Scalar>
 struct adam_update_op_t {
-    explicit adam_update_op_t(const Scalar &_step, const Scalar r_m,
+    explicit adam_update_op_t(const Scalar &_step,
+                              const Scalar r_m,
                               const Scalar r_v)
         : step(_step)
         , rate_m(r_m)
@@ -76,7 +83,9 @@ struct adam_update_op_t {
 
 template <typename T, typename Scalar, typename Index = unsigned int>
 struct adam_t {
-    explicit adam_t(const Scalar r_m, const Scalar r_v, const Index n1 = 1,
+    explicit adam_t(const Scalar r_m,
+                    const Scalar r_v,
+                    const Index n1 = 1,
                     const Index n2 = 1)
         : t(0.0)
         , update_op(this->t, r_m, r_v)

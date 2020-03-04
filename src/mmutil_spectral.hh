@@ -84,8 +84,8 @@ template <typename Derived>
 inline Mat
 make_scaled_regularized(
     const Eigen::SparseMatrixBase<Derived> &_X0, // sparse data
-    const float tau_scale, // regularization
-    const bool log_trans = true // log-transformation
+    const float tau_scale,                       // regularization
+    const bool log_trans = true                  // log-transformation
 )
 {
     const Derived &X0 = _X0.derived();
@@ -127,9 +127,9 @@ inline Mat
 make_normalized_laplacian(
     const Eigen::SparseMatrixBase<Derived> &_X0, // sparse data
     const Eigen::MatrixBase<Derived2> &_weights, // row weights
-    const float tau_scale, // regularization
-    const float norm_target = 0, // normalization
-    const bool log_trans = true // log-transformation
+    const float tau_scale,                       // regularization
+    const float norm_target = 0,                 // normalization
+    const bool log_trans = true                  // log-transformation
 )
 {
     const Derived &X0 = _X0.derived();
@@ -208,11 +208,11 @@ make_normalized_laplacian(
 
 template <typename Derived>
 inline std::tuple<Mat, Mat, Mat>
-take_spectrum_laplacian( //
+take_spectrum_laplacian(                         //
     const Eigen::SparseMatrixBase<Derived> &_X0, // sparse data
-    const float tau_scale, // regularization
-    const int rank, // desired rank
-    const int lu_iter = 5 // should be enough
+    const float tau_scale,                       // regularization
+    const int rank,                              // desired rank
+    const int lu_iter = 5                        // should be enough
 )
 {
     const Mat XtTau = make_scaled_regularized(_X0, tau_scale);
@@ -234,10 +234,10 @@ take_spectrum_laplacian( //
 
 template <typename Derived, typename Derived2, typename options_t>
 inline Mat
-_nystrom_proj(const std::string mtx_file, // matrix file
+_nystrom_proj(const std::string mtx_file,                 // matrix file
               const Eigen::MatrixBase<Derived> &_weights, // row weights
-              const Eigen::MatrixBase<Derived2> &_proj, // projection matrix
-              const options_t &options // options
+              const Eigen::MatrixBase<Derived2> &_proj,   // projection matrix
+              const options_t &options                    // options
 );
 
 template <typename T>
@@ -295,10 +295,9 @@ nystrom_sample_columns(const std::string mtx_file, const T &options)
 
 template <typename Derived, typename options_t>
 inline std::tuple<Mat, Mat, Mat>
-take_spectrum_nystrom(const std::string mtx_file, // matrix file
+take_spectrum_nystrom(const std::string mtx_file,                 // matrix file
                       const Eigen::MatrixBase<Derived> &_weights, // row weights
-                      const options_t &options // options
-)
+                      const options_t &options)
 {
     const Scalar tau = options.tau;
     const Scalar norm = options.col_norm;
@@ -337,8 +336,8 @@ take_spectrum_nystrom(const std::string mtx_file, // matrix file
         svd.compute(xx_t);
     }
 
-    Mat uu = svd.matrixU(); // nn x rank
-    Mat vv = svd.matrixV(); // feature x rank
+    Mat uu = svd.matrixU();        // nn x rank
+    Mat vv = svd.matrixV();        // feature x rank
     Vec dd = svd.singularValues(); // rank x 1
 
     TLOG("Trained SVD on the matrix X");
@@ -397,10 +396,10 @@ take_spectrum_nystrom(const std::string mtx_file, // matrix file
 
 template <typename Derived, typename Derived2, typename options_t>
 inline Mat
-_nystrom_proj(const std::string mtx_file, // matrix file
+_nystrom_proj(const std::string mtx_file,                 // matrix file
               const Eigen::MatrixBase<Derived> &_weights, // row weights
-              const Eigen::MatrixBase<Derived2> &_proj, // projection matrix
-              const options_t &options // options
+              const Eigen::MatrixBase<Derived2> &_proj,   // projection matrix
+              const options_t &options                    // options
 )
 {
     using _reader_t = eigen_triplet_reader_remapped_cols_t;
@@ -471,7 +470,7 @@ _nystrom_proj(const std::string mtx_file, // matrix file
 }
 
 int
-parse_spectral_options(const int argc, //
+parse_spectral_options(const int argc,     //
                        const char *argv[], //
                        spectral_options_t &options)
 {
@@ -503,28 +502,28 @@ parse_spectral_options(const int argc, //
     const char *const short_opts = "d:m:u:r:l:C:w:S:s:B:LRM:ho:";
 
     const option long_opts[] =
-        { { "mtx", required_argument, nullptr, 'd' }, //
-          { "data", required_argument, nullptr, 'd' }, //
-          { "out", required_argument, nullptr, 'o' }, //
-          { "tau", required_argument, nullptr, 'u' }, //
-          { "rank", required_argument, nullptr, 'r' }, //
-          { "lu_iter", required_argument, nullptr, 'l' }, //
-          { "row_weight", required_argument, nullptr, 'w' }, //
-          { "col_norm", required_argument, nullptr, 'C' }, //
-          { "log_scale", no_argument, nullptr, 'L' }, //
-          { "raw_scale", no_argument, nullptr, 'R' }, //
-          { "rand_seed", required_argument, nullptr, 's' }, //
-          { "initial_sample", required_argument, nullptr, 'S' }, //
-          { "nystrom_batch", required_argument, nullptr, 'B' }, //
+        { { "mtx", required_argument, nullptr, 'd' },             //
+          { "data", required_argument, nullptr, 'd' },            //
+          { "out", required_argument, nullptr, 'o' },             //
+          { "tau", required_argument, nullptr, 'u' },             //
+          { "rank", required_argument, nullptr, 'r' },            //
+          { "lu_iter", required_argument, nullptr, 'l' },         //
+          { "row_weight", required_argument, nullptr, 'w' },      //
+          { "col_norm", required_argument, nullptr, 'C' },        //
+          { "log_scale", no_argument, nullptr, 'L' },             //
+          { "raw_scale", no_argument, nullptr, 'R' },             //
+          { "rand_seed", required_argument, nullptr, 's' },       //
+          { "initial_sample", required_argument, nullptr, 'S' },  //
+          { "nystrom_batch", required_argument, nullptr, 'B' },   //
           { "sampling_method", required_argument, nullptr, 'M' }, //
-          { "help", no_argument, nullptr, 'h' }, //
+          { "help", no_argument, nullptr, 'h' },                  //
           { nullptr, no_argument, nullptr, 0 } };
 
     while (true) {
-        const auto opt = getopt_long(argc, //
+        const auto opt = getopt_long(argc,                      //
                                      const_cast<char **>(argv), //
-                                     short_opts, //
-                                     long_opts, //
+                                     short_opts,                //
+                                     long_opts,                 //
                                      nullptr);
 
         if (-1 == opt)

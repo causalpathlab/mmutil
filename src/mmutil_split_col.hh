@@ -5,7 +5,7 @@
 #define MMUTIL_DISTRIBUTE_COL_HH_
 
 void
-distribute_col(const std::string mtx_file, // matrix market
+distribute_col(const std::string mtx_file,        // matrix market
                const std::string membership_file, // membership
                const std::string output)
 { //
@@ -26,8 +26,8 @@ distribute_col(const std::string mtx_file, // matrix market
     std_vector(collector.Col_N, nnz_col);
 
     std::vector<Str> column_names;
-    std::transform(_column_membership.begin(), //
-                   _column_membership.end(), //
+    std::transform(_column_membership.begin(),       //
+                   _column_membership.end(),         //
                    std::back_inserter(column_names), //
                    [](auto &pp) -> Str { return pp.first; });
 

@@ -21,6 +21,24 @@ _softplus(const T x)
     return fasterlog(one + fasterexp(x));
 }
 
+/////////////////////
+// 1/(1 + exp(-x)) //
+/////////////////////
+
+template <typename T>
+inline T
+_sigmoid(const T x, const T pmin = 0.0, const T pmax = 1.0)
+{
+    const T cutoff = static_cast<T>(10.);
+    const T one = static_cast<T>(1.0);
+
+    if (x < cutoff) {
+        return pmax * fasterexp(x) / (one + fasterexp(x));
+    }
+
+    return pmax / (one + fasterexp(-x)) + pmin;
+}
+
 //////////////////////////
 // log(exp(a) + exp(b)) //
 //////////////////////////

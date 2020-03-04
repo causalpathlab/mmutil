@@ -35,7 +35,7 @@ main(const int argc, const char *argv[])
     // sample triplets
     const Index Nref = RefMat.cols();
 
-    const SpMat C = sample_conv_index(NrefT(Nref), //
+    const SpMat C = sample_conv_index(NrefT(Nref),    //
                                       ConvSampleT(N), //
                                       RefPerSampleT(D));
 

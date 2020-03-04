@@ -48,10 +48,10 @@ private:
     static const int bufferSize = 47 + 256; // size of data buff
     // totals 512 bytes under g++ for igzstream at the end.
 
-    gzFile file; // file handle for compressed file
+    gzFile file;             // file handle for compressed file
     char buffer[bufferSize]; // data buffer
-    char opened; // open/close state of stream
-    int mode; // I/O mode
+    char opened;             // open/close state of stream
+    int mode;                // I/O mode
 
     int flush_buffer();
 
@@ -60,8 +60,8 @@ public:
         : opened(0)
     {
         setp(buffer, buffer + (bufferSize - 1));
-        setg(buffer + 4, // beginning of putback area
-             buffer + 4, // read position
+        setg(buffer + 4,  // beginning of putback area
+             buffer + 4,  // read position
              buffer + 4); // end position
         // ASSERT: both input & output capabilities will not be used
         // together

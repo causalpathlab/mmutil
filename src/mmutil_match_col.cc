@@ -34,11 +34,11 @@ main(const int argc, const char *argv[])
     const SpMat Src = read_eigen_sparse(options.src_mtx).transpose().eval();
     const SpMat Tgt = read_eigen_sparse(options.tgt_mtx).transpose().eval();
 
-    auto knn = search_knn(SrcSparseRowsT(Src), //
-                          TgtSparseRowsT(Tgt), //
-                          KNN(options.knn), //
+    auto knn = search_knn(SrcSparseRowsT(Src),    //
+                          TgtSparseRowsT(Tgt),    //
+                          KNN(options.knn),       //
                           BILINK(options.bilink), //
-                          NNLIST(options.nlist), //
+                          NNLIST(options.nlist),  //
                           out_index);
 
     CHK_ERR_RET(knn, "Failed to search kNN");

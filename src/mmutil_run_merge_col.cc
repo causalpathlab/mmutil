@@ -54,6 +54,10 @@ main(const int argc, const char *argv[])
         col_files.push_back(Str(argv[b + 2]));
     }
 
-    return run_merge_col(glob_row_file, column_threshold, output, mtx_files,
-                         row_files, col_files);
+    return run_merge_col(glob_row_file,
+                         column_threshold,
+                         output,
+                         mtx_files,
+                         row_files,
+                         col_files);
 }

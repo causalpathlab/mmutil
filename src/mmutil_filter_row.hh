@@ -39,8 +39,8 @@ compute_coeffvar_mtx_row(const std::string mtx_file)
 }
 
 void
-filter_row_by_coeffvar(const Index Ntop, //
-                       const std::string mtx_file, //
+filter_row_by_coeffvar(const Index Ntop,               //
+                       const std::string mtx_file,     //
                        const std::string feature_file, //
                        const std::string output)
 {
@@ -83,7 +83,8 @@ filter_row_by_coeffvar(const Index Ntop, //
     std::vector<Index> index_top(Nout);
     std::iota(std::begin(index_top), std::end(index_top), 0);
     Index NNZ = 0;
-    std::for_each(index_top.begin(), index_top.end(), //
+    std::for_each(index_top.begin(),
+                  index_top.end(), //
                   [&](const Index i) {
                       const Index j = order.at(i);
                       out_features[i] = features.at(j);
@@ -95,7 +96,8 @@ filter_row_by_coeffvar(const Index Ntop, //
     std::vector<Index> index_all(max_row);
     std::iota(std::begin(index_all), std::end(index_all), 0);
 
-    std::for_each(index_all.begin(), index_all.end(), //
+    std::for_each(index_all.begin(),
+                  index_all.end(), //
                   [&](const Index i) {
                       const Index j = order.at(i);
                       out_full_scores[i] = row_scores(j);

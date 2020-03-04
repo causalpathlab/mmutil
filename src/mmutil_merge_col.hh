@@ -3,9 +3,9 @@
 #ifndef MMUTIL_MERGE_COL_HH_
 #define MMUTIL_MERGE_COL_HH_
 
-int run_merge_col(const std::string glob_row_file, //
-                  const Index column_threshold, //
-                  const std::string output, //
+int run_merge_col(const std::string glob_row_file,          //
+                  const Index column_threshold,             //
+                  const std::string output,                 //
                   const std::vector<std::string> mtx_files, //
                   const std::vector<std::string> row_files, //
                   const std::vector<std::string> col_files);
@@ -72,7 +72,7 @@ struct glob_triplet_copier_t {
     using index_map_t = std::unordered_map<index_t, index_t>;
 
     explicit glob_triplet_copier_t(
-        ogzstream &_ofs, // output stream
+        ogzstream &_ofs,               // output stream
         const index_map_t &_remap_row, // row mapper
         const index_map_t &_remap_col) // column mapper
         : ofs(_ofs)
@@ -121,7 +121,8 @@ struct glob_triplet_copier_t {
 #include "mmutil_merge_col.hh"
 
 int
-run_merge_col(const std::string glob_row_file, const Index column_threshold,
+run_merge_col(const std::string glob_row_file,
+              const Index column_threshold,
               const std::string output,
               const std::vector<std::string> mtx_files,
               const std::vector<std::string> row_files,
@@ -206,7 +207,8 @@ run_merge_col(const std::string glob_row_file, const Index column_threshold,
             std::vector<Index> local_index(row_names.size()); // original
             std::vector<Index> rel_local_index; // relevant local indexes
             std::iota(local_index.begin(), local_index.end(), 0);
-            std::copy_if(local_index.begin(), local_index.end(),
+            std::copy_if(local_index.begin(),
+                         local_index.end(),
                          std::back_inserter(rel_local_index),
                          [&](const Index i) {
                              return is_glob_row(row_names.at(i));
@@ -214,7 +216,8 @@ run_merge_col(const std::string glob_row_file, const Index column_threshold,
 
             std::vector<index_pair_t> local_glob; // local -> glob mapping
 
-            std::transform(rel_local_index.begin(), rel_local_index.end(),
+            std::transform(rel_local_index.begin(),
+                           rel_local_index.end(),
                            std::back_inserter(local_glob),
                            [&](const Index _local) {
                                const Index _glob =
@@ -253,8 +256,10 @@ run_merge_col(const std::string glob_row_file, const Index column_threshold,
             std::vector<Index> cols(counter.max_col);
             std::iota(std::begin(cols), std::end(cols), 0);
             std::vector<Index> valid_cols;
-            std::copy_if(cols.begin(), cols.end(),
-                         std::back_inserter(valid_cols), [&](const Index j) {
+            std::copy_if(cols.begin(),
+                         cols.end(),
+                         std::back_inserter(valid_cols),
+                         [&](const Index j) {
                              return nnz_col.at(j) >= column_threshold;
                          });
 
@@ -262,7 +267,8 @@ run_merge_col(const std::string glob_row_file, const Index column_threshold,
                           << " (with the nnz >=" << column_threshold << ")");
 
             std::vector<Index> nnz_col_valid;
-            std::transform(valid_cols.begin(), valid_cols.end(),
+            std::transform(valid_cols.begin(),
+                           valid_cols.end(),
                            std::back_inserter(nnz_col_valid),
                            [&](const Index j) { return nnz_col.at(j); });
 
@@ -279,8 +285,10 @@ run_merge_col(const std::string glob_row_file, const Index column_threshold,
             };
 
             std::vector<index_pair_t> local2glob;
-            std::transform(idx.begin(), idx.end(),
-                           std::back_inserter(local2glob), fun_local2glob);
+            std::transform(idx.begin(),
+                           idx.end(),
+                           std::back_inserter(local2glob),
+                           fun_local2glob);
             remap_to_glob_col.insert(local2glob.begin(), local2glob.end());
 
             // auto fun_glob2local = [&](const Index i) {
@@ -306,7 +314,7 @@ run_merge_col(const std::string glob_row_file, const Index column_threshold,
 
     ofs_columns.close();
 
-    TLOG("[" << std::setw(10) << glob_max_row //
+    TLOG("[" << std::setw(10) << glob_max_row                 //
              << " x " << std::setw(10) << glob_max_col << "]" //
              << std::setw(20) << glob_max_elem);
 

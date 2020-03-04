@@ -99,8 +99,8 @@ gzstreambuf::underflow()
 
     // reset buffer pointers
     setg(buffer + (4 - n_putback), // beginning of putback area
-         buffer + 4, // read position
-         buffer + 4 + num); // end of buffer
+         buffer + 4,               // read position
+         buffer + 4 + num);        // end of buffer
 
     // return next character
     return *reinterpret_cast<unsigned char *>(gptr());

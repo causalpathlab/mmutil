@@ -28,7 +28,7 @@ struct RefPerSampleT {
 };
 
 SpMat
-sample_conv_index(const NrefT _Nref, //
+sample_conv_index(const NrefT _Nref,    //
                   const ConvSampleT _N, //
                   const RefPerSampleT _D)
 {

@@ -11,11 +11,14 @@ bin_PROGRAMS = mmutil_merge_col \
     mmutil_spectral_col \
     mmutil_match_col \
     mmutil_annotate_col \
+    mmutil_embed_annot \
     mmutil_propagate_membership \
     mmutil_spectral_match_col \
     mmutil_spectral_cluster_col
 
-math = svd.hh
+math = \
+    svd.hh \
+    inference/adam.hh
 
 rbm = mmutil_rbm.hh \
     inference/sampler.hh \
@@ -72,6 +75,15 @@ mmutil_annotate_col_SOURCES = mmutil_annotate_col.hh \
 	mmutil_normalize.hh \
 	mmutil_spectral.hh \
 	mmutil_annotate_col.cc \
+        $(common)
+
+mmutil_embed_annot_SOURCES = \
+	mmutil_normalize.hh \
+	mmutil_spectral.hh \
+	mmutil_embedding.hh \
+	mmutil_annotate_embedding.hh \
+	mmutil_annotate_embedding.cc \
+	$(math) \
         $(common)
 
 #####################

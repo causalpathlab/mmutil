@@ -20,7 +20,7 @@ create_clustering_data(const cluster_options_t &options)
 
     Mat U;
     std::tie(U, ignore, ignore) = take_spectrum_nystrom(options.mtx, //
-                                                        weights, //
+                                                        weights,     //
                                                         options);
 
     Mat Data = standardize(U).transpose().eval();
@@ -46,7 +46,9 @@ create_argmax_pair(const Eigen::MatrixBase<Derived> &Z,
     std::vector<std::tuple<S, Index>> membership;
     membership.reserve(Z.cols());
     std::iota(index.begin(), index.end(), 0);
-    std::transform(index.begin(), index.end(), std::back_inserter(membership),
+    std::transform(index.begin(),
+                   index.end(),
+                   std::back_inserter(membership),
                    _argmax);
 
     return membership;
@@ -69,7 +71,9 @@ create_argmax_pair(const std::vector<Index> &argmax,
     std::vector<std::tuple<S, Index>> ret;
     ret.reserve(N);
     std::iota(index.begin(), index.end(), 0);
-    std::transform(index.begin(), index.end(), std::back_inserter(ret),
+    std::transform(index.begin(),
+                   index.end(),
+                   std::back_inserter(ret),
                    _argmax);
 
     return ret;
@@ -91,7 +95,9 @@ create_argmax_vector(const Eigen::MatrixBase<Derived> &Z)
 
     std::vector<Index> index(N);
     std::iota(index.begin(), index.end(), 0);
-    std::transform(index.begin(), index.end(), std::back_inserter(ret),
+    std::transform(index.begin(),
+                   index.end(),
+                   std::back_inserter(ret),
                    _argmax);
 
     return ret;
@@ -146,17 +152,6 @@ run_mixture_model(const Mat &Data, const cluster_options_t &options)
         write_data_file(options.out + ".data.gz", Data);
     }
 
-    //////////////////////////////////////
-    // output low-dimensional embedding //
-    //////////////////////////////////////
-
-    TLOG("Embedding the clustering results");
-    vector<Index> argmax = create_argmax_vector(Z);
-
-    Mat xx = embed_by_centroid(Data, argmax, options);
-
-    write_data_file(options.out + ".embedded.gz", xx);
-
     TLOG("Done fitting a mixture model");
 }
 
@@ -171,7 +166,7 @@ run_dbscan(const Mat &Data, const cluster_options_t &options)
     vector<vector<Index>> membership;
     estimate_dbscan_of_columns(Data, membership, options);
 
-    // cluster membership and embedding results
+    // cluster membership results
     Index l = 0;
     for (const vector<Index> &z : membership) {
         const Index k_max = *std::max_element(z.begin(), z.end()) + 1;
@@ -194,9 +189,6 @@ run_dbscan(const Mat &Data, const cluster_options_t &options)
             write_tuple_file(output + ".argmax.gz", argmax);
         }
 
-        Mat xx = embed_by_centroid(Data, z, options);
-
-        write_data_file(output + ".embedded.gz", xx);
     }
 }
 

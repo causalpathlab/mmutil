@@ -30,8 +30,8 @@ const char *_take_svd_desc =
     "`out['d']` : D matrix/vector \n"
     "\n";
 
-static PyObject *mmutil_take_svd(PyObject *self, PyObject *args,
-                                 PyObject *keywords);
+static PyObject *
+mmutil_take_svd(PyObject *self, PyObject *args, PyObject *keywords);
 
 ////////////////////
 // implementation //
@@ -48,11 +48,11 @@ mmutil_take_svd(PyObject *self, PyObject *args, PyObject *keywords)
     int iterations = 5;
 
     if (!PyArg_ParseTupleAndKeywords(args,
-                                     keywords, // keywords
-                                     "si|fi", // format
+                                     keywords,                    // keywords
+                                     "si|fi",                     // format
                                      const_cast<char **>(kwlist), //
-                                     &mtx_file, // filename
-                                     &rank, //
+                                     &mtx_file,                   // filename
+                                     &rank,                       //
                                      &tau_scale, // regularization
                                      &iterations // iteration
                                      )) {

@@ -64,10 +64,10 @@ main(const int argc, const char *argv[])
                                                    << u.cols());
 
     u_src.transposeInPlace(); // Column-major
-    u.transposeInPlace(); //
+    u.transposeInPlace();     //
 
     u_src.colwise().normalize(); // Normalize for cosine distance
-    u.colwise().normalize(); //
+    u.colwise().normalize();     //
 
     std::vector<std::tuple<Index, Index, Scalar>> out_index;
 
@@ -75,9 +75,9 @@ main(const int argc, const char *argv[])
 
     auto knn = search_knn(SrcDataT(u_src.data(), u_src.rows(), u_src.cols()),
                           TgtDataT(u.data(), u.rows(), u.cols()),
-                          KNN(options.knn), //
+                          KNN(options.knn),       //
                           BILINK(options.bilink), //
-                          NNLIST(options.nlist), //
+                          NNLIST(options.nlist),  //
                           out_index);
 
     CHK_ERR_RET(knn, "Failed to search kNN");

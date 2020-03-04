@@ -9,9 +9,9 @@
 #define MMUTIL_RANDOM_COL_HH_
 
 void
-copy_random_columns(const Index Nsample, //
-                    std::string mtx_file, //
-                    std::string column_file, //
+copy_random_columns(const Index Nsample,         //
+                    std::string mtx_file,        //
+                    std::string column_file,     //
                     std::string output_mtx_file, //
                     std::string output_column_file)
 {
@@ -35,7 +35,7 @@ copy_random_columns(const Index Nsample, //
     std::vector<std::string> out_column_names;
     Index NNZ = 0;
 
-    for (Index new_index = 0; //
+    for (Index new_index = 0;                                               //
          new_index < std::min(static_cast<Index>(index_r.size()), Nsample); //
          ++new_index) {
         const Index old_index = index_r.at(new_index);

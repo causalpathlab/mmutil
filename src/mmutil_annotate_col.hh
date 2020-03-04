@@ -10,6 +10,7 @@
 #include "io.hh"
 #include "mmutil.hh"
 #include "mmutil_normalize.hh"
+#include "mmutil_embedding.hh"
 #include "mmutil_spectral.hh"
 #include "mmutil_stat.hh"
 #include "utils/progress.hh"
@@ -18,6 +19,9 @@
 #define MMUTIL_ANNOTATE_COL_
 
 struct annotate_options_t;
+struct annotate_model_t;
+
+int run_annotation(const annotate_options_t &options);
 
 template <typename T>
 std::tuple<SpMat, std::vector<std::string>, std::vector<std::string>>
@@ -28,6 +32,12 @@ inline std::tuple<std::vector<Index>, std::vector<Index>>
 select_rows_columns(const Eigen::SparseMatrixBase<Derived> &ltot,
                     const row_col_stat_collector_t &stat,
                     const T &options);
+
+template <typename Derived, typename T>
+void
+train_marker_genes(annotate_model_t &annot,
+                   const Eigen::MatrixBase<Derived> &_X, // expression matrix
+                   const T &options);
 
 /////////////////////////////
 // select rows and columns //
@@ -108,9 +118,9 @@ select_rows_columns(const Eigen::SparseMatrixBase<Derived> &ltot,
 // Refine annotation vocabulary //
 //////////////////////////////////
 
-struct annot_model_t {
+struct annotate_model_t {
 
-    explicit annot_model_t(const Mat lab)
+    explicit annotate_model_t(const Mat lab)
         : L(lab)
         , nmarker(L.rows())
         , ntype(L.cols())
@@ -121,11 +131,13 @@ struct annot_model_t {
         , log_normalizer(ntype)
         , score(ntype)
         , kappa_init(1.0)
+        , kappa_max(std::max(fastlog(static_cast<Scalar>(nmarker)), kappa_init))
     {
         // initialization
         kappa.setConstant(kappa_init);
         log_normalizer.setZero();
         mu = L;
+        indep_kappa = false;
     }
 
     template <typename Derived, typename Derived2>
@@ -147,16 +159,24 @@ struct annot_model_t {
         // kappa = -------------------
         //          1 - rbar^2
 
-        // We need to share this kappa estimate across all the types
-        // since some of the types might be under-represented.
+        const Scalar d = static_cast<Scalar>(nmarker);
+
+#ifdef DEBUG
+        ASSERT(!indep_kappa, "Unstable! Share kappa!");
+#endif
+
+        // We may need to share this kappa estimate across all the
+        // types since some of the types might be
+        // under-represented.
 
         const Scalar r = Stat.rowwise().sum().norm() / nsize.sum();
         rbar.setConstant(r);
 
-        const Scalar d = static_cast<Scalar>(nmarker);
-        const Scalar eps = 1e-8;
+        Scalar _kappa = r * (d - r * r) / (1.0 - r * r);
 
-        const Scalar _kappa = r * (d - r * r) / (1.0 - r * r);
+        if (_kappa > kappa_max) {
+            _kappa = kappa_max;
+        }
 
         kappa.setConstant(_kappa);
 
@@ -214,20 +234,23 @@ struct annot_model_t {
     const Index nmarker;
     const Index ntype;
 
-    Mat mu; // refined marker x type matrix
-    Mat mu_null; // permuted marker x type matrix
-    Vec kappa; // von Mises-Fisher concentration
-    Vec rbar; // temporary
+    Mat mu;             // refined marker x type matrix
+    Mat mu_null;        // permuted marker x type matrix
+    Vec kappa;          // von Mises-Fisher concentration
+    Vec rbar;           // temporary
     Vec log_normalizer; // log-normalizer
-    Vec score; // temporary score
+    Vec score;          // temporary score
+
+    bool indep_kappa;
 
     const Scalar kappa_init;
+    const Scalar kappa_max;
 };
 
 template <typename Derived, typename T>
 void
-train_marker_genes(annot_model_t &annot,
-                   const Eigen::MatrixBase<Derived> &_X, // expression matrix
+train_marker_genes(annotate_model_t &annot,
+                   const Eigen::MatrixBase<Derived> &_X,
                    const T &options)
 {
 
@@ -235,6 +258,12 @@ train_marker_genes(annot_model_t &annot,
     const Derived &X = _X.derived();
     const Index M = L.rows();
     const Index K = L.cols();
+
+    if (options.indep_kappa) {
+        annot.indep_kappa = true;
+        if (options.verbose)
+            TLOG("Separate kappa ");
+    }
 
     ASSERT(M > 1, "Must have more than two rows");
 
@@ -270,7 +299,7 @@ train_marker_genes(annot_model_t &annot,
 
     const Scalar pseudo = 1.0;
 
-    Mat Stat(M, K); // feature x label
+    Mat Stat(M, K);           // feature x label
     Stat.setConstant(pseudo); // sum x(g,j) * z(j, k)
 
     Mat scoreMat = mu.transpose() * xx;
@@ -313,15 +342,25 @@ train_marker_genes(annot_model_t &annot,
         std::shuffle(indexes.begin(), indexes.end(), rgen);
 
         for (Index j : indexes) {
+
             xj = xx.col(j);
 
             const Index k_prev = membership.at(j);
+
+#ifdef DEBUG
+            ASSERT(k_prev >= 0 && k_prev < K, "k_prev in [0, K)");
+#endif
 
             // Index k;
             // score += sj.maxCoeff(&k);
 
             sj = annot.log_score(xj);
             const Index k_now = sampler_k(sj);
+
+#ifdef DEBUG
+            ASSERT(k_now >= 0 && k_now < K, "k_now in [0, K)");
+#endif
+
             score += sj(k_now);
 
             if (k_now != k_prev) {
@@ -346,7 +385,11 @@ train_marker_genes(annot_model_t &annot,
         score = score / static_cast<Scalar>(indexes.size());
         score_trace(iter) = score;
 
-        Scalar diff = std::abs(score_trace(iter - 1) - score_trace(iter));
+        Scalar diff = std::abs(score_trace(iter));
+
+        if (iter > 0) {
+            diff = std::abs(score_trace(iter - 1) - score_trace(iter));
+        }
 
         prog.update();
 
@@ -480,7 +523,9 @@ struct annotate_options_t {
 
         balance_marker_size = false;
         unconstrained_update = false;
+
         verbose = false;
+        indep_kappa = false;
     }
 
     Str mtx;
@@ -519,12 +564,14 @@ struct annotate_options_t {
 
     bool balance_marker_size;
     bool unconstrained_update;
+
+    bool indep_kappa;
     bool verbose;
 };
 
 template <typename T>
 int
-parse_annotate_options(const int argc, //
+parse_annotate_options(const int argc,     //
                        const char *argv[], //
                        T &options)
 {
@@ -539,6 +586,7 @@ parse_annotate_options(const int argc, //
         "--ann (-a)             : row annotation file\n"
         "--out (-o)             : Output file header\n"
         "\n"
+        "--indep_kappa (-p)     : Independent concentration (default: false)\n"
         "--unconstrained (-d)   : Unconstrained dictionary (default: false)\n"
         "--log_scale (-L)       : Data in a log-scale (default: false)\n"
         "--raw_scale (-R)       : Data in a raw-scale (default: true)\n"
@@ -549,49 +597,50 @@ parse_annotate_options(const int argc, //
         "MEAN, UNIFORM\n"
         "\n"
         "--em_iter (-i)         : EM iteration (default: 100)\n"
-        "--em_tol (-e)          : EM convergence criterion (default: 1e-4)\n"
+        "--em_tol (-t)          : EM convergence criterion (default: 1e-4)\n"
+        "\n"
+        "--verbose (-v)         : Set verbose (default: false)\n"
+        "--balance_markers (-b) : Balance maker size (default: false)\n"
         "\n"
         "--tau (-u)             : Regularization parameter (default: tau = 1)\n"
         "--rank (-r)            : The maximal rank of SVD (default: rank = 50)\n"
         "--iter (-l)            : # of LU iterations (default: iter = 5)\n"
-        "\n"
-        "--verbose (-v)         : Set verbose (default: false)\n"
-        "--balance_markers (-k) : Balance maker size (default: false)\n"
         "\n";
 
-    const char *const short_opts = "m:c:f:a:o:I:B:M:LRi:e:hkd:u:r:l:v";
+    const char *const short_opts = "m:c:f:a:o:I:B:M:LRi:t:hbd:u:r:l:kv";
 
     const option long_opts[] =
-        { { "mtx", required_argument, nullptr, 'm' }, //
-          { "data", required_argument, nullptr, 'm' }, //
-          { "col", required_argument, nullptr, 'c' }, //
-          { "row", required_argument, nullptr, 'f' }, //
-          { "feature", required_argument, nullptr, 'f' }, //
-          { "ann", required_argument, nullptr, 'a' }, //
-          { "out", required_argument, nullptr, 'o' }, //
-          { "log_scale", no_argument, nullptr, 'L' }, //
-          { "raw_scale", no_argument, nullptr, 'R' }, //
-          { "initial_sample", required_argument, nullptr, 'I' }, //
-          { "batch_size", required_argument, nullptr, 'B' }, //
+        { { "mtx", required_argument, nullptr, 'm' },             //
+          { "data", required_argument, nullptr, 'm' },            //
+          { "col", required_argument, nullptr, 'c' },             //
+          { "row", required_argument, nullptr, 'f' },             //
+          { "feature", required_argument, nullptr, 'f' },         //
+          { "ann", required_argument, nullptr, 'a' },             //
+          { "out", required_argument, nullptr, 'o' },             //
+          { "log_scale", no_argument, nullptr, 'L' },             //
+          { "raw_scale", no_argument, nullptr, 'R' },             //
+          { "initial_sample", required_argument, nullptr, 'I' },  //
+          { "batch_size", required_argument, nullptr, 'B' },      //
           { "sampling_method", required_argument, nullptr, 'M' }, //
-          { "em_iter", required_argument, nullptr, 'i' }, //
-          { "em_tol", required_argument, nullptr, 'e' }, //
-          { "help", no_argument, nullptr, 'h' }, //
-          { "balance_marker", no_argument, nullptr, 'k' }, //
-          { "balance_markers", no_argument, nullptr, 'k' }, //
-          { "unconstrained_update", no_argument, nullptr, 'd' }, //
-          { "unconstrained", no_argument, nullptr, 'd' }, //
-          { "tau", required_argument, nullptr, 'u' }, //
-          { "rank", required_argument, nullptr, 'r' }, //
-          { "lu_iter", required_argument, nullptr, 'l' }, //
-          { "verbose", no_argument, nullptr, 'v' }, //
+          { "em_iter", required_argument, nullptr, 'i' },         //
+          { "em_tol", required_argument, nullptr, 'e' },          //
+          { "help", no_argument, nullptr, 'h' },                  //
+          { "balance_marker", no_argument, nullptr, 'b' },        //
+          { "balance_markers", no_argument, nullptr, 'b' },       //
+          { "unconstrained_update", no_argument, nullptr, 'd' },  //
+          { "unconstrained", no_argument, nullptr, 'd' },         //
+          { "tau", required_argument, nullptr, 'u' },             //
+          { "rank", required_argument, nullptr, 'r' },            //
+          { "lu_iter", required_argument, nullptr, 'l' },         //
+          { "indep_kappa", required_argument, nullptr, 'p' },     //
+          { "verbose", no_argument, nullptr, 'v' },               //
           { nullptr, no_argument, nullptr, 0 } };
 
     while (true) {
-        const auto opt = getopt_long(argc, //
+        const auto opt = getopt_long(argc,                      //
                                      const_cast<char **>(argv), //
-                                     short_opts, //
-                                     long_opts, //
+                                     short_opts,                //
+                                     long_opts,                 //
                                      nullptr);
 
         if (-1 == opt)
@@ -622,7 +671,7 @@ parse_annotate_options(const int argc, //
             options.max_em_iter = std::stoi(optarg);
             break;
 
-        case 'e':
+        case 't':
             options.em_tol = std::stof(optarg);
             break;
 
@@ -646,7 +695,7 @@ parse_annotate_options(const int argc, //
         case 'v': // -v or --verbose
             options.verbose = true;
             break;
-        case 'k': // -k or --balance_marker
+        case 'b': // -k or --balance_marker
             options.balance_marker_size = true;
             break;
         case 'd':
@@ -660,6 +709,9 @@ parse_annotate_options(const int argc, //
             break;
         case 'l':
             options.lu_iter = std::stoi(optarg);
+            break;
+        case 'k':
+            options.indep_kappa = true;
             break;
         case 'h': // -h or --help
         case '?': // Unrecognized option
@@ -675,6 +727,183 @@ parse_annotate_options(const int argc, //
     ERR_RET(!file_exists(options.row), "No ROW data file");
     ERR_RET(!file_exists(options.ann), "No ANN data file");
 
+    return EXIT_SUCCESS;
+}
+
+int
+run_annotation(const annotate_options_t &options)
+{
+    //////////////////////////////////////////////////////////
+    // Read the annotation information to construct initial //
+    // type-specific marker gene profiles                   //
+    //////////////////////////////////////////////////////////
+
+    SpMat Ltot; // gene x label
+    std::vector<std::string> rows;
+    std::vector<std::string> labels;
+
+    std::tie(Ltot, rows, labels) = read_annotation_matched(options);
+
+    std::vector<std::string> columns;
+    CHECK(read_vector_file(options.col, columns));
+
+    ///////////////////////////////////////////////
+    // step 1 : Initial sampling for pretraining //
+    ///////////////////////////////////////////////
+
+    TLOG("Collecting row- and column-wise statistics");
+
+    row_col_stat_collector_t stat;
+    visit_matrix_market_file(options.mtx, stat);
+    const Index N = stat.max_col;
+
+    ASSERT(stat.max_col <= columns.size(), "Needs column names");
+
+    std::vector<Index> subrows;
+    std::vector<Index> subcols;
+
+    std::tie(subrows, subcols) = select_rows_columns(Ltot, stat, options);
+
+    TLOG("Training data [" << subrows.size() << " x " << subcols.size()
+                           << "] from [" << stat.max_row << " x "
+                           << stat.max_col << "]");
+
+    SpMat X0 =
+        read_eigen_sparse_subset_rows_cols(options.mtx, subrows, subcols);
+    Mat L = Mat(row_sub(Ltot, subrows));
+    Mat X = Mat(X0);
+
+    TLOG("Preprocessing X [" << X.rows() << " x " << X.cols() << "]");
+
+    auto log2_op = [](const Scalar &x) -> Scalar { return std::log2(1.0 + x); };
+
+    if (options.log_scale) {
+        X = X.unaryExpr(log2_op);
+    }
+
+    normalize_columns(X);
+
+    //////////////////////////////////////////
+    // step2 : Train marker gene parameters //
+    //////////////////////////////////////////
+
+    TLOG("Fine-tuning marker gene parameters");
+
+    annotate_model_t annot(L);
+
+    train_marker_genes(annot, X, options);
+
+    //////////////////////////////////////////////////
+    // Estimate the projection matrix for embedding //
+    //////////////////////////////////////////////////
+
+    auto safe_inverse = [](const Scalar &x) -> Scalar {
+        return 1.0 / static_cast<Scalar>(x + 1e-8);
+    };
+
+    Vec ww = annot.mu.rowwise().maxCoeff().unaryExpr(safe_inverse);
+
+    const Index rank = std::min(options.rank, L.rows());
+    RandomizedSVD<Mat> svd(rank, options.lu_iter);
+
+    Mat proj;
+    {
+        Mat xx_t = make_normalized_laplacian(X0,
+                                             ww,
+                                             options.tau,
+                                             0,
+                                             options.log_scale);
+        svd.compute(xx_t);
+
+        Mat uu = svd.matrixU();        // nn x rank
+        Mat vv = svd.matrixV();        // feature x rank
+        Vec dd = svd.singularValues(); // rank x 1
+
+        proj = vv * dd.cwiseInverse().asDiagonal(); // feature x rank
+    }
+
+    /////////////////////////////////////////////////////
+    // step3: Assign labels to all the cells (columns) //
+    /////////////////////////////////////////////////////
+
+    const Index batch_size = options.batch_size;
+
+    using out_tup = std::tuple<std::string, std::string, Scalar>;
+    std::vector<out_tup> output;
+
+    output.reserve(N);
+    Vec zi(annot.ntype);
+    Mat Pr(annot.ntype, N);
+    Mat Ut(N, rank);
+    Ut.setZero();
+
+    for (Index lb = 0; lb < N; lb += batch_size) {
+        const Index ub = std::min(N, batch_size + lb);
+        std::vector<Index> subcols_b(ub - lb);
+
+        std::iota(subcols_b.begin(), subcols_b.end(), lb);
+
+        TLOG("On the batch [" << lb << ", " << ub << ")");
+
+        SpMat x0_b =
+            read_eigen_sparse_subset_rows_cols(options.mtx, subrows, subcols_b);
+
+        Mat xx_t = make_normalized_laplacian(x0_b,
+                                             ww,
+                                             options.tau,
+                                             0,
+                                             options.log_scale);
+
+        Mat xx_b = Mat(x0_b);
+        Mat _col_norm = Mat::Ones(1, xx_b.rows()) * xx_b.cwiseProduct(xx_b);
+        _col_norm.transposeInPlace();
+
+        if (options.log_scale) {
+            xx_b = xx_b.unaryExpr(log2_op);
+        }
+
+        normalize_columns(xx_b);
+
+        for (Index j = 0; j < xx_b.cols(); ++j) {
+            const Index i = subcols_b.at(j);
+
+            if (_col_norm(j) < 1e-4) {
+                if (options.verbose)
+                    WLOG("Ignore this zero-norm column: " << columns.at(i));
+                continue;
+            }
+
+            const Vec &_score = annot.log_score(xx_b.col(j));
+            normalized_exp(_score, zi);
+            Index argmax;
+            _score.maxCoeff(&argmax);
+            output.emplace_back(columns.at(i), labels.at(argmax), zi(argmax));
+
+            Pr.col(i) = zi;
+        }
+
+        for (Index j = 0; j < xx_b.cols(); ++j) {
+            const Index i = subcols_b.at(j);
+            Ut.row(i) += xx_t.row(j) * proj;
+        }
+    }
+
+    Pr.transposeInPlace();
+
+    std::vector<std::string> markers;
+    markers.reserve(subrows.size());
+    std::for_each(subrows.begin(), subrows.end(), [&](const auto r) {
+        markers.emplace_back(rows.at(r));
+    });
+
+    write_tuple_file(options.out + ".annot.gz", output);
+    write_data_file(options.out + ".annot_prob.gz", Pr);
+    write_data_file(options.out + ".marker_profile.gz", annot.mu);
+    write_data_file(options.out + ".marker_spectral.gz", Ut);
+    write_vector_file(options.out + ".marker_names.gz", markers);
+    write_vector_file(options.out + ".label_names.gz", labels);
+
+    TLOG("Done");
     return EXIT_SUCCESS;
 }
 

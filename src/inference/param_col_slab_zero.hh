@@ -13,7 +13,8 @@ struct param_col_slab_zero_t {
     using Dense = Eigen::Matrix<scalar_t, Eigen::Dynamic, Eigen::Dynamic>;
 
     template <typename Opt>
-    explicit param_col_slab_zero_t(const index_t n1, const index_t n2,
+    explicit param_col_slab_zero_t(const index_t n1,
+                                   const index_t n2,
                                    const Opt &opt)
         : nrow(n1)
         , ncol(n2)
@@ -311,7 +312,10 @@ param_impl_var(Parameter &P, const param_tag_col_slab_zero)
 // evaluate stochastic gradient descent step
 template <typename Parameter, typename M1, typename M2, typename M3>
 void
-param_impl_eval_sgd(Parameter &P, const M1 &G1, const M2 &G2, const M3 &Nobs,
+param_impl_eval_sgd(Parameter &P,
+                    const M1 &G1,
+                    const M2 &G2,
+                    const M3 &Nobs,
                     const param_tag_col_slab_zero)
 {
     ////////////////////////////////
@@ -332,8 +336,11 @@ param_impl_eval_sgd(Parameter &P, const M1 &G1, const M2 &G2, const M3 &Nobs,
 
 template <typename Parameter, typename M1, typename M2, typename M3>
 void
-hyperparam_impl_eval_sgd(Parameter &P, const M1 &G1, const M2 &G2,
-                         const M3 &Nobs, const param_tag_col_slab_zero)
+hyperparam_impl_eval_sgd(Parameter &P,
+                         const M1 &G1,
+                         const M2 &G2,
+                         const M3 &Nobs,
+                         const param_tag_col_slab_zero)
 {
     using scalar_t = typename Parameter::scalar_t;
     const scalar_t ntot = Nobs.sum();
@@ -363,7 +370,8 @@ hyperparam_impl_eval_sgd(Parameter &P, const M1 &G1, const M2 &G2,
 // update parameters by calculated stochastic gradient
 template <typename Parameter, typename Scalar>
 void
-param_impl_update_sgd(Parameter &P, const Scalar rate,
+param_impl_update_sgd(Parameter &P,
+                      const Scalar rate,
                       const param_tag_col_slab_zero)
 {
     const typename Parameter::scalar_t denom = P.rows();
@@ -377,7 +385,8 @@ param_impl_update_sgd(Parameter &P, const Scalar rate,
 
 template <typename Parameter, typename Scalar>
 void
-hyperparam_impl_update_sgd(Parameter &P, const Scalar rate,
+hyperparam_impl_update_sgd(Parameter &P,
+                           const Scalar rate,
                            const param_tag_col_slab_zero)
 {
     P.tau_aux += update_adam(P.adam_tau_aux, P.grad_tau_aux) * rate;
@@ -386,7 +395,9 @@ hyperparam_impl_update_sgd(Parameter &P, const Scalar rate,
 
 template <typename Parameter>
 void
-param_impl_write(Parameter &P, const std::string hdr, const std::string gz,
+param_impl_write(Parameter &P,
+                 const std::string hdr,
+                 const std::string gz,
                  const param_tag_col_slab_zero)
 {
     write_data_file((hdr + ".theta" + gz), P.beta);

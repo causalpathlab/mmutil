@@ -7,8 +7,8 @@
 #ifndef UTIL_GRAPH_HH_
 #define UTIL_GRAPH_HH_
 
-using UGraph = boost::adjacency_list<boost::listS, //
-                                     boost::vecS, //
+using UGraph = boost::adjacency_list<boost::listS,       //
+                                     boost::vecS,        //
                                      boost::undirectedS, //
                                      boost::no_property, //
                                      boost::no_property>;

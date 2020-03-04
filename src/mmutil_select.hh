@@ -5,8 +5,8 @@
 #define MMUTIL_SELECT_HH_
 
 void
-copy_selected_columns(const std::string mtx_file, //
-                      const std::string full_column_file, //
+copy_selected_columns(const std::string mtx_file,             //
+                      const std::string full_column_file,     //
                       const std::string selected_column_file, //
                       const std::string output)
 {
@@ -33,7 +33,9 @@ copy_selected_columns(const std::string mtx_file, //
     auto _found = [&](const Index j) {
         return selected.count(full_column_names.at(j)) > 0;
     };
-    std::copy_if(cols.begin(), cols.end(), std::back_inserter(valid_cols),
+    std::copy_if(cols.begin(),
+                 cols.end(),
+                 std::back_inserter(valid_cols),
                  _found);
 
     TLOG("Found " << valid_cols.size() << " columns");

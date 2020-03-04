@@ -96,7 +96,8 @@ using DenseDeriv = Eigen::MatrixBase<Derived>;
 // dispatch functions for SGD evaluation
 template <typename P, typename D1, typename D2, typename D3>
 void
-param_eval_sgd(P &p, const Eigen::MatrixBase<D1> &g1, //
+param_eval_sgd(P &p,
+               const Eigen::MatrixBase<D1> &g1, //
                const Eigen::MatrixBase<D2> &g2, //
                const Eigen::MatrixBase<D3> &nobs)
 {
@@ -105,7 +106,8 @@ param_eval_sgd(P &p, const Eigen::MatrixBase<D1> &g1, //
 
 template <typename P, typename D1, typename D2, typename D3>
 void
-param_eval_sgd(P &p, const Eigen::SparseMatrixBase<D1> &g1, //
+param_eval_sgd(P &p,
+               const Eigen::SparseMatrixBase<D1> &g1, //
                const Eigen::SparseMatrixBase<D2> &g2, //
                const Eigen::SparseMatrixBase<D3> &nobs)
 {
@@ -115,24 +117,31 @@ param_eval_sgd(P &p, const Eigen::SparseMatrixBase<D1> &g1, //
 // check to match sparsity of the parameter and gradient
 template <typename Parameter, typename Deriv1, typename Deriv2, typename Deriv3>
 void
-param_safe_eval_sgd(Parameter &P, const Eigen::MatrixBase<Deriv1> &G1, //
-                    const Eigen::MatrixBase<Deriv2> &G2, //
+param_safe_eval_sgd(Parameter &P,
+                    const Eigen::MatrixBase<Deriv1> &G1,   //
+                    const Eigen::MatrixBase<Deriv2> &G2,   //
                     const Eigen::MatrixBase<Deriv3> &Nobs, //
                     const param_tag_dense)
 {
-    param_impl_eval_sgd(P, G1.derived(), G2.derived(), Nobs.derived(),
+    param_impl_eval_sgd(P,
+                        G1.derived(),
+                        G2.derived(),
+                        Nobs.derived(),
                         sgd_tag<Parameter>());
 }
 
 template <typename Parameter, typename Deriv1, typename Deriv2, typename Deriv3>
 void
 param_safe_eval_sgd(Parameter &P,
-                    const Eigen::SparseMatrixBase<Deriv1> &G1, //
-                    const Eigen::SparseMatrixBase<Deriv2> &G2, //
+                    const Eigen::SparseMatrixBase<Deriv1> &G1,   //
+                    const Eigen::SparseMatrixBase<Deriv2> &G2,   //
                     const Eigen::SparseMatrixBase<Deriv3> &Nobs, //
                     const param_tag_sparse)
 {
-    param_impl_eval_sgd(P, G1.derived(), G2.derived(), Nobs.derived(),
+    param_impl_eval_sgd(P,
+                        G1.derived(),
+                        G2.derived(),
+                        Nobs.derived(),
                         sgd_tag<Parameter>());
 }
 
@@ -140,7 +149,8 @@ param_safe_eval_sgd(Parameter &P,
 // dispatch functions for SGD evaluation
 template <typename P, typename D1, typename D2, typename D3>
 void
-hyperparam_eval_sgd(P &p, const Eigen::MatrixBase<D1> &g1, //
+hyperparam_eval_sgd(P &p,
+                    const Eigen::MatrixBase<D1> &g1, //
                     const Eigen::MatrixBase<D2> &g2, //
                     const Eigen::MatrixBase<D3> &nobs)
 {
@@ -149,7 +159,8 @@ hyperparam_eval_sgd(P &p, const Eigen::MatrixBase<D1> &g1, //
 
 template <typename P, typename D1, typename D2, typename D3>
 void
-hyperparam_eval_sgd(P &p, const Eigen::SparseMatrixBase<D1> &g1, //
+hyperparam_eval_sgd(P &p,
+                    const Eigen::SparseMatrixBase<D1> &g1, //
                     const Eigen::SparseMatrixBase<D2> &g2, //
                     const Eigen::SparseMatrixBase<D3> &nobs)
 {
@@ -165,19 +176,25 @@ hyperparam_safe_eval_sgd(Parameter &P,
                          const Eigen::MatrixBase<Deriv3> &Nobs,
                          const param_tag_dense)
 {
-    hyperparam_impl_eval_sgd(P, G1.derived(), G2.derived(), Nobs.derived(),
+    hyperparam_impl_eval_sgd(P,
+                             G1.derived(),
+                             G2.derived(),
+                             Nobs.derived(),
                              sgd_tag<Parameter>());
 }
 
 template <typename Parameter, typename Deriv1, typename Deriv2, typename Deriv3>
 void
 hyperparam_safe_eval_sgd(Parameter &P,
-                         const Eigen::SparseMatrixBase<Deriv1> &G1, //
-                         const Eigen::SparseMatrixBase<Deriv2> &G2, //
+                         const Eigen::SparseMatrixBase<Deriv1> &G1,   //
+                         const Eigen::SparseMatrixBase<Deriv2> &G2,   //
                          const Eigen::SparseMatrixBase<Deriv3> &Nobs, //
                          const param_tag_sparse)
 {
-    hyperparam_impl_eval_sgd(P, G1.derived(), G2.derived(), Nobs.derived(),
+    hyperparam_impl_eval_sgd(P,
+                             G1.derived(),
+                             G2.derived(),
+                             Nobs.derived(),
                              sgd_tag<Parameter>());
 }
 

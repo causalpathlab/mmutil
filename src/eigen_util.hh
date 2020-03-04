@@ -97,13 +97,16 @@ eigen_argsort_descending(const Vec &data)
     using Index = typename Vec::Index;
     std::vector<Index> index(data.size());
     std::iota(std::begin(index), std::end(index), 0);
-    std::sort(std::begin(index), std::end(index),
-              [&](Index lhs, Index rhs) { return data(lhs) > data(rhs); });
+    std::sort(std::begin(index), std::end(index), [&](Index lhs, Index rhs) {
+        return data(lhs) > data(rhs);
+    });
     return index;
 }
 
 template <typename Derived>
-inline Eigen::Matrix<typename Derived::Scalar, Eigen::Dynamic, Eigen::Dynamic,
+inline Eigen::Matrix<typename Derived::Scalar,
+                     Eigen::Dynamic,
+                     Eigen::Dynamic,
                      Eigen::ColMajor>
 row_score_degree(const Eigen::SparseMatrixBase<Derived> &_xx)
 {
@@ -117,7 +120,9 @@ row_score_degree(const Eigen::SparseMatrixBase<Derived> &_xx)
 }
 
 template <typename Derived>
-inline Eigen::Matrix<typename Derived::Scalar, Eigen::Dynamic, Eigen::Dynamic,
+inline Eigen::Matrix<typename Derived::Scalar,
+                     Eigen::Dynamic,
+                     Eigen::Dynamic,
                      Eigen::ColMajor>
 row_score_sd(const Eigen::SparseMatrixBase<Derived> &_xx)
 {
@@ -138,12 +143,12 @@ row_score_sd(const Eigen::SparseMatrixBase<Derived> &_xx)
 }
 
 template <typename Derived, typename ROWS>
-inline Eigen::SparseMatrix<typename Derived::Scalar, Eigen::RowMajor,
-                           std::ptrdiff_t>
-row_sub(const Eigen::SparseMatrixBase<Derived> &_mat, const ROWS &sub_rows)
+inline Eigen::
+    SparseMatrix<typename Derived::Scalar, Eigen::RowMajor, std::ptrdiff_t>
+    row_sub(const Eigen::SparseMatrixBase<Derived> &_mat, const ROWS &sub_rows)
 {
-    using SpMat = typename Eigen::SparseMatrix<typename Derived::Scalar,
-                                               Eigen::RowMajor, std::ptrdiff_t>;
+    using SpMat = typename Eigen::
+        SparseMatrix<typename Derived::Scalar, Eigen::RowMajor, std::ptrdiff_t>;
 
     using Index = typename SpMat::Index;
     using Scalar = typename SpMat::Scalar;
@@ -176,14 +181,14 @@ row_sub(const Eigen::SparseMatrixBase<Derived> &_mat, const ROWS &sub_rows)
 
 template <typename Derived, typename ROWS>
 inline Eigen::Matrix<typename Derived::Scalar, //
-                     Eigen::Dynamic, //
-                     Eigen::Dynamic, //
+                     Eigen::Dynamic,           //
+                     Eigen::Dynamic,           //
                      Eigen::ColMajor>
 row_sub(const Eigen::MatrixBase<Derived> &_mat, const ROWS &sub_rows)
 {
     using Mat = typename Eigen::Matrix<typename Derived::Scalar, //
-                                       Eigen::Dynamic, //
-                                       Eigen::Dynamic, //
+                                       Eigen::Dynamic,           //
+                                       Eigen::Dynamic,           //
                                        Eigen::ColMajor>;
 
     using Index = typename Mat::Index;
@@ -208,10 +213,10 @@ row_sub(const Eigen::MatrixBase<Derived> &_mat, const ROWS &sub_rows)
 }
 
 template <typename Derived>
-inline Eigen::SparseMatrix<typename Derived::Scalar, Eigen::RowMajor,
-                           std::ptrdiff_t>
-vcat(const Eigen::SparseMatrixBase<Derived> &_upper,
-     const Eigen::SparseMatrixBase<Derived> &_lower)
+inline Eigen::
+    SparseMatrix<typename Derived::Scalar, Eigen::RowMajor, std::ptrdiff_t>
+    vcat(const Eigen::SparseMatrixBase<Derived> &_upper,
+         const Eigen::SparseMatrixBase<Derived> &_lower)
 {
     using Scalar = typename Derived::Scalar;
     using Index = typename Derived::Index;
@@ -225,8 +230,8 @@ vcat(const Eigen::SparseMatrixBase<Derived> &_upper,
     std::vector<_Triplet> triplets;
     triplets.reserve(upper.nonZeros() + lower.nonZeros());
 
-    using SpMat = typename Eigen::SparseMatrix<typename Derived::Scalar,
-                                               Eigen::RowMajor, std::ptrdiff_t>;
+    using SpMat = typename Eigen::
+        SparseMatrix<typename Derived::Scalar, Eigen::RowMajor, std::ptrdiff_t>;
 
     for (Index k = 0; k < upper.outerSize(); ++k) {
         for (typename SpMat::InnerIterator it(upper, k); it; ++it) {
@@ -236,7 +241,8 @@ vcat(const Eigen::SparseMatrixBase<Derived> &_upper,
 
     for (Index k = 0; k < lower.outerSize(); ++k) {
         for (typename SpMat::InnerIterator it(lower, k); it; ++it) {
-            triplets.emplace_back(upper.rows() + it.row(), it.col(),
+            triplets.emplace_back(upper.rows() + it.row(),
+                                  it.col(),
                                   it.value());
         }
     }
@@ -247,10 +253,10 @@ vcat(const Eigen::SparseMatrixBase<Derived> &_upper,
 }
 
 template <typename Derived>
-inline Eigen::SparseMatrix<typename Derived::Scalar, Eigen::RowMajor,
-                           std::ptrdiff_t>
-hcat(const Eigen::SparseMatrixBase<Derived> &_left,
-     const Eigen::SparseMatrixBase<Derived> &_right)
+inline Eigen::
+    SparseMatrix<typename Derived::Scalar, Eigen::RowMajor, std::ptrdiff_t>
+    hcat(const Eigen::SparseMatrixBase<Derived> &_left,
+         const Eigen::SparseMatrixBase<Derived> &_right)
 {
     using Scalar = typename Derived::Scalar;
     using Index = typename Derived::Index;
@@ -264,8 +270,8 @@ hcat(const Eigen::SparseMatrixBase<Derived> &_left,
     std::vector<_Triplet> triplets;
     triplets.reserve(left.nonZeros() + right.nonZeros());
 
-    using SpMat = typename Eigen::SparseMatrix<typename Derived::Scalar,
-                                               Eigen::RowMajor, std::ptrdiff_t>;
+    using SpMat = typename Eigen::
+        SparseMatrix<typename Derived::Scalar, Eigen::RowMajor, std::ptrdiff_t>;
 
     for (Index k = 0; k < left.outerSize(); ++k) {
         for (typename SpMat::InnerIterator it(left, k); it; ++it) {
@@ -334,7 +340,9 @@ normalized_exp(const Eigen::MatrixBase<Derived> &_log_vec,
 }
 
 template <typename Derived>
-inline Eigen::Matrix<typename Derived::Scalar, Eigen::Dynamic, Eigen::Dynamic,
+inline Eigen::Matrix<typename Derived::Scalar,
+                     Eigen::Dynamic,
+                     Eigen::Dynamic,
                      Eigen::ColMajor>
 standardize(const Eigen::MatrixBase<Derived> &Xraw,
             const typename Derived::Scalar EPS = 1e-8)
@@ -403,6 +411,26 @@ normalize_columns(Eigen::MatrixBase<Derived> &_mat)
         const Scalar denom = std::max(mat.col(c).norm(), eps);
         mat.col(c) /= denom;
     }
+}
+
+////////////////////////////////////////////////////////////////
+template <typename Derived>
+void
+setConstant(Eigen::SparseMatrixBase<Derived> &mat,
+            const typename Derived::Scalar val)
+{
+    using Scalar = typename Derived::Scalar;
+    auto fill_const = [val](const Scalar &x) { return val; };
+    Derived &Mat = mat.derived();
+    Mat = Mat.unaryExpr(fill_const);
+}
+
+template <typename Derived>
+void
+setConstant(Eigen::MatrixBase<Derived> &mat, const typename Derived::Scalar val)
+{
+    Derived &Mat = mat.derived();
+    Mat = Mat.setConstant(val);
 }
 
 #endif

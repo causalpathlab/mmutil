@@ -3,7 +3,8 @@
 
 template <typename Data, typename Str2Int, typename Derived>
 void
-read_sparse_pairs(const Data &data, const Str2Int &vertex2index,
+read_sparse_pairs(const Data &data,
+                  const Str2Int &vertex2index,
                   Eigen::SparseMatrixBase<Derived> &Amat)
 {
     Derived &out = Amat.derived();
@@ -45,7 +46,8 @@ read_sparse_pairs(const Data &data, const Str2Int &vertex2index,
 
 template <typename Data, typename Str2Int, typename Int2Str>
 void
-build_vertex2index(const Data &data, Str2Int &vertex2index,
+build_vertex2index(const Data &data,
+                   Str2Int &vertex2index,
                    Int2Str &index2vertex)
 {
     int pos = 0;
@@ -74,18 +76,18 @@ build_boost_graph(const Data &data, const Str2Int &vertex2index, Graph &G)
     using IndexPair = std::pair<Vertex, Vertex>;
     std::vector<IndexPair> index_pairs;
 
-    auto update_max_vertex = [&max_vertex, &vertex2index,
-                              &index_pairs](const auto &e) {
-        const Vertex u = vertex2index.at(std::get<0>(e));
-        const Vertex v = vertex2index.at(std::get<1>(e));
-        if (u != v) {
-            if (u > max_vertex)
-                max_vertex = u;
-            if (v > max_vertex)
-                max_vertex = v;
-            index_pairs.push_back(IndexPair(u, v));
-        }
-    };
+    auto update_max_vertex =
+        [&max_vertex, &vertex2index, &index_pairs](const auto &e) {
+            const Vertex u = vertex2index.at(std::get<0>(e));
+            const Vertex v = vertex2index.at(std::get<1>(e));
+            if (u != v) {
+                if (u > max_vertex)
+                    max_vertex = u;
+                if (v > max_vertex)
+                    max_vertex = v;
+                index_pairs.push_back(IndexPair(u, v));
+            }
+        };
 
     auto add_edge = [&G](const auto &pp) {
         bool has_edge;
@@ -127,10 +129,12 @@ prune_uninformative_edges(const Graph &gIn, Graph &gOut, const Scalar snCutoff)
         // bool has_sn = false;
         Scalar sn = 0.0;
         for (boost::tie(ani, anEnd) = boost::adjacent_vertices(a, gIn);
-             ani != anEnd; ++ani) {
+             ani != anEnd;
+             ++ani) {
             const typename Graph::vertex_descriptor an = *ani;
             for (boost::tie(bni, bnEnd) = boost::adjacent_vertices(b, gIn);
-                 bni != bnEnd; ++bni) {
+                 bni != bnEnd;
+                 ++bni) {
                 const typename Graph::vertex_descriptor bn = *bni;
 
                 if ((an == bn) && (an != b) && (bn != a)) {
@@ -152,11 +156,14 @@ prune_uninformative_edges(const Graph &gIn, Graph &gOut, const Scalar snCutoff)
 std::vector<std::shared_ptr<network_component_t>>
 read_network_data(const std::string data_file,
                   const std::string color_file = "",
-                  const bool weighted = false, const double snCutoff = 0.0)
+                  const bool weighted = false,
+                  const double snCutoff = 0.0)
 {
-    using Graph =
-        boost::adjacency_list<boost::vecS, boost::vecS, boost::undirectedS,
-                              boost::no_property, boost::no_property>;
+    using Graph = boost::adjacency_list<boost::vecS,
+                                        boost::vecS,
+                                        boost::undirectedS,
+                                        boost::no_property,
+                                        boost::no_property>;
 
     using Index = network_component_t::Index;
     using Str2Index = boost::unordered_map<std::string, Index>;

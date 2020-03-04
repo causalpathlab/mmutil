@@ -5,6 +5,7 @@
 #include <string>
 #include <unordered_set>
 
+#include "svd.hh"
 #include "inference/component_gaussian.hh"
 #include "inference/dpm.hh"
 #include "inference/sampler.hh"
@@ -51,8 +52,6 @@ struct cluster_options_t {
         tau = 1.0;
         rank = 10;
         lu_iter = 3;
-        embedding_dim = 2;
-        embedding_epochs = 20;
         min_size = 10;
         prune_knn = false;
         raw_scale = false;
@@ -69,12 +68,12 @@ struct cluster_options_t {
         verbose = false;
     }
 
-    Index K; // Truncation level
-    Scalar Alpha; // Truncated DPM prior
-    Index burnin_iter; // burn-in iterations
-    Index max_iter; // maximum number of iterations
-    Index min_iter; // minimum number of iterations
-    Scalar Tol; // tolerance to check convergence
+    Index K;              // Truncation level
+    Scalar Alpha;         // Truncated DPM prior
+    Index burnin_iter;    // burn-in iterations
+    Index max_iter;       // maximum number of iterations
+    Index min_iter;       // minimum number of iterations
+    Scalar Tol;           // tolerance to check convergence
     Scalar rate_discount; // learning rate discount
     Index bilink;
     Index nlist;
@@ -84,16 +83,14 @@ struct cluster_options_t {
     std::string mtx;
     std::string col;
 
-    Scalar tau; // regularization
-    Index rank; // rank
-    Index lu_iter; // LU iteration for SVD
-    Index embedding_dim; // final embedding dimensionality
-    Index embedding_epochs; // number of iterations
+    Scalar tau;             // regularization
+    Index rank;             // rank
+    Index lu_iter;          // LU iteration for SVD
 
-    bool kmeanspp; // initialization by kmeans++
-    Index knn; // number of nearest neighbors
+    bool kmeanspp;     // initialization by kmeans++
+    Index knn;         // number of nearest neighbors
     Scalar knn_cutoff; // cosine distance cutoff
-    Index levels; // number of eps levels
+    Index levels;      // number of eps levels
 
     bool out_data; // output clustering data
 
@@ -136,7 +133,8 @@ struct cluster_options_t {
     }
 };
 
-int parse_cluster_options(const int argc, const char *argv[],
+int parse_cluster_options(const int argc,
+                          const char *argv[],
                           cluster_options_t &options);
 
 template <typename F0, typename F>
@@ -157,13 +155,9 @@ struct num_sample_t : public check_positive_t<Index> {
 };
 
 inline void
-estimate_dbscan_of_columns(const Mat &X, //
+estimate_dbscan_of_columns(const Mat &X,                                //
                            std::vector<std::vector<Index>> &membership, //
                            const cluster_options_t &options);
-
-inline Mat embed_by_centroid(const Mat &X, // data matrix
-                             const std::vector<Index> &membership, // membership
-                             const cluster_options_t &options);
 
 inline std::vector<Index> random_membership(const num_clust_t num_clust, //
                                             const num_sample_t num_sample);
@@ -174,8 +168,8 @@ inline std::vector<Index> random_membership(const num_clust_t num_clust, //
 
 template <typename F0, typename F>
 inline Scalar
-sum_log_marginal(const Mat &X, //
-                 const Index K, //
+sum_log_marginal(const Mat &X,                   //
+                 const Index K,                  //
                  std::vector<Index> &membership, //
                  const cluster_options_t &options)
 {
@@ -191,7 +185,9 @@ sum_log_marginal(const Mat &X, //
     std::vector<Index> cindex(K);
     std::iota(cindex.begin(), cindex.end(), 0);
     std::vector<F> components;
-    std::transform(cindex.begin(), cindex.end(), std::back_inserter(components),
+    std::transform(cindex.begin(),
+                   cindex.end(),
+                   std::back_inserter(components),
                    [&dim](const Index) { return F(dim); });
 
     Scalar Ntot = 0.;
@@ -261,179 +257,12 @@ sort_cluster_index(std::vector<T> &_membership, const T cutoff = 0)
     return k_new;
 }
 
-inline Mat
-embed_by_centroid(const Mat &X, //
-                  const std::vector<Index> &memb, //
-                  const cluster_options_t &options)
-{
-    const Index kk = *std::max_element(memb.begin(), memb.end()) + 1;
-    const Index D = X.rows();
-    const Index N = X.cols();
-
-    if (kk < 1) {
-        TLOG("There is no centroid");
-        return Mat{};
-    }
-
-    const Index n_rand_clust = 3; // extra clusters for randomness
-
-    Mat _cc(D, kk + n_rand_clust); // take the means
-    Vec _nn(kk + n_rand_clust); // denominator
-    _cc.setZero();
-    _nn.setOnes();
-
-    for (Index j = 0; j < N; ++j) {
-        const Index k = memb.at(j); //
-        if (k >= 0) { // ignore unassigned
-            _cc.col(k) += X.col(j); // accumulate
-            _nn(k) += 1.0; //
-        }
-    }
-
-    /////////////////////////////
-    // create random clusters  //
-    /////////////////////////////
-
-    std::random_device rd;
-    std::mt19937 rgen(rd());
-
-    std::vector<Index> rand_i(N);
-    std::iota(rand_i.begin(), rand_i.end(), 0);
-    std::shuffle(rand_i.begin(), rand_i.end(), rgen);
-
-    const Index n_rand = (1 + N / kk) * n_rand_clust;
-
-    if (options.verbose) {
-        TLOG("Generating some cluster of random points");
-    }
-
-    for (Index r = 0; r < n_rand; ++r) {
-        const Index j = r % N;
-        const Index k = kk + (r % n_rand_clust);
-        _cc.col(k) += X.col(j);
-        _nn(k) += 1.0;
-    }
-
-    ////////////////////////////
-    // normalize the centroid //
-    ////////////////////////////
-
-    Mat C = _cc * (_nn.cwiseInverse().asDiagonal()); // D x K
-
-    // We might add stochastic noise
-    auto _sigmoid = [](const Scalar x) -> Scalar {
-        Scalar ret = 0.99 / (1.0 + exp(-x)) + 0.01;
-        return ret;
-    };
-
-    const Index nepochs = options.embedding_epochs;
-    const Index dd = std::min(options.embedding_dim, kk);
-    const Index rank = dd + 1;
-
-    if (options.verbose) {
-        TLOG("Start embedding, epochs = " << nepochs << ", rank = " << rank);
-    }
-
-    Mat CC = scale_by_degree(C, options.tau);
-    Mat XX = scale_by_degree(X, options.tau);
-
-    ///////////////////////////
-    // shatter the centroids //
-    ///////////////////////////
-
-    for (Index k = 0; k < CC.cols(); ++k) {
-        CC.col(k) /= (CC.col(k).norm() + 1e-8);
-    }
-
-    Vec grad_D(D);
-
-    for (Index t = 0; t < nepochs; ++t) {
-        const Scalar rate =
-            1.0 - static_cast<Scalar>(t) / static_cast<Scalar>(nepochs);
-
-        for (Index k = 0; k < kk; ++k) { // don't move the random one
-
-            grad_D.setZero();
-            for (Index l = 0; l < (kk + 1); ++l) {
-                if (k == l)
-                    continue;
-                const Scalar qq = _sigmoid(CC.col(l).dot(CC.col(k)));
-                grad_D += CC.col(l) * qq;
-            }
-
-            CC.col(k) += rate * grad_D / static_cast<Scalar>(kk);
-        }
-    }
-
-    // Initial embedding of X --> [rank x k] and [rank x n]
-    RandomizedSVD<Mat> svd(rank, options.lu_iter);
-    if (options.verbose) {
-        svd.set_verbose();
-    }
-    svd.compute(CC);
-
-    Mat Cd = svd.matrixV().rightCols(dd);
-    Cd.transposeInPlace();
-
-    Mat uu = svd.matrixU().rightCols(dd);
-    Mat Xd = uu.transpose() * XX;
-
-    if (options.verbose) {
-        TLOG("Built initial embedding: " << Xd.rows() << " x " << Xd.cols());
-    }
-
-    if (kk < 2) {
-        Xd.transposeInPlace();
-        return Xd;
-    }
-
-    //////////////////////
-    // Move data points //
-    //////////////////////
-
-    Vec grad_rank(dd);
-    Vec pr(kk + 1);
-
-    for (Index t = 0; t < nepochs; ++t) {
-        const Scalar rate =
-            1.0 - static_cast<Scalar>(t) / static_cast<Scalar>(nepochs);
-
-        for (Index j = 0; j < N; ++j) {
-            Index k = memb.at(j);
-            if (k < 0) {
-                pr = Cd.transpose() * Xd.col(j);
-                pr.maxCoeff(&k);
-            }
-
-            grad_rank.setZero();
-            const Scalar pp = _sigmoid(-Cd.col(k).dot(Xd.col(j)));
-            grad_rank -= Cd.col(k) * pp * static_cast<Scalar>((kk - 1));
-
-            for (Index l = 0; l < (kk + 1); ++l) {
-                if (l == k)
-                    continue;
-                const Scalar qq = _sigmoid(Cd.col(l).dot(Xd.col(j)));
-                grad_rank += Cd.col(l) * qq;
-            }
-
-            Xd.col(j) += rate * grad_rank / static_cast<Scalar>(kk);
-        }
-    }
-
-    if (options.verbose) {
-        TLOG("Done the refinement: [" << Xd.rows() << " x " << Xd.cols()
-                                      << "]");
-    }
-    Xd.transposeInPlace();
-    return Xd;
-}
-
 template <typename T, typename OFS>
 void
 print_histogram(const std::vector<T> &nn, //
-                OFS &ofs, //
-                const T height = 50.0, //
-                const T cutoff = .01, //
+                OFS &ofs,                 //
+                const T height = 50.0,    //
+                const T cutoff = .01,     //
                 const int ntop = 10)
 {
     using std::accumulate;
@@ -467,7 +296,7 @@ print_histogram(const std::vector<T> &nn, //
 }
 
 inline void
-estimate_dbscan_of_columns(const Mat &X, //
+estimate_dbscan_of_columns(const Mat &X,                                //
                            std::vector<std::vector<Index>> &membership, //
                            const cluster_options_t &options)
 {
@@ -490,9 +319,9 @@ estimate_dbscan_of_columns(const Mat &X, //
     std::vector<std::tuple<Index, Index, Scalar>> knn_index;
     auto _knn = search_knn(SrcDataT(X.data(), X.rows(), X.cols()), //
                            TgtDataT(X.data(), X.rows(), X.cols()), //
-                           KNN(options.knn + 1), // itself
-                           BILINK(bilink), //
-                           NNLIST(nnlist), //
+                           KNN(options.knn + 1),                   // itself
+                           BILINK(bilink),                         //
+                           NNLIST(nnlist),                         //
                            knn_index);
 
     if (_knn != EXIT_SUCCESS) {
@@ -546,7 +375,9 @@ estimate_mixture_of_columns(const Mat &X, const cluster_options_t &options)
     std::vector<Index> cindex(K);
     std::iota(cindex.begin(), cindex.end(), 0);
     std::vector<F> components;
-    std::transform(cindex.begin(), cindex.end(), std::back_inserter(components),
+    std::transform(cindex.begin(),
+                   cindex.end(),
+                   std::back_inserter(components),
                    [&dim](const auto &) { return F(dim); });
 
     TLOG("Initialized " << K << " components");
@@ -763,8 +594,8 @@ estimate_mixture_of_columns(const Mat &X, const cluster_options_t &options)
 
 inline std::tuple<Mat, std::vector<Index>, Mat>
 simulate_gaussian_mixture(const Index n = 300, // sample size
-                          const Index p = 2, // dimension
-                          const Index k = 3, // #components
+                          const Index p = 2,   // dimension
+                          const Index k = 3,   // #components
                           const Scalar sd = 0.01)
 { // jitter
 
@@ -815,14 +646,16 @@ random_membership(const num_clust_t num_clust, //
     std::vector<Index> ret;
     ret.reserve(n);
 
-    std::transform(idx.begin(), idx.end(), std::back_inserter(ret),
+    std::transform(idx.begin(),
+                   idx.end(),
+                   std::back_inserter(ret),
                    [&](const Index i) { return runifK(gen); });
 
     return ret;
 }
 
 int
-parse_cluster_options(const int argc, //
+parse_cluster_options(const int argc,     //
                       const char *argv[], //
                       cluster_options_t &options)
 {
@@ -859,7 +692,6 @@ parse_cluster_options(const int argc, //
         "--min_size (-z)         : minimum size to report (default: 10)\n"
         "--num_levels (-n)       : number of DBSCAN levels (default: 10)\n"
         "--prune_knn (-P)        : prune kNN graph (reciprocal match)\n"
-        "--embedding_epochs (-t) : # of epochs for embedding\n"
         "\n"
         "[Options for Gaussian mixture models]\n"
         "\n"
@@ -903,47 +735,46 @@ parse_cluster_options(const int argc, //
                                    "S:B:N:";
 
     const option long_opts[] =
-        { { "mtx", required_argument, nullptr, 'd' }, //
-          { "sdata", required_argument, nullptr, 's' }, //
-          { "data", required_argument, nullptr, 'd' }, //
-          { "sdata", required_argument, nullptr, 's' }, //
-          { "method", required_argument, nullptr, 'M' }, //
-          { "col", required_argument, nullptr, 'c' }, //
-          { "knn", required_argument, nullptr, 'k' }, //
-          { "epsilon", required_argument, nullptr, 'e' }, //
-          { "trunc", required_argument, nullptr, 'K' }, //
-          { "burnin", required_argument, nullptr, 'I' }, //
-          { "min_vbiter", required_argument, nullptr, 'v' }, //
-          { "max_vbiter", required_argument, nullptr, 'V' }, //
-          { "convergence", required_argument, nullptr, 'T' }, //
-          { "tau", required_argument, nullptr, 'u' }, //
-          { "rank", required_argument, nullptr, 'r' }, //
-          { "lu_iter", required_argument, nullptr, 'l' }, //
-          { "bilink", required_argument, nullptr, 'm' }, //
-          { "nlist", required_argument, nullptr, 'f' }, //
-          { "out", required_argument, nullptr, 'o' }, //
-          { "row_weight", required_argument, nullptr, 'w' }, //
-          { "col_norm", required_argument, nullptr, 'C' }, //
-          { "num_levels", required_argument, nullptr, 'n' }, //
-          { "min_size", required_argument, nullptr, 'z' }, //
-          { "embedding_epochs", required_argument, nullptr, 't' }, //
-          { "out_data", no_argument, nullptr, 'D' }, //
-          { "prune_knn", no_argument, nullptr, 'P' }, //
-          { "verbose", no_argument, nullptr, 'O' }, //
-          { "log_scale", no_argument, nullptr, 'L' }, //
-          { "raw_scale", no_argument, nullptr, 'R' }, //
-          { "initial_sample", required_argument, nullptr, 'S' }, //
-          { "nystrom_batch", required_argument, nullptr, 'B' }, //
-          { "sampling_method", required_argument, nullptr, 'N' }, //
-          { "kmeanspp", no_argument, nullptr, 'i' }, //
-          { "help", no_argument, nullptr, 'h' }, //
+        { { "mtx", required_argument, nullptr, 'd' },              //
+          { "sdata", required_argument, nullptr, 's' },            //
+          { "data", required_argument, nullptr, 'd' },             //
+          { "sdata", required_argument, nullptr, 's' },            //
+          { "method", required_argument, nullptr, 'M' },           //
+          { "col", required_argument, nullptr, 'c' },              //
+          { "knn", required_argument, nullptr, 'k' },              //
+          { "epsilon", required_argument, nullptr, 'e' },          //
+          { "trunc", required_argument, nullptr, 'K' },            //
+          { "burnin", required_argument, nullptr, 'I' },           //
+          { "min_vbiter", required_argument, nullptr, 'v' },       //
+          { "max_vbiter", required_argument, nullptr, 'V' },       //
+          { "convergence", required_argument, nullptr, 'T' },      //
+          { "tau", required_argument, nullptr, 'u' },              //
+          { "rank", required_argument, nullptr, 'r' },             //
+          { "lu_iter", required_argument, nullptr, 'l' },          //
+          { "bilink", required_argument, nullptr, 'm' },           //
+          { "nlist", required_argument, nullptr, 'f' },            //
+          { "out", required_argument, nullptr, 'o' },              //
+          { "row_weight", required_argument, nullptr, 'w' },       //
+          { "col_norm", required_argument, nullptr, 'C' },         //
+          { "num_levels", required_argument, nullptr, 'n' },       //
+          { "min_size", required_argument, nullptr, 'z' },         //
+          { "out_data", no_argument, nullptr, 'D' },               //
+          { "prune_knn", no_argument, nullptr, 'P' },              //
+          { "verbose", no_argument, nullptr, 'O' },                //
+          { "log_scale", no_argument, nullptr, 'L' },              //
+          { "raw_scale", no_argument, nullptr, 'R' },              //
+          { "initial_sample", required_argument, nullptr, 'S' },   //
+          { "nystrom_batch", required_argument, nullptr, 'B' },    //
+          { "sampling_method", required_argument, nullptr, 'N' },  //
+          { "kmeanspp", no_argument, nullptr, 'i' },               //
+          { "help", no_argument, nullptr, 'h' },                   //
           { nullptr, no_argument, nullptr, 0 } };
 
     while (true) {
-        const auto opt = getopt_long(argc, //
+        const auto opt = getopt_long(argc,                      //
                                      const_cast<char **>(argv), //
-                                     short_opts, //
-                                     long_opts, //
+                                     short_opts,                //
+                                     long_opts,                 //
                                      nullptr);
 
         if (-1 == opt)
@@ -1041,9 +872,6 @@ parse_cluster_options(const int argc, //
             break;
         case 'C':
             options.col_norm = std::stof(optarg);
-            break;
-        case 't':
-            options.embedding_epochs = std::stoi(optarg);
             break;
         case 'h': // -h or --help
         case '?': // Unrecognized option

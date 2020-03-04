@@ -202,7 +202,7 @@ struct param_mixture_t {
         constexpr static scalar_t small_val = 1e-10;
     };
 
-    resolve_var_op_t omega_op; // omega_op(gammax, tau_aux)
+    resolve_var_op_t omega_op;      // omega_op(gammax, tau_aux)
     resolve_var_op_t omega_null_op; // omega_null_op(gammax, tau_null_aux)
 
     // nu = [1/gammax] * (1 + exp(-tau_aux))
@@ -224,7 +224,7 @@ struct param_mixture_t {
         constexpr static scalar_t small_val = 1e-10;
     };
 
-    resolve_prior_var_op_t nu_op; // nu_op(gammax, tau_aux)
+    resolve_prior_var_op_t nu_op;      // nu_op(gammax, tau_aux)
     resolve_prior_var_op_t nu_null_op; // nu_null_op(gammax, tau_null_aux)
 
     struct resolve_spike_t {
@@ -566,7 +566,8 @@ make_sparse_mixture(const Eigen::SparseMatrixBase<Derived> &A, const Opt &opt)
 // update parameters by calculated stochastic gradient
 template <typename Parameter, typename scalar_t>
 void
-param_impl_update_sgd(Parameter &P, const scalar_t rate,
+param_impl_update_sgd(Parameter &P,
+                      const scalar_t rate,
                       const param_tag_mixture)
 {
     P.alpha_aux += update_adam(P.adam_alpha_aux, P.grad_alpha_aux) * rate;
@@ -579,7 +580,8 @@ param_impl_update_sgd(Parameter &P, const scalar_t rate,
 
 template <typename Parameter, typename scalar_t>
 void
-hyperparam_impl_update_sgd(Parameter &P, const scalar_t rate,
+hyperparam_impl_update_sgd(Parameter &P,
+                           const scalar_t rate,
                            const param_tag_mixture)
 {
     P.pi_aux += update_adam(P.adam_pi_aux, P.grad_pi_aux) * rate;
@@ -635,7 +637,9 @@ hyperparam_impl_resolve(Parameter &P, const param_tag_mixture)
 
 template <typename Parameter, typename scalar_t, typename RNG>
 void
-param_impl_perturb(Parameter &P, const scalar_t sd, RNG &rng,
+param_impl_perturb(Parameter &P,
+                   const scalar_t sd,
+                   RNG &rng,
                    const param_tag_mixture)
 {
     std::normal_distribution<scalar_t> Norm;
@@ -691,7 +695,10 @@ param_impl_var(Parameter &P, const param_tag_mixture)
 // evaluate stochastic gradient descent step
 template <typename Parameter, typename M1, typename M2, typename M3>
 void
-param_impl_eval_sgd(Parameter &P, const M1 &G1, const M2 &G2, const M3 &Nobs,
+param_impl_eval_sgd(Parameter &P,
+                    const M1 &G1,
+                    const M2 &G2,
+                    const M3 &Nobs,
                     const param_tag_mixture)
 {
     using scalar_t = typename Parameter::scalar_t;
@@ -789,8 +796,11 @@ param_impl_eval_sgd(Parameter &P, const M1 &G1, const M2 &G2, const M3 &Nobs,
 
 template <typename Parameter, typename M1, typename M2, typename M3>
 void
-hyperparam_impl_eval_sgd(Parameter &P, const M1 &G1, const M2 &G2,
-                         const M3 &Nobs, const param_tag_mixture)
+hyperparam_impl_eval_sgd(Parameter &P,
+                         const M1 &G1,
+                         const M2 &G2,
+                         const M3 &Nobs,
+                         const param_tag_mixture)
 {
     using scalar_t = typename Parameter::scalar_t;
     const scalar_t ntot = Nobs.sum() + P.rows() * P.cols();
@@ -838,7 +848,9 @@ hyperparam_impl_eval_sgd(Parameter &P, const M1 &G1, const M2 &G2,
 
 template <typename Parameter>
 void
-param_impl_write(Parameter &P, const std::string hdr, const std::string gz,
+param_impl_write(Parameter &P,
+                 const std::string hdr,
+                 const std::string gz,
                  const param_tag_mixture)
 {
     write_data_file((hdr + ".theta" + gz), P.theta);

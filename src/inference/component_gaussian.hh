@@ -80,7 +80,7 @@ struct multi_gaussian_component_t {
 
     template <typename Derived>
     inline void update(const Eigen::MatrixBase<Derived> &xx, //
-                       const Scalar z_old, //
+                       const Scalar z_old,                   //
                        const Scalar z_new)
     {
         const Derived &x = xx.derived(); // d x 1
@@ -216,13 +216,13 @@ struct multi_gaussian_component_t {
         Scalar ret = -0.5 * d * ln2pi;
 
         ret -= 0.5 * d * fasterlog(n + 1.0 + scale); // new
-        ret += 0.5 * d * fasterlog(n + scale); // old
+        ret += 0.5 * d * fasterlog(n + scale);       // old
 
         ret += fasterlgamma(a0 + (n + 1.0) * d * 0.5); // new
-        ret -= fasterlgamma(a0 + n * d * 0.5); // old
+        ret -= fasterlgamma(a0 + n * d * 0.5);         // old
 
         ret -= (a0 + (n + 1.0) * d * 0.5) * fasterlog(b0 + C_new * 0.5); // new
-        ret += (a0 + n * d * 0.5) * fasterlog(b0 + C * 0.5); // old
+        ret += (a0 + n * d * 0.5) * fasterlog(b0 + C * 0.5);             // old
 
         return ret;
     }
@@ -298,17 +298,17 @@ private:
 private:
     const size_t p; // dimensionality
     const Scalar d; // dimensionality
-    Scalar n; // sum_i z_i
-    vec_type s1; // sum_i z_i x_i
-    Scalar s2; // sum_i z_i <x_i,x_i>
-    Scalar scale; // hyper-parameter
-    Scalar a0; // hyper for precision
-    Scalar b0; // hyper for precision
-    vec_type mu; // variational mu
+    Scalar n;       // sum_i z_i
+    vec_type s1;    // sum_i z_i x_i
+    Scalar s2;      // sum_i z_i <x_i,x_i>
+    Scalar scale;   // hyper-parameter
+    Scalar a0;      // hyper for precision
+    Scalar b0;      // hyper for precision
+    vec_type mu;    // variational mu
     Scalar mu_prec; //
-    Scalar tau; // variational precision
-    Scalar lntau; // log variational precision
-    Scalar musq; // E[mu^T mu]
+    Scalar tau;     // variational precision
+    Scalar lntau;   // log variational precision
+    Scalar musq;    // E[mu^T mu]
 
     const Scalar ln2pi = fasterlog(2.0 * M_PI);
     const Scalar tau_max = 1e6; // to prevent NaN

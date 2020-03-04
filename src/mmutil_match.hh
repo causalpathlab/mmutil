@@ -159,9 +159,9 @@ struct TgtDataT {
 
 int search_knn(const SrcSparseRowsT _SrcRows, //
                const TgtSparseRowsT _TgtRows, //
-               const KNN _knn, //
-               const BILINK _bilink, //
-               const NNLIST _nnlist, //
+               const KNN _knn,                //
+               const BILINK _bilink,          //
+               const NNLIST _nnlist,          //
                index_triplet_vec &out);
 
 ///////////////////////////////////
@@ -172,9 +172,9 @@ int search_knn(const SrcSparseRowsT _SrcRows, //
 
 int search_knn(const SrcDataT _SrcData, //
                const TgtDataT _TgtData, //
-               const KNN _knn, //
-               const BILINK _bilink, //
-               const NNLIST _nnlist, //
+               const KNN _knn,          //
+               const BILINK _bilink,    //
+               const NNLIST _nnlist,    //
                index_triplet_vec &out);
 
 template <typename TVEC>
@@ -185,9 +185,9 @@ inline TVEC prune_mutual_knn(const TVEC &knn_index);
 int
 search_knn(const SrcSparseRowsT _SrcRows, //
            const TgtSparseRowsT _TgtRows, //
-           const KNN _knn, //
-           const BILINK _bilink, //
-           const NNLIST _nnlist, //
+           const KNN _knn,                //
+           const BILINK _bilink,          //
+           const NNLIST _nnlist,          //
            index_triplet_vec &out)
 {
     const SpMat &SrcRows = _SrcRows.data;
@@ -310,9 +310,9 @@ search_knn(const SrcSparseRowsT _SrcRows, //
 int
 search_knn(const SrcDataT _SrcData, //
            const TgtDataT _TgtData, //
-           const KNN _knn, //
-           const BILINK _bilink, //
-           const NNLIST _nnlist, //
+           const KNN _knn,          //
+           const BILINK _bilink,    //
+           const NNLIST _nnlist,    //
            index_triplet_vec &out)
 {
     ERR_RET(_SrcData.vecdim != _TgtData.vecdim,
@@ -434,8 +434,10 @@ prune_mutual_knn(const TVEC &knn_index)
 
     std::vector<std::tuple<Index, Index, Scalar>> mutual_knn_index;
     mutual_knn_index.reserve(knn_index.size());
-    std::copy_if(knn_index.begin(), knn_index.end(),
-                 std::back_inserter(mutual_knn_index), is_mutual);
+    std::copy_if(knn_index.begin(),
+                 knn_index.end(),
+                 std::back_inserter(mutual_knn_index),
+                 is_mutual);
 
     return mutual_knn_index;
 }
@@ -456,8 +458,8 @@ find_nz_cols(const std::string mtx_file)
 }
 
 inline std::tuple<std::unordered_set<Index>, // valid
-                  Index, // #total
-                  std::vector<std::string> // names
+                  Index,                     // #total
+                  std::vector<std::string>   // names
                   >
 find_nz_col_names(const std::string mtx_file, const std::string col_file)
 {
@@ -484,7 +486,7 @@ find_nz_col_names(const std::string mtx_file, const std::string col_file)
 
 template <typename TVec, typename SVec>
 auto
-build_knn_named(const TVec &out_index, //
+build_knn_named(const TVec &out_index,     //
                 const SVec &col_src_names, //
                 const SVec &col_tgt_names)
 {
@@ -506,10 +508,10 @@ build_knn_named(const TVec &out_index, //
 
 template <typename TVec, typename SVec, typename VVec>
 auto
-build_knn_named(const TVec &out_index, //
+build_knn_named(const TVec &out_index,     //
                 const SVec &col_src_names, //
                 const SVec &col_tgt_names, //
-                const VVec &valid_src, //
+                const VVec &valid_src,     //
                 const VVec &valid_tgt)
 {
     using RET = std::vector<std::tuple<std::string, std::string, Scalar>>;
@@ -531,7 +533,7 @@ build_knn_named(const TVec &out_index, //
 }
 
 int
-parse_match_options(const int argc, //
+parse_match_options(const int argc,     //
                     const char *argv[], //
                     match_options_t &options)
 {
@@ -595,33 +597,33 @@ parse_match_options(const int argc, //
     const char *const short_opts = "s:c:t:g:k:m:f:o:u:r:l:w:C:S:B:PLRM:h";
 
     const option long_opts[] =
-        { { "src_mtx", required_argument, nullptr, 's' }, //
-          { "src_col", required_argument, nullptr, 'c' }, //
-          { "tgt_mtx", required_argument, nullptr, 't' }, //
-          { "tgt_col", required_argument, nullptr, 'g' }, //
-          { "knn", required_argument, nullptr, 'k' }, //
-          { "bilink", required_argument, nullptr, 'm' }, //
-          { "nlist", required_argument, nullptr, 'f' }, //
-          { "out", required_argument, nullptr, 'o' }, //
-          { "tau", required_argument, nullptr, 'u' }, //
-          { "rank", required_argument, nullptr, 'r' }, //
-          { "lu_iter", required_argument, nullptr, 'l' }, //
-          { "row_weight", required_argument, nullptr, 'w' }, //
-          { "col_norm", required_argument, nullptr, 'C' }, //
-          { "prune_knn", no_argument, nullptr, 'P' }, //
-          { "log_scale", no_argument, nullptr, 'L' }, //
-          { "raw_scale", no_argument, nullptr, 'R' }, //
-          { "initial_sample", required_argument, nullptr, 'S' }, //
-          { "nystrom_batch", required_argument, nullptr, 'B' }, //
+        { { "src_mtx", required_argument, nullptr, 's' },         //
+          { "src_col", required_argument, nullptr, 'c' },         //
+          { "tgt_mtx", required_argument, nullptr, 't' },         //
+          { "tgt_col", required_argument, nullptr, 'g' },         //
+          { "knn", required_argument, nullptr, 'k' },             //
+          { "bilink", required_argument, nullptr, 'm' },          //
+          { "nlist", required_argument, nullptr, 'f' },           //
+          { "out", required_argument, nullptr, 'o' },             //
+          { "tau", required_argument, nullptr, 'u' },             //
+          { "rank", required_argument, nullptr, 'r' },            //
+          { "lu_iter", required_argument, nullptr, 'l' },         //
+          { "row_weight", required_argument, nullptr, 'w' },      //
+          { "col_norm", required_argument, nullptr, 'C' },        //
+          { "prune_knn", no_argument, nullptr, 'P' },             //
+          { "log_scale", no_argument, nullptr, 'L' },             //
+          { "raw_scale", no_argument, nullptr, 'R' },             //
+          { "initial_sample", required_argument, nullptr, 'S' },  //
+          { "nystrom_batch", required_argument, nullptr, 'B' },   //
           { "sampling_method", required_argument, nullptr, 'M' }, //
-          { "help", no_argument, nullptr, 'h' }, //
+          { "help", no_argument, nullptr, 'h' },                  //
           { nullptr, no_argument, nullptr, 0 } };
 
     while (true) {
-        const auto opt = getopt_long(argc, //
+        const auto opt = getopt_long(argc,                      //
                                      const_cast<char **>(argv), //
-                                     short_opts, //
-                                     long_opts, //
+                                     short_opts,                //
+                                     long_opts,                 //
                                      nullptr);
 
         if (-1 == opt)

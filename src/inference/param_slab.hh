@@ -286,7 +286,9 @@ hyperparam_impl_resolve(Parameter &P, const param_tag_slab)
 
 template <typename Parameter, typename Scalar, typename RNG>
 void
-param_impl_perturb(Parameter &P, const Scalar sd, RNG &rng,
+param_impl_perturb(Parameter &P,
+                   const Scalar sd,
+                   RNG &rng,
                    const param_tag_slab)
 {
     std::normal_distribution<Scalar> Norm;
@@ -328,7 +330,10 @@ param_impl_var(Parameter &P, const param_tag_slab)
 // evaluate stochastic gradient descent step
 template <typename Parameter, typename M1, typename M2, typename M3>
 void
-param_impl_eval_sgd(Parameter &P, const M1 &G1, const M2 &G2, const M3 &Nobs,
+param_impl_eval_sgd(Parameter &P,
+                    const M1 &G1,
+                    const M2 &G2,
+                    const M3 &Nobs,
                     const param_tag_slab)
 {
     ////////////////////////////////
@@ -354,8 +359,11 @@ param_impl_eval_sgd(Parameter &P, const M1 &G1, const M2 &G2, const M3 &Nobs,
 
 template <typename Parameter, typename M1, typename M2, typename M3>
 void
-hyperparam_impl_eval_sgd(Parameter &P, const M1 &G1, const M2 &G2,
-                         const M3 &Nobs, const param_tag_slab)
+hyperparam_impl_eval_sgd(Parameter &P,
+                         const M1 &G1,
+                         const M2 &G2,
+                         const M3 &Nobs,
+                         const param_tag_slab)
 {
     using scalar_t = typename Parameter::scalar_t;
     const scalar_t ntot = Nobs.sum();
@@ -394,7 +402,8 @@ param_impl_update_sgd(Parameter &P, const Scalar rate, const param_tag_slab)
 
 template <typename Parameter, typename Scalar>
 void
-hyperparam_impl_update_sgd(Parameter &P, const Scalar rate,
+hyperparam_impl_update_sgd(Parameter &P,
+                           const Scalar rate,
                            const param_tag_slab)
 {
     P.tau_aux += update_adam(P.adam_tau_aux, P.grad_tau_aux) * rate;
@@ -403,7 +412,9 @@ hyperparam_impl_update_sgd(Parameter &P, const Scalar rate,
 
 template <typename Parameter>
 void
-param_impl_write(Parameter &P, const std::string hdr, const std::string gz,
+param_impl_write(Parameter &P,
+                 const std::string hdr,
+                 const std::string gz,
                  const param_tag_slab)
 {
     write_data_file((hdr + ".theta" + gz), P.beta);

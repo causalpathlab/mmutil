@@ -16,16 +16,18 @@ struct network_component_t {
     using Index = sp_mat_t::Index;
 
     std::vector<std::string> index2vertex;
-    sp_mat_t A; // vertex x vertex
-    sp_mat_t Mleft; // left vertex x edge
-    sp_mat_t Mright; // right vertex x edge
+    sp_mat_t A;                                 // vertex x vertex
+    sp_mat_t Mleft;                             // left vertex x edge
+    sp_mat_t Mright;                            // right vertex x edge
     std::vector<std::pair<Index, Index>> Edges; // edges (i,j)
-    std::vector<Index> colors; // edge colors
+    std::vector<Index> colors;                  // edge colors
 };
 
 std::vector<std::shared_ptr<network_component_t>>
-read_network_data(const std::string data_file, const std::string color_file,
-                  const bool, const double);
+read_network_data(const std::string data_file,
+                  const std::string color_file,
+                  const bool,
+                  const double);
 
 template <typename Derived, typename Pair>
 int construct_edge_incidence(const Eigen::SparseMatrixBase<Derived> &A,
@@ -34,7 +36,8 @@ int construct_edge_incidence(const Eigen::SparseMatrixBase<Derived> &A,
                              std::vector<Pair> &edges);
 
 template <typename Data, typename Str2Int, typename Derived>
-void read_sparse_pairs(const Data &data, const Str2Int &vertex2index,
+void read_sparse_pairs(const Data &data,
+                       const Str2Int &vertex2index,
                        Eigen::SparseMatrixBase<Derived> &Amat);
 
 template <typename Data, typename Str2Int, typename Graph>
@@ -44,7 +47,8 @@ template <typename Graph, typename Scalar>
 void prune_uninformative_edges(const Graph &gIn, Graph &gOut, const Scalar);
 
 template <typename Data, typename Str2Int, typename Int2Str>
-void build_vertex2index(const Data &data, Str2Int &vertex2index,
+void build_vertex2index(const Data &data,
+                        Str2Int &vertex2index,
                         Int2Str &index2vertex);
 
 template <typename Derived, typename OtherDerived, typename Pair>

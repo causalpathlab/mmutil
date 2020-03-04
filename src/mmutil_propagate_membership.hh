@@ -5,7 +5,7 @@
 #define MMUTIL_COLLAPSE_MATCH_HH_
 
 auto
-propagate_membership(const std::string match_file, //
+propagate_membership(const std::string match_file,      //
                      const std::string membership_file, //
                      const Scalar decay)
 {
@@ -19,7 +19,7 @@ propagate_membership(const std::string match_file, //
     eigen_io::col_index_map_t::type j_index;
 
     SpMat M;
-    eigen_io::read_named_eigen_sparse_file(match_file, //
+    eigen_io::read_named_eigen_sparse_file(match_file,                       //
                                            eigen_io::row_name_vec_t(i_name), //
                                            eigen_io::col_name_vec_t(j_name), //
                                            eigen_io::row_index_map_t(
@@ -41,7 +41,7 @@ propagate_membership(const std::string match_file, //
 
     read_named_membership_file(membership_file,
                                eigen_io::row_index_map_t(j_index), //
-                               eigen_io::col_name_vec_t(k_name), //
+                               eigen_io::col_name_vec_t(k_name),   //
                                eigen_io::col_index_map_t(k_index), //
                                Z);
 

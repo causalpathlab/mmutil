@@ -132,20 +132,20 @@ struct sgd_repr_gaus_t {
     const index_t n;
     const index_t m;
 
-    Matrix G1; // stoch gradient wrt mean
-    Matrix G2; // stoch gradient wrt var
-    Matrix Eta; // random eta = Mean + Eps * Sd
-    Matrix Eps; // Eps ~ N(0,1)
+    Matrix G1;   // stoch gradient wrt mean
+    Matrix G2;   // stoch gradient wrt var
+    Matrix Eta;  // random eta = Mean + Eps * Sd
+    Matrix Eps;  // Eps ~ N(0,1)
     Matrix Mean; // current mean
-    Matrix Var; // current var
+    Matrix Var;  // current var
 
-    Matrix Fcum; // cumulation of F
-    Matrix FepsSdCum; // F * eps / Sd
+    Matrix Fcum;        // cumulation of F
+    Matrix FepsSdCum;   // F * eps / Sd
     Matrix Feps1VarCum; // F * (eps^2 - 1) / Var
-    Matrix epsSdCum; // eps / Sd
-    Matrix eps1VarCum; // (eps^2 - 1) / Var
+    Matrix epsSdCum;    // eps / Sd
+    Matrix eps1VarCum;  // (eps^2 - 1) / Var
 
-    Matrix epsSd; // eps / Sd
+    Matrix epsSd;   // eps / Sd
     Matrix eps1Var; // (eps^2 - 1) / Var
 
     bool summarized;
@@ -212,8 +212,12 @@ sample_repr(sgd_repr_gaus_t<Matrix> &repr, VSLStreamStatePtr rstream)
     static_assert(std::is_same<float, typename Matrix::scalar_t>::value,
                   "Only assume float for intel RNG");
 
-    vsRngGaussian(VSL_RNG_METHOD_GAUSSIAN_ICDF, rstream, repr.Eps.size(),
-                  repr.Eps.data(), 0.0, 1.0);
+    vsRngGaussian(VSL_RNG_METHOD_GAUSSIAN_ICDF,
+                  rstream,
+                  repr.Eps.size(),
+                  repr.Eps.data(),
+                  0.0,
+                  1.0);
     repr.Eta = repr.Mean + repr.Eps.cwiseProduct(repr.Var.cwiseSqrt());
     return repr.Eta;
 }
@@ -225,8 +229,12 @@ sample_repr_zeromean(sgd_repr_gaus_t<Matrix> &repr, VSLStreamStatePtr rstream)
     static_assert(std::is_same<float, typename Matrix::scalar_t>::value,
                   "Only assume float for intel RNG");
 
-    vsRngGaussian(VSL_RNG_METHOD_GAUSSIAN_ICDF, rstream, repr.Eps.size(),
-                  repr.Eps.data(), 0.0, 1.0);
+    vsRngGaussian(VSL_RNG_METHOD_GAUSSIAN_ICDF,
+                  rstream,
+                  repr.Eps.size(),
+                  repr.Eps.data(),
+                  0.0,
+                  1.0);
 
     repr.Eta = repr.Eps.cwiseProduct(repr.Var.cwiseSqrt());
     return repr.Eta;

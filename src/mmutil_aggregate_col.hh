@@ -61,8 +61,8 @@ private:
 };
 
 void
-aggregate_col(const std::string mtx_file, //
-              const std::string col_file, //
+aggregate_col(const std::string mtx_file,        //
+              const std::string col_file,        //
               const std::string membership_file, //
               const std::string output)
 {
@@ -91,7 +91,7 @@ aggregate_col(const std::string mtx_file, //
 
     read_named_membership_file(membership_file,
                                eigen_io::row_index_map_t(j_index), //
-                               eigen_io::col_name_vec_t(k_name), //
+                               eigen_io::col_name_vec_t(k_name),   //
                                eigen_io::col_index_map_t(k_index), //
                                Zsparse);
 
@@ -100,7 +100,7 @@ aggregate_col(const std::string mtx_file, //
         return;
     }
 
-    Mat Z = Zsparse; //
+    Mat Z = Zsparse;      //
     Z.transposeInPlace(); // cluster x sample
 
     //////////////////////////////////////

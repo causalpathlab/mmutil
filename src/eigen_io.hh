@@ -60,9 +60,9 @@ struct col_index_map_t {
 
 template <typename IFS, typename MATTYPE>
 void
-read_named_eigen_sparse_stream(IFS &ifs, //
-                               row_name_vec_t row_name_vec, //
-                               col_name_vec_t col_name_vec, //
+read_named_eigen_sparse_stream(IFS &ifs,                      //
+                               row_name_vec_t row_name_vec,   //
+                               col_name_vec_t col_name_vec,   //
                                row_index_map_t row_index_map, //
                                col_index_map_t col_index_map, //
                                MATTYPE &mat)
@@ -202,22 +202,30 @@ read_named_eigen_sparse_stream(IFS &ifs, //
 
 template <typename MATTYPE>
 void
-read_named_eigen_sparse_file(const std::string filename, //
-                             row_name_vec_t row_name_vec, //
-                             col_name_vec_t col_name_vec, //
+read_named_eigen_sparse_file(const std::string filename,    //
+                             row_name_vec_t row_name_vec,   //
+                             col_name_vec_t col_name_vec,   //
                              row_index_map_t row_index_map, //
                              col_index_map_t col_index_map, //
                              MATTYPE &mat)
 {
     if (is_file_gz(filename)) {
         igzstream ifs(filename.c_str(), std::ios::in);
-        read_named_eigen_sparse_stream(ifs, row_name_vec, col_name_vec,
-                                       row_index_map, col_index_map, mat);
+        read_named_eigen_sparse_stream(ifs,
+                                       row_name_vec,
+                                       col_name_vec,
+                                       row_index_map,
+                                       col_index_map,
+                                       mat);
         ifs.close();
     } else {
         std::ifstream ifs(filename.c_str(), std::ios::in);
-        read_named_eigen_sparse_stream(ifs, row_name_vec, col_name_vec,
-                                       row_index_map, col_index_map, mat);
+        read_named_eigen_sparse_stream(ifs,
+                                       row_name_vec,
+                                       col_name_vec,
+                                       row_index_map,
+                                       col_index_map,
+                                       mat);
         ifs.close();
     }
 }
@@ -226,10 +234,10 @@ read_named_eigen_sparse_file(const std::string filename, //
 
 template <typename MATTYPE>
 void
-read_named_membership_file(const std::string membership_file, //
+read_named_membership_file(const std::string membership_file,   //
                            const row_index_map_t row_index_map, //
-                           col_name_vec_t col_name_vec, //
-                           col_index_map_t col_index_map, //
+                           col_name_vec_t col_name_vec,         //
+                           col_index_map_t col_index_map,       //
                            MATTYPE &Z)
 {
     col_name_vec_t::type &k_name = col_name_vec.val;

@@ -42,7 +42,7 @@ visit_matrix_market_stream(IFS &ifs, FUN &fun)
     strbuf_t strbuf;
     state_t state = S_EOL;
 
-    size_t num_nz = 0u; // number of non-zero elements
+    size_t num_nz = 0u;   // number of non-zero elements
     size_t num_rows = 0u; // number of rows
     size_t num_cols = 0u; // number of columns
 

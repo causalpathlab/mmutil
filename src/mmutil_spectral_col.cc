@@ -28,7 +28,7 @@ main(const int argc, const char *argv[])
     Mat U, V, D;
 
     std::tie(U, V, D) = take_spectrum_nystrom(options.mtx, //
-                                              weights, //
+                                              weights,     //
                                               options);
 
     // SpMat X0 = build_eigen_sparse(mtx_file);

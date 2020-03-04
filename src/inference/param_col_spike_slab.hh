@@ -13,7 +13,8 @@ struct param_col_spike_slab_t {
     using Dense = Eigen::Matrix<scalar_t, Eigen::Dynamic, Eigen::Dynamic>;
 
     template <typename Opt>
-    explicit param_col_spike_slab_t(const index_t n1, const index_t n2,
+    explicit param_col_spike_slab_t(const index_t n1,
+                                    const index_t n2,
                                     const Opt &opt)
         : nrow(n1)
         , ncol(n2)
@@ -64,21 +65,21 @@ struct param_col_spike_slab_t {
 
     Dense onesN1;
 
-    T alpha; // [nrow x ncol]
-    T alpha_aux; // [nrow x ncol]
+    T alpha;         // [nrow x ncol]
+    T alpha_aux;     // [nrow x ncol]
     T alpha_aux_col; // [1 x ncol]
-    T beta; // [nrow x ncol]
-    T gamma; // [nrow x ncol]
-    T gamma_aux; // [nrow x ncol]
+    T beta;          // [nrow x ncol]
+    T gamma;         // [nrow x ncol]
+    T gamma_aux;     // [nrow x ncol]
     T gamma_aux_col; // [1 x ncol]
 
-    T theta; // [nrow x ncol]
+    T theta;     // [nrow x ncol]
     T theta_var; // [nrow x ncol]
 
-    T grad_alpha_aux; // [nrow x ncol]
+    T grad_alpha_aux;     // [nrow x ncol]
     T grad_alpha_aux_col; // [1 x ncol]
-    T grad_beta; // [nrow x ncol]
-    T grad_gamma_aux; // [nrow x ncol]
+    T grad_beta;          // [nrow x ncol]
+    T grad_gamma_aux;     // [nrow x ncol]
     T grad_gamma_aux_col; // [1 x ncol]
 
     // hyperparameters
@@ -424,7 +425,8 @@ make_sparse_col_spike_slab(const Eigen::SparseMatrixBase<Derived> &A,
 // update parameters by calculated stochastic gradient
 template <typename Parameter, typename Scalar>
 void
-param_impl_update_sgd(Parameter &P, const Scalar rate,
+param_impl_update_sgd(Parameter &P,
+                      const Scalar rate,
                       const param_tag_col_spike_slab)
 {
     const typename Parameter::scalar_t denom = P.rows();
@@ -443,7 +445,8 @@ param_impl_update_sgd(Parameter &P, const Scalar rate,
 
 template <typename Parameter, typename Scalar>
 void
-hyperparam_impl_update_sgd(Parameter &P, const Scalar rate,
+hyperparam_impl_update_sgd(Parameter &P,
+                           const Scalar rate,
                            const param_tag_col_spike_slab)
 {
     P.pi_aux += update_adam(P.adam_pi_aux, P.grad_pi_aux) * rate;
@@ -488,7 +491,8 @@ hyperparam_impl_resolve(Parameter &P, const param_tag_col_spike_slab)
 
 template <typename Parameter, typename Scalar>
 void
-param_impl_perturb(Parameter &P, const Scalar sd,
+param_impl_perturb(Parameter &P,
+                   const Scalar sd,
                    const param_tag_col_spike_slab)
 {
     std::mt19937 rng;
@@ -507,7 +511,9 @@ param_impl_perturb(Parameter &P, const Scalar sd,
 
 template <typename Parameter, typename Scalar, typename RNG>
 void
-param_impl_perturb(Parameter &P, const Scalar sd, RNG &rng,
+param_impl_perturb(Parameter &P,
+                   const Scalar sd,
+                   RNG &rng,
                    const param_tag_col_spike_slab)
 {
     std::normal_distribution<Scalar> Norm;
@@ -562,7 +568,10 @@ param_impl_var(Parameter &P, const param_tag_col_spike_slab)
 // evaluate stochastic gradient descent step
 template <typename Parameter, typename M1, typename M2, typename M3>
 void
-param_impl_eval_sgd(Parameter &P, const M1 &G1, const M2 &G2, const M3 &Nobs,
+param_impl_eval_sgd(Parameter &P,
+                    const M1 &G1,
+                    const M2 &G2,
+                    const M3 &Nobs,
                     const param_tag_col_spike_slab)
 {
     ////////////////////////////////
@@ -614,8 +623,11 @@ param_impl_eval_sgd(Parameter &P, const M1 &G1, const M2 &G2, const M3 &Nobs,
 
 template <typename Parameter, typename M1, typename M2, typename M3>
 void
-hyperparam_impl_eval_sgd(Parameter &P, const M1 &G1, const M2 &G2,
-                         const M3 &Nobs, const param_tag_col_spike_slab)
+hyperparam_impl_eval_sgd(Parameter &P,
+                         const M1 &G1,
+                         const M2 &G2,
+                         const M3 &Nobs,
+                         const param_tag_col_spike_slab)
 {
     using scalar_t = typename Parameter::scalar_t;
     const scalar_t ntot = Nobs.sum();
@@ -672,7 +684,9 @@ hyperparam_impl_eval_sgd(Parameter &P, const M1 &G1, const M2 &G2,
 
 template <typename Parameter>
 void
-param_impl_write(Parameter &P, const std::string hdr, const std::string gz,
+param_impl_write(Parameter &P,
+                 const std::string hdr,
+                 const std::string gz,
                  const param_tag_col_spike_slab)
 {
     write_data_file((hdr + ".theta" + gz), P.theta);
