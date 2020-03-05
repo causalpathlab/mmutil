@@ -122,33 +122,3 @@ Read and show GMM estimation results:
 .show.scatter(out.dir %&% "/gmm.argmax.gz",
               out.dir %&% "/gmm.embedded.gz")
 ```
-
-### Density-based spectral clustering
-
-A strong distributional assumption of underlying data often result in
-poor clustering results while density-based non-parametric clustering
-methods robustly identify clusters of data points distributed in an
-arbitrary fashion.
-
-```{bash}
-if ! [ -f example/brain_2018-05-03/dbscan_level_1.argmax.gz ]; then
-
-	zcat example/brain_2018-05-03/temp.u.gz | cut -f 2-30 -d ' ' | gzip > example/brain_2018-05-03/temp.30.u.gz
-
-    mmutil_spectral_cluster_col --sdata example/brain_2018-05-03/temp.30.u.gz \
-      --method DBSCAN --knn 50 --nlist 100 --bilink 10 --epsilon 3.0 \
-      --num_levels 10 --min_size 5 --embedding_epochs 50 \
-	  --verbose --out example/brain_2018-05-03/dbscan 2> /dev/null
-
-fi
-```
-
-Read and show DBSCAN estimation at multiple resolutions:
-
-```{r fig_scatter_dbscan}
-for(j in 1:5){
-    .show.scatter(out.dir %&% "/dbscan_level_" %&% j %&% ".argmax.gz",
-                  out.dir %&% "/dbscan_level_" %&% j %&% ".embedded.gz")
-}
-```
-

@@ -20,14 +20,14 @@
 #define MMUTIL_CLUSTER_HH_
 
 struct cluster_options_t {
-    typedef enum { DBSCAN, GAUSSIAN_MIXTURE } clustering_method_t;
+    typedef enum { GAUSSIAN_MIXTURE } clustering_method_t;
     const std::vector<std::string> METHOD_NAMES;
 
     typedef enum { UNIFORM, CV, MEAN } sampling_method_t;
     const std::vector<std::string> SAMPLING_METHOD_NAMES;
 
     explicit cluster_options_t()
-        : METHOD_NAMES{ "DBSCAN", "GMM" }
+        : METHOD_NAMES{ "GMM" }
         , SAMPLING_METHOD_NAMES{ "UNIFORM", "CV", "MEAN" }
     {
         K = 3;
@@ -47,7 +47,7 @@ struct cluster_options_t {
         out = "output";
         out_data = false;
 
-        method = DBSCAN;
+        method = GAUSSIAN_MIXTURE;
 
         tau = 1.0;
         rank = 10;
@@ -83,9 +83,9 @@ struct cluster_options_t {
     std::string mtx;
     std::string col;
 
-    Scalar tau;             // regularization
-    Index rank;             // rank
-    Index lu_iter;          // LU iteration for SVD
+    Scalar tau;    // regularization
+    Index rank;    // rank
+    Index lu_iter; // LU iteration for SVD
 
     bool kmeanspp;     // initialization by kmeans++
     Index knn;         // number of nearest neighbors
@@ -154,10 +154,10 @@ struct num_sample_t : public check_positive_t<Index> {
     }
 };
 
-inline void
-estimate_dbscan_of_columns(const Mat &X,                                //
-                           std::vector<std::vector<Index>> &membership, //
-                           const cluster_options_t &options);
+// inline void
+// estimate_dbscan_of_columns(const Mat &X,                                //
+//                            std::vector<std::vector<Index>> &membership, //
+//                            const cluster_options_t &options);
 
 inline std::vector<Index> random_membership(const num_clust_t num_clust, //
                                             const num_sample_t num_sample);
@@ -295,66 +295,67 @@ print_histogram(const std::vector<T> &nn, //
     ofs << "</histogram>" << std::endl;
 }
 
-inline void
-estimate_dbscan_of_columns(const Mat &X,                                //
-                           std::vector<std::vector<Index>> &membership, //
-                           const cluster_options_t &options)
-{
-    //////////////////////////////////////
-    // Overall algorithm:		      //
-    // 1. Construct kNN graph	      //
-    // 2. Prune edges and vertices      //
-    // 3. Identify connected components //
-    //////////////////////////////////////
+// inline void
+// estimate_dbscan_of_columns(const Mat &X,                                //
+//                            std::vector<std::vector<Index>> &membership, //
+//                            const cluster_options_t &options)
+// {
+//     //////////////////////////////////////
+//     // Overall algorithm:		      //
+//     // 1. Construct kNN graph	      //
+//     // 2. Prune edges and vertices      //
+//     // 3. Identify connected components //
+//     //////////////////////////////////////
 
-    const Index N = X.cols();
-    const Index D = X.rows();
+//     const Index N = X.cols();
+//     const Index D = X.rows();
 
-    TLOG("Constructing kNN graph ... N=" << N << ", knn=" << options.knn);
+//     TLOG("Constructing kNN graph ... N=" << N << ", knn=" << options.knn);
 
-    const Index nnlist = std::max(options.knn + 1, options.nlist);
-    const Index bilink =
-        std::max(std::min(options.bilink, X.rows() - 1), static_cast<Index>(2));
+//     const Index nnlist = std::max(options.knn + 1, options.nlist);
+//     const Index bilink =
+//         std::max(std::min(options.bilink, X.rows() - 1),
+//         static_cast<Index>(2));
 
-    std::vector<std::tuple<Index, Index, Scalar>> knn_index;
-    auto _knn = search_knn(SrcDataT(X.data(), X.rows(), X.cols()), //
-                           TgtDataT(X.data(), X.rows(), X.cols()), //
-                           KNN(options.knn + 1),                   // itself
-                           BILINK(bilink),                         //
-                           NNLIST(nnlist),                         //
-                           knn_index);
+//     std::vector<std::tuple<Index, Index, Scalar>> knn_index;
+//     auto _knn = search_knn(SrcDataT(X.data(), X.rows(), X.cols()), //
+//                            TgtDataT(X.data(), X.rows(), X.cols()), //
+//                            KNN(options.knn + 1),                   // itself
+//                            BILINK(bilink),                         //
+//                            NNLIST(nnlist),                         //
+//                            knn_index);
 
-    if (_knn != EXIT_SUCCESS) {
-        TLOG("Failed to search k-nearest neighbors");
-        return;
-    }
+//     if (_knn != EXIT_SUCCESS) {
+//         TLOG("Failed to search k-nearest neighbors");
+//         return;
+//     }
 
-    auto mutual_knn_index = prune_mutual_knn(knn_index);
-    TLOG("Found " << mutual_knn_index.size() << " mutual kNN edges");
+//     auto mutual_knn_index = prune_mutual_knn(knn_index);
+//     TLOG("Found " << mutual_knn_index.size() << " mutual kNN edges");
 
-    membership.clear();
+//     membership.clear();
 
-    for (Index l = 1; l <= options.levels; ++l) {
-        const Scalar rr =
-            static_cast<Scalar>(l) / static_cast<Scalar>(options.levels);
+//     for (Index l = 1; l <= options.levels; ++l) {
+//         const Scalar rr =
+//             static_cast<Scalar>(l) / static_cast<Scalar>(options.levels);
 
-        const Scalar cutoff = options.knn_cutoff * rr;
+//         const Scalar cutoff = options.knn_cutoff * rr;
 
-        UGraph G;
-        build_boost_graph(mutual_knn_index, G, cutoff);
-        std::vector<Index> _membership(N);
-        boost::connected_components(G, &_membership[0]);
-        const Index kk = sort_cluster_index(_membership, options.min_size);
-        membership.push_back(_membership);
+//         UGraph G;
+//         build_boost_graph(mutual_knn_index, G, cutoff);
+//         std::vector<Index> _membership(N);
+//         boost::connected_components(G, &_membership[0]);
+//         const Index kk = sort_cluster_index(_membership, options.min_size);
+//         membership.push_back(_membership);
 
-        TLOG("K = " << kk << " components with distance <= " << cutoff);
-        if (options.verbose) {
-            auto nn = count_frequency(_membership, options.min_size);
-            print_histogram(nn, std::cout);
-            std::cout << std::flush;
-        }
-    }
-}
+//         TLOG("K = " << kk << " components with distance <= " << cutoff);
+//         if (options.verbose) {
+//             auto nn = count_frequency(_membership, options.min_size);
+//             print_histogram(nn, std::cout);
+//             std::cout << std::flush;
+//         }
+//     }
+// }
 
 template <typename F0, typename F>
 inline std::tuple<Mat, Mat, std::vector<Scalar>>
@@ -665,7 +666,7 @@ parse_cluster_options(const int argc,     //
         "--data (-d)             : MTX file (data)\n"
         "--mtx (-d)              : MTX file (data)\n"
         "--sdata (-s)            : Spectral feature file (column x factor)\n"
-        "--method (-M)           : A clustering method {DBSCAN,GMM}\n"
+        // "--method (-M)           : A clustering method {GMM}\n"
         "--col (-c)              : Column file\n"
         "--tau (-u)              : Regularization parameter (default: 1)\n"
         "--rank (-r)             : The maximal rank of SVD (default: 10)\n"
@@ -682,17 +683,17 @@ parse_cluster_options(const int argc,     //
         "CV, MEAN\n"
         "--verbose (-O)          : Output more words (default: false)\n"
         "\n"
-        "[Options for DBSCAN]\n"
-        "\n"
-        "--knn (-k)              : K nearest neighbors (default: 10)\n"
-        "--epsilon (-e)          : maximum cosine distance cutoff (default: "
-        "1.0)\n"
-        "--bilink (-m)           : # of bidirectional links (default: 10)\n"
-        "--nlist (-f)            : # nearest neighbor lists (default: 10)\n"
-        "--min_size (-z)         : minimum size to report (default: 10)\n"
-        "--num_levels (-n)       : number of DBSCAN levels (default: 10)\n"
-        "--prune_knn (-P)        : prune kNN graph (reciprocal match)\n"
-        "\n"
+        // "[Options for DBSCAN]\n"
+        // "\n"
+        // "--knn (-k)              : K nearest neighbors (default: 10)\n"
+        // "--epsilon (-e)          : maximum cosine distance cutoff (default: "
+        // "1.0)\n"
+        // "--bilink (-m)           : # of bidirectional links (default: 10)\n"
+        // "--nlist (-f)            : # nearest neighbor lists (default: 10)\n"
+        // "--min_size (-z)         : minimum size to report (default: 10)\n"
+        // "--num_levels (-n)       : number of DBSCAN levels (default: 10)\n"
+        // "--prune_knn (-P)        : prune kNN graph (reciprocal match)\n"
+        // "\n"
         "[Options for Gaussian mixture models]\n"
         "\n"
         "--trunc (-K)            : maximum truncation-level of clustering\n"
@@ -707,67 +708,68 @@ parse_cluster_options(const int argc,     //
         "Qin and Rohe (2013), Regularized Spectral Clustering under "
         "Degree-corrected Stochastic Block Model\n"
         "Li, Kwok, Lu (2010), Making Large-Scale Nystrom Approximation Possible\n"
-        "\n"
-        "[Details for kNN graph]\n"
-        "\n"
-        "(M)\n"
-        "The number of bi-directional links created for every new element  \n"
-        "during construction. Reasonable range for M is 2-100. Higher M work \n"
-        "better on datasets with intrinsic dimensionality and/or high recall, \n"
-        "while low M works better for datasets intrinsic dimensionality and/or\n"
-        "low recalls. \n"
-        "\n"
-        "(N)\n"
-        "The size of the dynamic list for the nearest neighbors (used during \n"
-        "the search). A higher more accurate but slower search. This cannot be \n"
-        "set lower than the number nearest neighbors k. The value ef of can be \n"
-        "anything between of the dataset. [Reference] Malkov, Yu, and Yashunin. "
-        "\n"
-        "`Efficient and robust approximate nearest neighbor search using \n"
-        "Hierarchical Navigable Small World graphs.` \n"
-        "\n"
-        "preprint: "
-        "https://arxiv.org/abs/1603.09320 See also: "
-        "https://github.com/nmslib/hnswlib";
+        "\n";
+    // "[Details for kNN graph]\n"
+    // "\n"
+    // "(M)\n"
+    // "The number of bi-directional links created for every new element  \n"
+    // "during construction. Reasonable range for M is 2-100. Higher M work \n"
+    // "better on datasets with intrinsic dimensionality and/or high recall, \n"
+    // "while low M works better for datasets intrinsic dimensionality and/or\n"
+    // "low recalls. \n"
+    // "\n"
+    // "(N)\n"
+    // "The size of the dynamic list for the nearest neighbors (used during \n"
+    // "the search). A higher more accurate but slower search. This cannot be
+    // \n" "set lower than the number nearest neighbors k. The value ef of can
+    // be \n" "anything between of the dataset. [Reference] Malkov, Yu, and
+    // Yashunin. "
+    // "\n"
+    // "`Efficient and robust approximate nearest neighbor search using \n"
+    // "Hierarchical Navigable Small World graphs.` \n"
+    // "\n"
+    // "preprint: "
+    // "https://arxiv.org/abs/1603.09320 See also: "
+    // "https://github.com/nmslib/hnswlib";
 
     const char *const short_opts = "M:d:c:k:e:K:I:v:V:T:u:LR"
                                    "r:l:m:f:z:t:o:w:C:n:DPOih"
                                    "S:B:N:";
 
     const option long_opts[] =
-        { { "mtx", required_argument, nullptr, 'd' },              //
-          { "sdata", required_argument, nullptr, 's' },            //
-          { "data", required_argument, nullptr, 'd' },             //
-          { "sdata", required_argument, nullptr, 's' },            //
-          { "method", required_argument, nullptr, 'M' },           //
-          { "col", required_argument, nullptr, 'c' },              //
-          { "knn", required_argument, nullptr, 'k' },              //
-          { "epsilon", required_argument, nullptr, 'e' },          //
-          { "trunc", required_argument, nullptr, 'K' },            //
-          { "burnin", required_argument, nullptr, 'I' },           //
-          { "min_vbiter", required_argument, nullptr, 'v' },       //
-          { "max_vbiter", required_argument, nullptr, 'V' },       //
-          { "convergence", required_argument, nullptr, 'T' },      //
-          { "tau", required_argument, nullptr, 'u' },              //
-          { "rank", required_argument, nullptr, 'r' },             //
-          { "lu_iter", required_argument, nullptr, 'l' },          //
-          { "bilink", required_argument, nullptr, 'm' },           //
-          { "nlist", required_argument, nullptr, 'f' },            //
-          { "out", required_argument, nullptr, 'o' },              //
-          { "row_weight", required_argument, nullptr, 'w' },       //
-          { "col_norm", required_argument, nullptr, 'C' },         //
-          { "num_levels", required_argument, nullptr, 'n' },       //
-          { "min_size", required_argument, nullptr, 'z' },         //
-          { "out_data", no_argument, nullptr, 'D' },               //
-          { "prune_knn", no_argument, nullptr, 'P' },              //
-          { "verbose", no_argument, nullptr, 'O' },                //
-          { "log_scale", no_argument, nullptr, 'L' },              //
-          { "raw_scale", no_argument, nullptr, 'R' },              //
-          { "initial_sample", required_argument, nullptr, 'S' },   //
-          { "nystrom_batch", required_argument, nullptr, 'B' },    //
-          { "sampling_method", required_argument, nullptr, 'N' },  //
-          { "kmeanspp", no_argument, nullptr, 'i' },               //
-          { "help", no_argument, nullptr, 'h' },                   //
+        { { "mtx", required_argument, nullptr, 'd' },             //
+          { "sdata", required_argument, nullptr, 's' },           //
+          { "data", required_argument, nullptr, 'd' },            //
+          { "sdata", required_argument, nullptr, 's' },           //
+          { "method", required_argument, nullptr, 'M' },          //
+          { "col", required_argument, nullptr, 'c' },             //
+          { "knn", required_argument, nullptr, 'k' },             //
+          { "epsilon", required_argument, nullptr, 'e' },         //
+          { "trunc", required_argument, nullptr, 'K' },           //
+          { "burnin", required_argument, nullptr, 'I' },          //
+          { "min_vbiter", required_argument, nullptr, 'v' },      //
+          { "max_vbiter", required_argument, nullptr, 'V' },      //
+          { "convergence", required_argument, nullptr, 'T' },     //
+          { "tau", required_argument, nullptr, 'u' },             //
+          { "rank", required_argument, nullptr, 'r' },            //
+          { "lu_iter", required_argument, nullptr, 'l' },         //
+          { "bilink", required_argument, nullptr, 'm' },          //
+          { "nlist", required_argument, nullptr, 'f' },           //
+          { "out", required_argument, nullptr, 'o' },             //
+          { "row_weight", required_argument, nullptr, 'w' },      //
+          { "col_norm", required_argument, nullptr, 'C' },        //
+          { "num_levels", required_argument, nullptr, 'n' },      //
+          { "min_size", required_argument, nullptr, 'z' },        //
+          { "out_data", no_argument, nullptr, 'D' },              //
+          { "prune_knn", no_argument, nullptr, 'P' },             //
+          { "verbose", no_argument, nullptr, 'O' },               //
+          { "log_scale", no_argument, nullptr, 'L' },             //
+          { "raw_scale", no_argument, nullptr, 'R' },             //
+          { "initial_sample", required_argument, nullptr, 'S' },  //
+          { "nystrom_batch", required_argument, nullptr, 'B' },   //
+          { "sampling_method", required_argument, nullptr, 'N' }, //
+          { "kmeanspp", no_argument, nullptr, 'i' },              //
+          { "help", no_argument, nullptr, 'h' },                  //
           { nullptr, no_argument, nullptr, 0 } };
 
     while (true) {

@@ -155,41 +155,34 @@ run_mixture_model(const Mat &Data, const cluster_options_t &options)
     TLOG("Done fitting a mixture model");
 }
 
-void
-run_dbscan(const Mat &Data, const cluster_options_t &options)
-{
-    const Index N = Data.cols();
-
-    using std::string;
-    using std::vector;
-
-    vector<vector<Index>> membership;
-    estimate_dbscan_of_columns(Data, membership, options);
-
-    // cluster membership results
-    Index l = 0;
-    for (const vector<Index> &z : membership) {
-        const Index k_max = *std::max_element(z.begin(), z.end()) + 1;
-        if (k_max < 1)
-            continue;
-
-        string output = options.out + "_level_" + std::to_string(++l);
-
-        TLOG("Writing " << output);
-
-        if (file_exists(options.col)) {
-            vector<string> samples;
-            CHECK(read_vector_file(options.col, samples));
-            auto argmax = create_argmax_pair(z, samples);
-            write_tuple_file(output + ".argmax.gz", argmax);
-        } else {
-            vector<Index> samples(N);
-            std::iota(samples.begin(), samples.end(), 0);
-            auto argmax = create_argmax_pair(z, samples);
-            write_tuple_file(output + ".argmax.gz", argmax);
-        }
-
-    }
-}
+// void
+// run_dbscan(const Mat &Data, const cluster_options_t &options)
+// {
+//     const Index N = Data.cols();
+//     using std::string;
+//     using std::vector;
+//     vector<vector<Index>> membership;
+//     estimate_dbscan_of_columns(Data, membership, options);
+//     // cluster membership results
+//     Index l = 0;
+//     for (const vector<Index> &z : membership) {
+//         const Index k_max = *std::max_element(z.begin(), z.end()) + 1;
+//         if (k_max < 1)
+//             continue;
+//         string output = options.out + "_level_" + std::to_string(++l);
+//         TLOG("Writing " << output);
+//         if (file_exists(options.col)) {
+//             vector<string> samples;
+//             CHECK(read_vector_file(options.col, samples));
+//             auto argmax = create_argmax_pair(z, samples);
+//             write_tuple_file(output + ".argmax.gz", argmax);
+//         } else {
+//             vector<Index> samples(N);
+//             std::iota(samples.begin(), samples.end(), 0);
+//             auto argmax = create_argmax_pair(z, samples);
+//             write_tuple_file(output + ".argmax.gz", argmax);
+//         }
+//     }
+// }
 
 #endif
