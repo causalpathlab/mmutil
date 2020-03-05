@@ -13,7 +13,6 @@
 #include "mmutil_match.hh"
 #include "mmutil_normalize.hh"
 #include "mmutil_spectral.hh"
-#include "utils/graph.hh"
 #include "utils/progress.hh"
 
 #ifndef MMUTIL_CLUSTER_HH_
