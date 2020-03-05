@@ -433,6 +433,10 @@ read_annotation_matched(const T &options)
 
     std::unordered_map<Str, Index> row_pos; // row name -> row index
     for (Index j = 0; j < row_vec.size(); ++j) {
+        if (row_pos.count(row_vec.at(j)) > 0) {
+            WLOG("Duplicate row/feature name: " << row_vec.at(j));
+            WLOG("Will ignore the first one");
+        }
         row_pos[row_vec.at(j)] = j;
     }
 
@@ -462,12 +466,15 @@ read_annotation_matched(const T &options)
         }
     }
 
-    SpMat L(row_pos.size(), label_pos.size());
+    const Index max_rows = std::max(row_vec.size(), row_pos.size());
+    const Index max_labels = label_pos.size();
+
+    SpMat L(max_rows, max_labels);
     L.reserve(triples.size());
     L.setFromTriplets(triples.begin(), triples.end());
 
-    std::vector<Str> labels(label_pos.size());
-    std::vector<Str> rows(row_pos.size());
+    std::vector<Str> labels(max_labels);
+    std::vector<Str> rows(max_rows);
 
     for (auto pp : label_pos) {
         labels[std::get<1>(pp)] = std::get<0>(pp);
