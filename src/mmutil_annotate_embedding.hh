@@ -7,10 +7,6 @@
 #ifndef MMUTIL_ANNOTATE_EMBEDDING_HH_
 #define MMUTIL_ANNOTATE_EMBEDDING_HH_
 
-struct embedding_options_t;
-
-////////////////////////////////////////////////////////////////
-
 struct embedding_options_t {
     using Str = std::string;
 
@@ -21,10 +17,11 @@ struct embedding_options_t {
     {
         out = "output.txt.gz";
         embedding_dim = 2;
-        embedding_epochs = 100;
-        embedding_rate = 0.1;
+        embedding_epochs = 1000;
         tol = 1e-4;
         verbose = false;
+        l2_penalty = 1e-1;
+        sig2 = 1e-2;
     }
 
     Str data_file;
@@ -34,10 +31,10 @@ struct embedding_options_t {
 
     Index embedding_dim;
     Index embedding_epochs;
-    Scalar embedding_rate;
 
     Scalar tol;
     Scalar sig2;
+    Scalar l2_penalty;
 
     bool verbose;
 };
@@ -58,12 +55,11 @@ parse_embedding_options(const int argc,     //
         "--sig2 (-s)             : variance of Gaussian kernel (default: 1.0)\n"
         "--embedding_dim (-d)    : latent dimensionality (default: 2)\n"
         "--embedding_epochs (-i) : Maximum iteration (default: 100)\n"
-        "--embedding_rate (-r)   : The rate of SGD update (default: 0.1)\n"
         "--tol (-t)              : Convergence criterion (default: 1e-4)\n"
         "--verbose (-v)          : Set verbose (default: false)\n"
         "\n";
 
-    const char *const short_opts = "m:p:o:d:i:t:r:hv";
+    const char *const short_opts = "m:p:o:d:i:t:s:hv";
 
     const option long_opts[] =
         { { "data", required_argument, nullptr, 'm' },             //
@@ -72,8 +68,7 @@ parse_embedding_options(const int argc,     //
           { "embedding_dim", required_argument, nullptr, 'd' },    //
           { "embed_dim", required_argument, nullptr, 'd' },        //
           { "dim", required_argument, nullptr, 'd' },              //
-	  { "embedding_epochs", required_argument, nullptr, 'i' }, //
-          { "embedding_rate", required_argument, nullptr, 'r' }, //
+          { "embedding_epochs", required_argument, nullptr, 'i' }, //
           { "sig2", required_argument, nullptr, 's' },             //
           { "var", required_argument, nullptr, 's' },              //
           { "tol", required_argument, nullptr, 't' },              //
@@ -111,14 +106,9 @@ parse_embedding_options(const int argc,     //
             options.embedding_epochs = std::stoi(optarg);
             break;
 
-        case 'r':
-            options.embedding_rate = std::stof(optarg);
-            break;
-
         case 't':
             options.tol = std::stof(optarg);
             break;
-
 
         case 's':
             options.sig2 = std::stof(optarg);
