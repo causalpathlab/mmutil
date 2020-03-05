@@ -78,9 +78,16 @@ func_apply(Func &&f, std::tuple<Ts...> &&tup)
                                                                tup));
 }
 
+namespace hash_tuple {
+
 ////////////////////
 // hash functions //
 ////////////////////
+
+template <typename T>
+struct hash {
+    size_t operator()(T const &t) const { return std::hash<T>()(t); }
+};
 
 template <typename T>
 inline void
@@ -91,7 +98,7 @@ hash_combine(std::size_t &seed, const T &val)
 }
 
 template <typename S, typename T>
-struct std::hash<std::pair<S, T>> {
+struct hash<std::pair<S, T>> {
     inline std::size_t operator()(const std::pair<S, T> &val) const
     {
         std::size_t seed = 0;
@@ -102,7 +109,7 @@ struct std::hash<std::pair<S, T>> {
 };
 
 template <class... TupleArgs>
-struct std::hash<std::tuple<TupleArgs...>> {
+struct hash<std::tuple<TupleArgs...>> {
 private:
     //  this is a termination condition
     //  N == sizeof...(TupleTypes)
@@ -139,4 +146,5 @@ public:
     }
 };
 
+} // hash tuple
 #endif

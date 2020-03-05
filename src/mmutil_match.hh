@@ -396,7 +396,10 @@ inline TVEC
 prune_mutual_knn(const TVEC &knn_index)
 {
     // Make sure that we could only consider reciprocal kNN pairs
-    std::unordered_map<std::tuple<Index, Index>, short> edge_count;
+    std::unordered_map<std::tuple<Index, Index>,
+                       short,
+                       hash_tuple::hash<std::tuple<Index, Index>>>
+        edge_count;
 
     auto _count = [&edge_count](const auto &tt) {
         Index i, j, temp;
