@@ -127,8 +127,8 @@ parse_embedding_options(const int argc,     //
         }
     }
 
-    ERR_RET(!file_exists(options.data_file), "No MTX data file");
-    ERR_RET(!file_exists(options.prob_file), "No COL data file");
+    ERR_RET(!file_exists(options.data_file), "No data matrix file");
+    ERR_RET(!file_exists(options.prob_file), "No probability file");
 
     return EXIT_SUCCESS;
 }

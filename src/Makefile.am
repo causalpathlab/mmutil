@@ -69,10 +69,10 @@ mmutil_split_col_SOURCES = mmutil_split_col.cc \
 # Annotation #
 ##############
 
-mmutil_annotate_col_SOURCES = mmutil_annotate_col.hh \
+mmutil_annotate_col_SOURCES = \
+        mmutil_annotate_col.hh \
         inference/sampler.hh \
 	mmutil_normalize.hh \
-	mmutil_spectral.hh \
 	mmutil_annotate_col.cc \
         $(common)
 

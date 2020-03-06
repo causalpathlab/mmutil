@@ -524,12 +524,13 @@ struct annotate_options_t {
 
         em_tol = 1e-4;
 
-        tau = 1.0;
-        rank = 50;
-        lu_iter = 5;
+        // tau = 1.0;
+        // rank = 10;
+        // lu_iter = 5;
 
         balance_marker_size = false;
         unconstrained_update = false;
+        output_count_matrix = true;
 
         verbose = false;
         indep_kappa = false;
@@ -565,12 +566,13 @@ struct annotate_options_t {
         }
     }
 
-    Scalar tau;
-    Index rank;
-    Index lu_iter;
+    // Scalar tau;
+    // Index rank;
+    // Index lu_iter;
 
     bool balance_marker_size;
     bool unconstrained_update;
+    bool output_count_matrix;
 
     bool indep_kappa;
     bool verbose;
@@ -608,13 +610,10 @@ parse_annotate_options(const int argc,     //
         "\n"
         "--verbose (-v)         : Set verbose (default: false)\n"
         "--balance_markers (-b) : Balance maker size (default: false)\n"
-        "\n"
-        "--tau (-u)             : Regularization parameter (default: tau = 1)\n"
-        "--rank (-r)            : The maximal rank of SVD (default: rank = 50)\n"
-        "--iter (-l)            : # of LU iterations (default: iter = 5)\n"
+        "--output_mtx_file (-O) : Write a count matrix of the markers (default: false)\n"
         "\n";
 
-    const char *const short_opts = "m:c:f:a:o:I:B:M:LRi:t:hbd:u:r:l:kv";
+    const char *const short_opts = "m:c:f:a:o:I:B:M:LRi:t:hbd:u:r:l:kOv";
 
     const option long_opts[] =
         { { "mtx", required_argument, nullptr, 'm' },             //
@@ -636,11 +635,12 @@ parse_annotate_options(const int argc,     //
           { "balance_markers", no_argument, nullptr, 'b' },       //
           { "unconstrained_update", no_argument, nullptr, 'd' },  //
           { "unconstrained", no_argument, nullptr, 'd' },         //
-          { "tau", required_argument, nullptr, 'u' },             //
-          { "rank", required_argument, nullptr, 'r' },            //
-          { "lu_iter", required_argument, nullptr, 'l' },         //
-          { "indep_kappa", required_argument, nullptr, 'p' },     //
-          { "verbose", no_argument, nullptr, 'v' },               //
+          { "output_mtx_file", no_argument, nullptr, 'O' },       //
+          // { "tau", required_argument, nullptr, 'u' },             //
+          // { "rank", required_argument, nullptr, 'r' },            //
+          // { "lu_iter", required_argument, nullptr, 'l' },         //
+          { "indep_kappa", required_argument, nullptr, 'p' }, //
+          { "verbose", no_argument, nullptr, 'v' },           //
           { nullptr, no_argument, nullptr, 0 } };
 
     while (true) {
@@ -708,17 +708,20 @@ parse_annotate_options(const int argc,     //
         case 'd':
             options.unconstrained_update = true;
             break;
-        case 'u':
-            options.tau = std::stof(optarg);
-            break;
-        case 'r':
-            options.rank = std::stoi(optarg);
-            break;
-        case 'l':
-            options.lu_iter = std::stoi(optarg);
-            break;
+        // case 'u':
+        //     options.tau = std::stof(optarg);
+        //     break;
+        // case 'r':
+        //     options.rank = std::stoi(optarg);
+        //     break;
+        // case 'l':
+        //     options.lu_iter = std::stoi(optarg);
+        //     break;
         case 'k':
             options.indep_kappa = true;
+            break;
+        case 'O':
+            options.output_count_matrix = true;
             break;
         case 'h': // -h or --help
         case '?': // Unrecognized option
@@ -800,35 +803,6 @@ run_annotation(const annotate_options_t &options)
 
     train_marker_genes(annot, X, options);
 
-    //////////////////////////////////////////////////
-    // Estimate the projection matrix for embedding //
-    //////////////////////////////////////////////////
-
-    auto safe_inverse = [](const Scalar &x) -> Scalar {
-        return 1.0 / static_cast<Scalar>(x + 1e-8);
-    };
-
-    Vec ww = annot.mu.rowwise().maxCoeff().unaryExpr(safe_inverse);
-
-    const Index rank = std::min(options.rank, L.rows());
-    RandomizedSVD<Mat> svd(rank, options.lu_iter);
-
-    Mat proj;
-    {
-        Mat xx_t = make_normalized_laplacian(X0,
-                                             ww,
-                                             options.tau,
-                                             0,
-                                             options.log_scale);
-        svd.compute(xx_t);
-
-        Mat uu = svd.matrixU();        // nn x rank
-        Mat vv = svd.matrixV();        // feature x rank
-        Vec dd = svd.singularValues(); // rank x 1
-
-        proj = vv * dd.cwiseInverse().asDiagonal(); // feature x rank
-    }
-
     /////////////////////////////////////////////////////
     // step3: Assign labels to all the cells (columns) //
     /////////////////////////////////////////////////////
@@ -841,8 +815,8 @@ run_annotation(const annotate_options_t &options)
     output.reserve(N);
     Vec zi(annot.ntype);
     Mat Pr(annot.ntype, N);
-    Mat Ut(N, rank);
-    Ut.setZero();
+
+    SpMat xx_out(subrows.size(), 0);
 
     for (Index lb = 0; lb < N; lb += batch_size) {
         const Index ub = std::min(N, batch_size + lb);
@@ -855,12 +829,6 @@ run_annotation(const annotate_options_t &options)
         SpMat x0_b =
             read_eigen_sparse_subset_rows_cols(options.mtx, subrows, subcols_b);
 
-        Mat xx_t = make_normalized_laplacian(x0_b,
-                                             ww,
-                                             options.tau,
-                                             0,
-                                             options.log_scale);
-
         Mat xx_b = Mat(x0_b);
         Mat _col_norm = Mat::Ones(1, xx_b.rows()) * xx_b.cwiseProduct(xx_b);
         _col_norm.transposeInPlace();
@@ -870,6 +838,10 @@ run_annotation(const annotate_options_t &options)
         }
 
         normalize_columns(xx_b);
+
+        if (options.output_count_matrix) {
+	  xx_out = hcat(xx_out, x0_b);
+        }
 
         for (Index j = 0; j < xx_b.cols(); ++j) {
             const Index i = subcols_b.at(j);
@@ -888,11 +860,6 @@ run_annotation(const annotate_options_t &options)
 
             Pr.col(i) = zi;
         }
-
-        for (Index j = 0; j < xx_b.cols(); ++j) {
-            const Index i = subcols_b.at(j);
-            Ut.row(i) += xx_t.row(j) * proj;
-        }
     }
 
     Pr.transposeInPlace();
@@ -903,10 +870,13 @@ run_annotation(const annotate_options_t &options)
         markers.emplace_back(rows.at(r));
     });
 
+    if (options.output_count_matrix) {
+        write_matrix_market_file(options.out + ".marker.mtx.gz", xx_out);
+    }
+
     write_tuple_file(options.out + ".annot.gz", output);
     write_data_file(options.out + ".annot_prob.gz", Pr);
     write_data_file(options.out + ".marker_profile.gz", annot.mu);
-    write_data_file(options.out + ".marker_spectral.gz", Ut);
     write_vector_file(options.out + ".marker_names.gz", markers);
     write_vector_file(options.out + ".label_names.gz", labels);
 

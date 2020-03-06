@@ -99,12 +99,6 @@ zcat data/brain_2018-05-03/features.tsv.gz | head
 
 ## Annotate columns of 10x count matrix.
 
-We can take a look at command line arguments:
-
-```{bash}
-mmutil_annotate_col -h || exit 0 # This help page returns 1
-```
-
 Let's store all the results here:
 
 ```{bash}
@@ -113,25 +107,18 @@ Let's store all the results here:
 
 Running this takes some time...
 
-```{r}
-start.time = Sys.time()
-```
-
 ```{bash}
 [ -f example/annotate_brain/out.annot.gz ] || \
 mmutil_annotate_col \
  --mtx data/brain_2018-05-03/filtered_count_matrix.mtx.gz \
  --feature data/brain_2018-05-03/features.tsv.gz \
+ --balance_markers \
  --col data/brain_2018-05-03/barcodes.tsv.gz \
  --ann PsychENCODE.marker \
  --initial_sample 100000 \
  --batch_size 200000 \
+ --output_mtx_file \
  --out example/annotate_brain/out 2> /dev/null
-```
-
-```{r}
-end.time = Sys.time()
-end.time - start.time
 ```
 
 That is it! We have evaluated the probability of cell type assignment
@@ -157,16 +144,14 @@ Let's evaluate the performance of our assignment method.
 
 .dt %>% spread(key=broad.cell.type, value=nn, fill = 0)
 
-.dt.100 = .dt[nn >= 100]
+.dt.10 = .dt[nn >= 10]
 
 .gg.plot(.dt, aes(x=broad.cell.type, y=prediction, fill=nn)) +
-  theme(legend.key.width = unit(.2, "lines")) +
-  theme(legend.key.height = unit(.5, "lines")) +
+  theme(legend.position = "none") +
   geom_tile(na.rm=TRUE) +
-  geom_text(data=.dt.100, aes(label = num.int(nn)),size=2) +
+  geom_text(data=.dt.10, aes(label = num.int(nn)),size=2) +
   scale_fill_gradientn("#cells", colours=c("white","red"),trans="sqrt",labels=num.sci)
 ```
-
 
 The algorithm iteratively adjust marker gene contribution:
 
@@ -196,7 +181,7 @@ The algorithm iteratively adjust marker gene contribution:
 
 ```
 
-## Parametric embedding
+## Parametric embedding based on these cell type annotation results
 
 ```{bash}
 [ -f example/annotate_brain/latent.embedding.gz ] || \
@@ -216,13 +201,69 @@ The algorithm iteratively adjust marker gene contribution:
 .dt = merge(cbind(.pred, .dt), .meta)
 
 .gg.plot(.dt, aes(x = V1, y = V2, color = prediction)) +
-  geom_point(alpha = .5, size = .5) +
+  geom_point(alpha = .5, size = .1) +
   scale_color_brewer("prediction", type="div", palette="Paired")
 
 .gg.plot(.dt, aes(x = V1, y = V2, color = broad.cell.type)) +
   geom_point(alpha = .5, size = .5) +
   scale_color_brewer("Mathys+Davila", type="div", palette="Paired")
 
+```
+
+```{r}
+xx = Matrix::readMM("example/annotate_brain/out.marker.mtx.gz")
+xx = apply(xx, 2, function(x) x/sum(x) * 1e3)
+```
+
+```{r}
+plot.gene <- function(.gene.name) {
+
+  .idx = which(.genes == .gene.name)
+
+  .xx = xx[.idx, , drop = FALSE] %>%
+    as.matrix %>%
+    apply(MARGIN=2, mean) %>%
+    unlist %>% 
+    as.numeric
+
+  .xx = scale(log2(1 + .xx)) %>%
+    as.numeric %>% 
+    unlist
+
+  .df.show = .dt %>%
+    select(V1, V2, prob, prediction) %>%
+    mutate(expr = .xx) %>%
+    as_tibble %>%
+    arrange(expr)
+
+  plt =
+    .gg.plot(.df.show, aes(x=V1, y=V2, color=expr, size=prob)) +
+    ggtitle(paste0(.genes[.idx], collapse="+")) +
+    theme(legend.position="bottom") +
+    geom_point(alpha = .5) +
+    scale_size_continuous(range=c(0,1), guide=FALSE) +
+    scale_color_gradientn("",colours=c("white","white","#2B8CBE"))
+}
+```
+
+Classification of cell types based on a couple of genes might not be so great.
+
+```{r fig.width=8, fig.height=2}
+p1 = plot.gene("CD53")
+p2 = plot.gene("SNAP25")
+p3 = plot.gene("TCF12")
+p4 = plot.gene("CD74")
+
+p1 | p2 | p3 | p4
+```
+
+```{r fig.width=8, fig.height=2}
+p5 = plot.gene("ASAP1")
+p6 = plot.gene("KCNQ3")
+p7 = plot.gene("MBP")
+p8 = plot.gene("CLDN5")
+
+p5 | p6 | p7 | p8
 ```
 
 ```{r Fig_embedding_tsne, fig.width=6, fig.height=5}
