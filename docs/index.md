@@ -9,9 +9,9 @@ author: "Yongjin Park"
 
 # Examples
 
-[Brain data from Mathys and Davila 2018](example_brain_2018-05-03.html)
+[Direct cell type annotation](example_annotate_cells.html)
 
-[See also this](https://ypark.github.io/snRNAseq_mmutil_pipeline/plot_pca)
+[Brain data from Mathys and Davila 2018](example_brain_2018-05-03.html)
 
 [Pancreas data](example_pancreas_2018-08-13.html)
 

@@ -38,7 +38,7 @@ Create a working directory:
 Meta data to compare with the previous annotations:
 
 ```{r}
-meta.file = "data/brain_2018-05-03/filtered_column_metadata.txt"
+meta.file = "data/brain_2018-05-03/filtered_column_metadata.txt.gz"
 meta.tab = fread(meta.file)
 ```
 

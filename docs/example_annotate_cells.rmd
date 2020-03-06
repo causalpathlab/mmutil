@@ -1,0 +1,232 @@
+---
+title: "Cell type annotation by supervised von Mises-Fisher clustering"
+author: "Yongjin Park"
+date: "`r Sys.time()`"
+---
+
+```{r include=FALSE}
+library(tidyverse)
+library(data.table)
+library(patchwork)
+library("R.utils")
+library("lemon")
+source("Util-rmd.R")
+
+fig.dir = 'Fig/example/annotation/'
+dir.create(fig.dir, recursive = TRUE, showWarnings = FALSE)
+knitr::opts_chunk$set(fig.path = fig.dir, fig.width = 4, fig.height = 3)
+knitr::opts_chunk$set(dev.args = list(bg = "transparent"))
+options(stringsAsFactors = FALSE)
+```
+
+## Data preparation
+
+We downloaded a list of PsychENCODE marker gene annotations (broad cell types). The file looks like this:
+
+```{bash}
+cat PsychENCODE.marker | head
+```
+
+```{r Fig_Marker, fig.width=6, fig.height=1.5}
+marker.genes =
+  fread("PsychENCODE.marker",header=FALSE) %>%
+  (function(x) { colnames(x) = c("geneSymbol", "celltype"); x })
+
+## just show these marker genes
+.oo = list(rows = rev(c("Ex", "In", "Oligo", "OPC", "Microglia", "Astro", "Per", "Endo")))
+
+.oo$cols =
+    marker.genes %>% 
+    mutate(row = celltype, col = geneSymbol, weight = 1) %>%
+    col.order(.oo$rows)
+
+.df = marker.genes %>%
+    mutate(row = factor(celltype, .oo$rows)) %>% 
+    mutate(col = factor(geneSymbol, .oo$cols))
+    
+.gg.plot(.df, aes(y=row, x=col)) +
+    geom_tile() +
+    xlab("genes") + ylab("cell types") + 
+    theme(axis.ticks.x=element_blank()) +
+    theme(axis.text.x=element_blank())
+```
+
+For each cell, we can distinguish the identity of cell types by cosine similarity between them. For instance, we can construct a 0/1 marker gene membership matrix as follows:
+
+```{r}
+M = .df %>%
+  select(celltype, geneSymbol) %>%
+  mutate(val=1) %>%
+  spread(key="celltype", value="val", fill=0) %>%
+  select(-geneSymbol) %>%
+  as.matrix  
+
+M %>% head
+```
+
+We can measure the cosine similarity across the columns by taking
+dot-product after normalization.
+
+```{r}
+M = apply(M, 2, function(x) x/sqrt(sum(x^2)))
+t(M) %*% M %>% round(2)
+```
+
+PsychENCODE's marker gene selection might be imperfect since some
+"marker" genes are shared by different cell types. However, it has
+enough discriminatory power.
+
+Using this initial dictionary of marker genes, we can start analyzing
+10x data, which consist of these three files:
+
+* Sparse count matrix:
+
+```{bash}
+zcat data/brain_2018-05-03/filtered_count_matrix.mtx.gz | head
+```
+
+* Cell barcode list:
+
+```{bash}
+zcat data/brain_2018-05-03/barcodes.tsv.gz | head
+```
+
+* Gene/feature list (**these names should exist in the marker file**):
+
+```{bash}
+zcat data/brain_2018-05-03/features.tsv.gz | head
+```
+
+## Annotate columns of 10x count matrix.
+
+We can take a look at command line arguments:
+
+```{bash}
+mmutil_annotate_col -h || exit 0 # This help page returns 1
+```
+
+Let's store all the results here:
+
+```{bash}
+[ -d example/annotate_brain ] || mkdir -p example/annotate_brain
+```
+
+Running this takes some time...
+
+```{r}
+start.time = Sys.time()
+```
+
+```{bash}
+[ -f example/annotate_brain/out.annot.gz ] || \
+mmutil_annotate_col \
+ --mtx data/brain_2018-05-03/filtered_count_matrix.mtx.gz \
+ --feature data/brain_2018-05-03/features.tsv.gz \
+ --col data/brain_2018-05-03/barcodes.tsv.gz \
+ --ann PsychENCODE.marker \
+ --initial_sample 100000 \
+ --batch_size 200000 \
+ --out example/annotate_brain/out 2> /dev/null
+```
+
+```{r}
+end.time = Sys.time()
+end.time - start.time
+```
+
+That is it! We have evaluated the probability of cell type assignment
+for these cells:
+
+```{bash}
+gzip -cd example/annotate_brain/out.annot.gz | head
+```
+
+* The first column: barcode ID
+* The second column: cell type provided by the `.marker` file
+* The third column: the probability of most probable cell type
+
+Let's evaluate the performance of our assignment method.
+
+```{r Fig_prediction, fig.width=4, fig.height=3}
+.pred = fread("example/annotate_brain/out.annot.gz", header=FALSE) %>%
+  (function(x) { colnames(x) = c("TAG", "prediction", "prob"); x })
+.meta = fread("data/brain_2018-05-03/filtered_column_metadata.txt.gz")
+
+.dt = merge(.pred, .meta)
+.dt = .dt[, .(nn = .N), by = .(prediction, broad.cell.type)]
+
+.dt %>% spread(key=broad.cell.type, value=nn, fill = 0)
+
+.dt.100 = .dt[nn >= 100]
+
+.gg.plot(.dt, aes(x=broad.cell.type, y=prediction, fill=nn)) +
+  theme(legend.key.width = unit(.2, "lines")) +
+  theme(legend.key.height = unit(.5, "lines")) +
+  geom_tile(na.rm=TRUE) +
+  geom_text(data=.dt.100, aes(label = num.int(nn)),size=2) +
+  scale_fill_gradientn("#cells", colours=c("white","red"),trans="sqrt",labels=num.sci)
+```
+
+
+The algorithm iteratively adjust marker gene contribution:
+
+```{r Fig_Marker_adj, fig.width=6, fig.height=1.5}
+.labels = fread("example/annotate_brain/out.label_names.gz",header=FALSE) %>% unlist
+
+.genes = fread("example/annotate_brain/out.marker_names.gz",header=FALSE) %>% unlist
+
+.df = fread("example/annotate_brain/out.marker_profile.gz") %>%
+  (function(x) { colnames(x) = .labels; x }) %>% 
+  as_tibble() %>% 
+  mutate(geneSymbol = .genes) %>%
+  gather(key=celltype, value=phi, -geneSymbol) %>%
+  group_by(geneSymbol, celltype) %>%
+  slice(which.max(phi)) %>% 
+  ungroup() %>% 
+  mutate(row = factor(celltype, .oo$rows)) %>% 
+  mutate(col = factor(geneSymbol, .oo$cols))
+
+.gg.plot(.df, aes(y=row, x=col, fill = phi)) +
+  theme(legend.position = "top") +
+  geom_tile() +
+  scale_fill_gradientn(colours=c("white", "red")) +
+  xlab("genes") + ylab("cell types") + 
+  theme(axis.ticks.x=element_blank()) +
+  theme(axis.text.x=element_blank())
+
+```
+
+## Parametric embedding
+
+```{bash}
+[ -f example/annotate_brain/latent.embedding.gz ] || \
+ mmutil_embed_annot \
+ --data example/annotate_brain/out.marker_spectral.gz \
+ --prob example/annotate_brain/out.annot_prob.gz \
+ --embedding_dim 2 \
+ --embedding_epochs 500 \
+ --tol 1e-8 \
+ --sig2 0.1 \
+ --out example/annotate_brain/latent 2> /dev/null
+```
+
+```{r Fig_embedding, fig.width=6, fig.height=5}
+
+.dt = fread("example/annotate_brain/latent.embedding.gz",header=FALSE)
+.dt = merge(cbind(.pred, .dt), .meta)
+
+.gg.plot(.dt, aes(x = V1, y = V2, color = prediction)) +
+  geom_point(alpha = .5, size = .5) +
+  scale_color_brewer("prediction", type="div", palette="Paired")
+
+.gg.plot(.dt, aes(x = V1, y = V2, color = broad.cell.type)) +
+  geom_point(alpha = .5, size = .5) +
+  scale_color_brewer("Mathys+Davila", type="div", palette="Paired")
+
+```
+
+```{r Fig_embedding_tsne, fig.width=6, fig.height=5}
+.gg.plot(.dt, aes(x = tsne1, y = tsne2, color = prediction)) +
+  geom_point(alpha = .5, size = .5) +
+  scale_color_brewer("prediction", type="div", palette="Paired")
+```
