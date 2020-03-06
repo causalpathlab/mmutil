@@ -530,7 +530,7 @@ struct annotate_options_t {
 
         balance_marker_size = false;
         unconstrained_update = false;
-        output_count_matrix = true;
+        output_count_matrix = false;
 
         verbose = false;
         indep_kappa = false;
@@ -629,7 +629,7 @@ parse_annotate_options(const int argc,     //
           { "batch_size", required_argument, nullptr, 'B' },      //
           { "sampling_method", required_argument, nullptr, 'M' }, //
           { "em_iter", required_argument, nullptr, 'i' },         //
-          { "em_tol", required_argument, nullptr, 'e' },          //
+          { "em_tol", required_argument, nullptr, 't' },          //
           { "help", no_argument, nullptr, 'h' },                  //
           { "balance_marker", no_argument, nullptr, 'b' },        //
           { "balance_markers", no_argument, nullptr, 'b' },       //
@@ -840,7 +840,7 @@ run_annotation(const annotate_options_t &options)
         normalize_columns(xx_b);
 
         if (options.output_count_matrix) {
-	  xx_out = hcat(xx_out, x0_b);
+            xx_out = hcat(xx_out, x0_b);
         }
 
         for (Index j = 0; j < xx_b.cols(); ++j) {
