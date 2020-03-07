@@ -803,6 +803,16 @@ run_annotation(const annotate_options_t &options)
 
     train_marker_genes(annot, X, options);
 
+    write_data_file(options.out + ".marker_profile.gz", annot.mu);
+    write_vector_file(options.out + ".label_names.gz", labels);
+
+    std::vector<std::string> markers;
+    markers.reserve(subrows.size());
+    std::for_each(subrows.begin(), subrows.end(), [&](const auto r) {
+        markers.emplace_back(rows.at(r));
+    });
+    write_vector_file(options.out + ".marker_names.gz", markers);
+
     /////////////////////////////////////////////////////
     // step3: Assign labels to all the cells (columns) //
     /////////////////////////////////////////////////////
@@ -824,10 +834,12 @@ run_annotation(const annotate_options_t &options)
 
         std::iota(subcols_b.begin(), subcols_b.end(), lb);
 
-        TLOG("On the batch [" << lb << ", " << ub << ")");
+        TLOG("Reading data on the batch [" << lb << ", " << ub << ")");
 
         SpMat x0_b =
             read_eigen_sparse_subset_rows_cols(options.mtx, subrows, subcols_b);
+
+	TLOG("Preprocessing X [" << x0_b.rows() << " x " << x0_b.cols() << "]");
 
         Mat xx_b = Mat(x0_b);
         Mat _col_norm = Mat::Ones(1, xx_b.rows()) * xx_b.cwiseProduct(xx_b);
@@ -837,11 +849,15 @@ run_annotation(const annotate_options_t &options)
             xx_b = xx_b.unaryExpr(log2_op);
         }
 
+	TLOG("Normalizing columns ...");
+
         normalize_columns(xx_b);
 
         if (options.output_count_matrix) {
             xx_out = hcat(xx_out, x0_b);
         }
+
+	progress_bar_t<Index> prog(xx_b.cols(), 1000);
 
         for (Index j = 0; j < xx_b.cols(); ++j) {
             const Index i = subcols_b.at(j);
@@ -859,16 +875,15 @@ run_annotation(const annotate_options_t &options)
             output.emplace_back(columns.at(i), labels.at(argmax), zi(argmax));
 
             Pr.col(i) = zi;
+
+	    prog.update();
+            prog(std::cerr);
         }
+
+        TLOG("Done on the batch [" << lb << ", " << ub << ")");
     }
 
     Pr.transposeInPlace();
-
-    std::vector<std::string> markers;
-    markers.reserve(subrows.size());
-    std::for_each(subrows.begin(), subrows.end(), [&](const auto r) {
-        markers.emplace_back(rows.at(r));
-    });
 
     if (options.output_count_matrix) {
         write_matrix_market_file(options.out + ".marker.mtx.gz", xx_out);
@@ -876,9 +891,6 @@ run_annotation(const annotate_options_t &options)
 
     write_tuple_file(options.out + ".annot.gz", output);
     write_data_file(options.out + ".annot_prob.gz", Pr);
-    write_data_file(options.out + ".marker_profile.gz", annot.mu);
-    write_vector_file(options.out + ".marker_names.gz", markers);
-    write_vector_file(options.out + ".label_names.gz", labels);
 
     TLOG("Done");
     return EXIT_SUCCESS;
