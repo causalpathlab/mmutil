@@ -9,7 +9,6 @@
 #include <numeric>
 #include <vector>
 
-#include "eigen_io.hh"
 #include "eigen_util.hh"
 #include "io.hh"
 #include "io_visitor.hh"

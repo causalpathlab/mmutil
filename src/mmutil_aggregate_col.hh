@@ -70,37 +70,22 @@ aggregate_col(const std::string mtx_file,        //
     // read column names //
     ///////////////////////
 
-    std::vector<std::string> columns;
-    read_vector_file(col_file, columns);
+    // std::vector<std::string> columns;
+    // read_vector_file(col_file, columns);
 
-    eigen_io::row_index_map_t::type j_index;
-    j_index.reserve(columns.size());
-    Index j = 0;
-    for (auto s : columns) {
-        j_index[s] = j++;
-    }
+    // eigen_io::row_index_map_t::type j_index;
+    // j_index.reserve(columns.size());
+    // Index j = 0;
+    // for (auto s : columns) {
+    //     j_index[s] = j++;
+    // }
 
     ///////////////////////////////
     // match with the membership //
     ///////////////////////////////
 
-    eigen_io::col_name_vec_t::type k_name;
-    eigen_io::col_index_map_t::type k_index;
-
-    SpMat Zsparse;
-
-    read_named_membership_file(membership_file,
-                               eigen_io::row_index_map_t(j_index), //
-                               eigen_io::col_name_vec_t(k_name),   //
-                               eigen_io::col_index_map_t(k_index), //
-                               Zsparse);
-
-    if (Zsparse.rows() == 0 || Zsparse.cols() == 0) {
-        WLOG("Empty latent membership matrix");
-        return;
-    }
-
-    Mat Z = Zsparse;      //
+    Mat Z;
+    CHECK(read_data_file(membership_file, Z));
     Z.transposeInPlace(); // cluster x sample
 
     //////////////////////////////////////
@@ -129,8 +114,6 @@ aggregate_col(const std::string mtx_file,        //
         Mat N = collector.N.transpose();
         write_data_file(output + ".n.gz", N);
     }
-
-    write_vector_file(output + ".columns.gz", k_name);
 }
 
 #endif

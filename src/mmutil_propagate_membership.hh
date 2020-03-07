@@ -1,5 +1,6 @@
 #include "mmutil.hh"
 #include "mmutil_stat.hh"
+#include "eigen_io.hh"
 
 #ifndef MMUTIL_COLLAPSE_MATCH_HH_
 #define MMUTIL_COLLAPSE_MATCH_HH_
@@ -13,20 +14,20 @@ propagate_membership(const std::string match_file,      //
     // read matching results //
     ///////////////////////////
 
-    eigen_io::row_name_vec_t::type i_name;
-    eigen_io::col_name_vec_t::type j_name;
-    eigen_io::row_index_map_t::type i_index;
-    eigen_io::col_index_map_t::type j_index;
+    using eigen_io;
+
+    row_name_vec_t::type i_name;
+    col_name_vec_t::type j_name;
+    row_index_map_t::type i_index;
+    col_index_map_t::type j_index;
 
     SpMat M;
-    eigen_io::read_named_eigen_sparse_file(match_file,                       //
-                                           eigen_io::row_name_vec_t(i_name), //
-                                           eigen_io::col_name_vec_t(j_name), //
-                                           eigen_io::row_index_map_t(
-                                               i_index), //
-                                           eigen_io::col_index_map_t(
-                                               j_index), //
-                                           M);
+    read_named_eigen_sparse_file(match_file,
+                                 row_name_vec_t(i_name),
+                                 col_name_vec_t(j_name),
+                                 row_index_map_t(i_index),
+                                 col_index_map_t(j_index),
+                                 M);
 
     TLOG("Read the matching matrix: " << M.rows() << " x " << M.cols());
 
@@ -34,15 +35,15 @@ propagate_membership(const std::string match_file,      //
     // read the membership matrix //
     ////////////////////////////////
 
-    eigen_io::col_name_vec_t::type k_name;
-    eigen_io::col_index_map_t::type k_index;
+    col_name_vec_t::type k_name;
+    col_index_map_t::type k_index;
 
     SpMat Z;
 
     read_named_membership_file(membership_file,
-                               eigen_io::row_index_map_t(j_index), //
-                               eigen_io::col_name_vec_t(k_name),   //
-                               eigen_io::col_index_map_t(k_index), //
+                               row_index_map_t(j_index), //
+                               col_name_vec_t(k_name),   //
+                               col_index_map_t(k_index), //
                                Z);
 
     auto d2w = [&decay](const Scalar &x) -> Scalar {

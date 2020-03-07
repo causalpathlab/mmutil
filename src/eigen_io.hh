@@ -230,61 +230,6 @@ read_named_eigen_sparse_file(const std::string filename,    //
     }
 }
 
-////////////////////////////////////////////////////////////////
-
-template <typename MATTYPE>
-void
-read_named_membership_file(const std::string membership_file,   //
-                           const row_index_map_t row_index_map, //
-                           col_name_vec_t col_name_vec,         //
-                           col_index_map_t col_index_map,       //
-                           MATTYPE &Z)
-{
-    col_name_vec_t::type &k_name = col_name_vec.val;
-    col_index_map_t::type &k_index = col_index_map.val;
-    k_index.clear();
-    k_name.clear();
-
-    const row_index_map_t::type &j_index = row_index_map.val;
-
-    std::unordered_map<std::string, std::string> pi_jk;
-
-    read_dict_file(membership_file, pi_jk);
-
-    using Scalar = typename MATTYPE::Scalar;
-    using Index = typename MATTYPE::Index;
-
-    Index kk = 0;
-    for (auto pp : pi_jk) {
-        if (j_index.count(std::get<0>(pp)) == 0)
-            continue;
-        if (k_index.count(std::get<1>(pp)) == 0) {
-            k_index[std::get<1>(pp)] = kk++;
-            k_name.push_back(std::get<1>(pp));
-        }
-    }
-
-    Z.resize(j_index.size(), k_index.size());
-
-    std::vector<Eigen::Triplet<Scalar>> triplets;
-    for (auto pp : pi_jk) {
-        if (j_index.count(std::get<0>(pp)) == 0)
-            continue;
-        if (k_index.count(std::get<1>(pp)) == 0)
-            continue;
-        const Index j = j_index.at(std::get<0>(pp));
-        const Index k = k_index.at(std::get<1>(pp));
-        triplets.push_back(Eigen::Triplet<Scalar>(j, k, 1));
-    }
-
-    Z.reserve(triplets.size());
-    Z.setFromTriplets(triplets.begin(), triplets.end());
-
-    TLOG("Read the annotation matrix: " << Z.rows() << " x " << Z.cols());
-}
-
-//  read_membership_matrix_file()  ;
-
-} // namespace eigen_io
+} // eigen io
 
 #endif

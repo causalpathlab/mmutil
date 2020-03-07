@@ -12,7 +12,6 @@ bin_PROGRAMS = mmutil_merge_col \
     mmutil_match_col \
     mmutil_annotate_col \
     mmutil_embed_annot \
-    mmutil_propagate_membership \
     mmutil_spectral_match_col \
     mmutil_spectral_cluster_col
 
