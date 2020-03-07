@@ -20,8 +20,11 @@ struct mat_stat_collector_t {
 
     void set_dimension(const index_t D, const index_t n, const index_t e)
     {
-        if (n > nn)
-            WLOG("some samples will be ignored");
+
+        if (n != nn) {
+            WLOG("columns(MTX) != rows(Z)");
+        }
+
         S1.resize(kk, D);
         S2.resize(kk, D);
         N.resize(kk, D);
@@ -34,7 +37,7 @@ struct mat_stat_collector_t {
         Vec _nnz_col = Z.transpose() * Mat::Ones(Z.rows(), 1);
         std_vector(_nnz_col, nnz_col);
 
-        TLOG("Start aggregating the statistics: " << kk << " x " << D);
+        TLOG("Start aggregating " << kk << " x " << D << " stats");
     }
 
     void eval(const index_t i, const index_t j, const scalar_t x_ij)
@@ -46,7 +49,7 @@ struct mat_stat_collector_t {
         }
     }
 
-    void eval_end() { TLOG("Finished aggregating the statistics"); }
+    void eval_end() { TLOG("Finished aggregating the stats"); }
 
     const Mat &Z;
     const index_t nn;
@@ -60,32 +63,17 @@ private:
     std::vector<Index> nnz_col;
 };
 
-void
-aggregate_col(const std::string mtx_file,        //
-              const std::string col_file,        //
-              const std::string membership_file, //
+int
+aggregate_col(const std::string mtx_file,
+              const std::string prob_file,
               const std::string output)
 {
-    ///////////////////////
-    // read column names //
-    ///////////////////////
-
-    // std::vector<std::string> columns;
-    // read_vector_file(col_file, columns);
-
-    // eigen_io::row_index_map_t::type j_index;
-    // j_index.reserve(columns.size());
-    // Index j = 0;
-    // for (auto s : columns) {
-    //     j_index[s] = j++;
-    // }
-
-    ///////////////////////////////
-    // match with the membership //
-    ///////////////////////////////
 
     Mat Z;
-    CHECK(read_data_file(membership_file, Z));
+    CHECK(read_data_file(prob_file, Z));
+
+    TLOG("Latent membership matrix: " << Z.rows() << " x " << Z.cols());
+
     Z.transposeInPlace(); // cluster x sample
 
     //////////////////////////////////////
@@ -114,6 +102,8 @@ aggregate_col(const std::string mtx_file,        //
         Mat N = collector.N.transpose();
         write_data_file(output + ".n.gz", N);
     }
+
+    return EXIT_SUCCESS;
 }
 
 #endif
