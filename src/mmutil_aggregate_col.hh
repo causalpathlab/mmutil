@@ -54,6 +54,7 @@ parse_aggregate_options(const int argc,     //
         "--batch_size (-B) : Batch size (default: 10000)\n"
         "\n"
         "[Output]\n"
+        "${output}_${lab}.s0.gz   : (M x n) sum 1 * z[j,k]\n"
         "${output}_${lab}.s1.gz   : (M x n) sum x[i,j] z[j,k]\n"
         "${output}_${lab}.s2.gz   : (M x n) sum x[i,j]^2 z[j,k]\n"
         "${output}_${lab}.cols.gz : (n x 1) name of the columns\n"
@@ -176,6 +177,9 @@ aggregate_col(const std::string mtx_file,
     // Read an expression matrix block by block
 
     ASSERT(Z.rows() == Nsample, "rows(Z) != Nsample");
+    const Scalar eps = 1e-8;
+
+    auto nz = [&eps](const Scalar &x) -> Scalar { return x < eps ? 0. : 1.0; };
 
     for (Index k = 0; k < K; ++k) {
 
@@ -186,7 +190,7 @@ aggregate_col(const std::string mtx_file,
 
         for (Index j = 0; j < Nsample; ++j) {
             const Scalar pr_jk = Z(j, k);
-            if (pr_jk < 1e-4)
+            if (pr_jk < eps)
                 continue;
             triples.emplace_back(Eigen::Triplet<Scalar>(j, group.at(j), pr_jk));
         }
@@ -198,7 +202,7 @@ aggregate_col(const std::string mtx_file,
         // collect statistics from the data //
         //////////////////////////////////////
 
-        Mat S1, S2;
+        Mat S0, S1, S2;
 
         for (Index lb = 0; lb < Nsample; lb += batch_size) {
             const Index ub = std::min(Nsample, batch_size + lb);
@@ -210,16 +214,20 @@ aggregate_col(const std::string mtx_file,
             SpMat X_b = read_eigen_sparse_subset_col(mtx_file, subcols_b);
             SpMat Zk_b = row_sub(Zk, subcols_b);
 
+            SpMat S0_b = X_b.unaryExpr(nz) * Zk_b;     //
             SpMat S1_b = X_b * Zk_b;                   // feature x Nind
             SpMat S2_b = X_b.cwiseProduct(X_b) * Zk_b; // feature x Nind
 
             if (lb == 0) {
+                S0.resize(S0_b.rows(), Nind);
+                S0.setZero();
                 S1.resize(S1_b.rows(), Nind);
                 S1.setZero();
                 S2.resize(S2_b.rows(), Nind);
                 S2.setZero();
             }
 
+            S0 += S0_b;
             S1 += S1_b;
             S2 += S2_b;
 
@@ -231,6 +239,7 @@ aggregate_col(const std::string mtx_file,
         const std::string out_hdr = output + "_" + clust_name;
 
         write_vector_file(out_hdr + ".cols.gz", group_name);
+        write_data_file(out_hdr + ".s0.gz", S0);
         write_data_file(out_hdr + ".s1.gz", S1);
         write_data_file(out_hdr + ".s2.gz", S2);
 
