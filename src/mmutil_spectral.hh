@@ -35,7 +35,7 @@ struct spectral_options_t {
         initial_sample = 10000;
         nystrom_batch = 10000;
 
-        sampling_method = UNIFORM;
+        sampling_method = CV;
 
         rand_seed = 1;
     }
@@ -487,8 +487,8 @@ parse_spectral_options(const int argc,     //
         "--rand_seed (-s)       : Random seed (default: 1)\n"
         "--initial_sample (-S)  : Nystrom sample size (default: 10000)\n"
         "--nystrom_batch (-B)   : Nystrom batch size (default: 10000)\n"
-        "--sampling_method (-M) : Nystrom sampling method: UNIFORM (default), "
-        "CV, MEAN\n"
+        "--sampling_method (-M) : Nystrom sampling method: CV (default), "
+        "UNIFORM, MEAN\n"
         "--log_scale (-L)       : Data in a log-scale (default: true)\n"
         "--raw_scale (-R)       : Data in a raw-scale (default: false)\n"
         "--out (-o)             : Output file name\n"
