@@ -19,6 +19,14 @@ train_tsne(const Mat A, const Index d, const OPTIONS &options)
         return _p * fasterlog(_q + eps);
     };
 
+    std::random_device rd{};
+    std::mt19937 gen{ rd() };
+    std::normal_distribution<Scalar> rnorm{ 0, 1 };
+
+    auto rnorm_jitter_op = [&rnorm, &gen](const Scalar &x) -> Scalar {
+        return x + rnorm(gen);
+    };
+
     using grad_adam_t = adam_t<Mat, Scalar>;
 
     ASSERT(A.rows() == A.cols(), "Symmetric Adj matrix for t-SNE");
@@ -50,6 +58,8 @@ train_tsne(const Mat A, const Index d, const OPTIONS &options)
     Eigen::BDCSVD<Mat> svd;
     svd.compute(L, Eigen::ComputeThinU | Eigen::ComputeThinV);
 
+    TLOG("Setting " << d << " dimensions");
+
     Mat phi(d, N);
     phi.setZero();
 
@@ -58,10 +68,16 @@ train_tsne(const Mat A, const Index d, const OPTIONS &options)
             phi.row(j) += svd.matrixV().col(j - 1).transpose();
         }
     } else {
-        for (Index j = 0; j < d; ++j) {
+        const Index dd = std::min(d, svd.matrixV().cols());
+        for (Index j = 0; j < dd; ++j) {
             phi.row(j) += svd.matrixV().col(j).transpose();
         }
+        for (Index j = dd; j < d; ++j) {
+            phi.row(j) = phi.row(j).unaryExpr(rnorm_jitter_op) * 0.1;
+        }
     }
+
+    TLOG("Start optimizing KL ...");
 
     Mat q_phi(N, N);
     q_phi.setZero();
@@ -127,6 +143,8 @@ train_tsne(const Mat A, const Index d, const OPTIONS &options)
 
         score_old = score;
     }
+
+    TLOG("Finished the optimization: KL = " << score_old);
 
     if (options.verbose) {
         TLOG("Make sure these two probabilities more or less match");
