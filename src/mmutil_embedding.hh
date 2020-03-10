@@ -65,7 +65,7 @@ train_tsne(const Mat A, const Index d, const OPTIONS &options)
 
     if (svd.matrixV().cols() > d) { // ignore the first Eigen if possible
         for (Index j = 1; j <= d; ++j) {
-            phi.row(j) += svd.matrixV().col(j - 1).transpose();
+            phi.row(j - 1) += svd.matrixV().col(j).transpose();
         }
     } else {
         const Index dd = std::min(d, svd.matrixV().cols());
@@ -84,10 +84,16 @@ train_tsne(const Mat A, const Index d, const OPTIONS &options)
 
     std::vector<std::unique_ptr<Mat>> grad_phi_vec;
     std::vector<std::unique_ptr<grad_adam_t>> adam_phi_vec;
+    grad_phi_vec.reserve(N);
+    adam_phi_vec.reserve(N);
     for (Index k = 0; k < N; ++k) {
-        grad_phi_vec.push_back(std::make_unique<Mat>(d, 1));
-        adam_phi_vec.push_back(std::make_unique<grad_adam_t>(0.5, 0.9, d, 1));
+        grad_phi_vec.emplace_back(std::make_unique<Mat>(d, 1));
+        adam_phi_vec.emplace_back(
+            std::make_unique<grad_adam_t>(0.5, 0.9, d, 1));
     }
+
+    if (options.verbose)
+        TLOG("Created gradient matrices");
 
     Scalar score_old = 0;
 
@@ -279,9 +285,11 @@ run_cluster_embedding(const Eigen::MatrixBase<Derived> &_pr,
 
     std::vector<std::unique_ptr<Mat>> grad_y_vec;
     std::vector<std::unique_ptr<grad_adam_t>> adam_y_vec;
+    grad_y_vec.reserve(N);
+    adam_y_vec.reserve(N);
     for (Index i = 0; i < N; ++i) {
-        grad_y_vec.push_back(std::make_unique<Mat>(d, 1));
-        adam_y_vec.push_back(std::make_unique<grad_adam_t>(0.5, 0.9, d, 1));
+        grad_y_vec.emplace_back(std::make_unique<Mat>(d, 1));
+        adam_y_vec.emplace_back(std::make_unique<grad_adam_t>(0.5, 0.9, d, 1));
     }
 
     if (options.verbose)
