@@ -10,7 +10,7 @@
 #define MMUTIL_EMBEDDING_HH_
 
 template <typename OPTIONS>
-Mat
+inline Mat
 train_tsne(const Mat A, const Index d, const OPTIONS &options)
 {
 
@@ -45,10 +45,13 @@ train_tsne(const Mat A, const Index d, const OPTIONS &options)
     const Mat dSqInv = D.cwiseSqrt().cwiseInverse();
     const Mat L = dSqInv.asDiagonal() * A * dSqInv.asDiagonal();
 
+    TLOG("Initialize by SVD");
+
     Eigen::BDCSVD<Mat> svd;
     svd.compute(L, Eigen::ComputeThinU | Eigen::ComputeThinV);
 
-    Mat phi = Mat::Zero(d, N);
+    Mat phi(d, N);
+    phi.setZero();
 
     if (svd.matrixV().cols() > d) { // ignore the first Eigen if possible
         for (Index j = 1; j <= d; ++j) {
@@ -60,13 +63,14 @@ train_tsne(const Mat A, const Index d, const OPTIONS &options)
         }
     }
 
-    Mat q_phi = Mat::Zero(N, N);
+    Mat q_phi(N, N);
+    q_phi.setZero();
 
-    std::vector<std::shared_ptr<Mat>> grad_phi_vec;
-    std::vector<std::shared_ptr<grad_adam_t>> adam_phi_vec;
+    std::vector<std::unique_ptr<Mat>> grad_phi_vec;
+    std::vector<std::unique_ptr<grad_adam_t>> adam_phi_vec;
     for (Index k = 0; k < N; ++k) {
-        grad_phi_vec.push_back(std::make_shared<Mat>(d, 1));
-        adam_phi_vec.push_back(std::make_shared<grad_adam_t>(0.5, 0.9, d, 1));
+        grad_phi_vec.push_back(std::make_unique<Mat>(d, 1));
+        adam_phi_vec.push_back(std::make_unique<grad_adam_t>(0.5, 0.9, d, 1));
     }
 
     Scalar score_old = 0;
@@ -136,6 +140,8 @@ train_tsne(const Mat A, const Index d, const OPTIONS &options)
         std::cerr << std::endl;
     }
 
+    TLOG("phi matrix: " << phi.rows() << " x " << phi.cols());
+
     return phi;
 }
 
@@ -145,10 +151,14 @@ train_tsne(const Mat A, const Index d, const OPTIONS &options)
 // Pr : N x K assignment probability
 // X  : N x D data matrix
 //
-template <typename OPTIONS>
+template <typename Derived, typename OPTIONS>
 std::tuple<Mat, Mat>
-run_cluster_embedding(const Mat &Pr, const Mat &X, const OPTIONS &options)
+run_cluster_embedding(const Eigen::MatrixBase<Derived> &_pr,
+                      const Mat &X,
+                      const OPTIONS &options)
 {
+
+    const Derived &Pr = _pr.derived();
 
     const Index d = options.embedding_dim;
     const Index K = Pr.cols();
@@ -227,26 +237,37 @@ run_cluster_embedding(const Mat &Pr, const Mat &X, const OPTIONS &options)
     //////////////////////////////////////
 
     Mat p_phi = prob * prob.transpose() / static_cast<Scalar>(N);
-
     Mat phi = train_tsne(p_phi, d, options);
+
+    TLOG("Finished embedding centroid by t-SNE");
 
     ////////////////////
     // random seeding //
     ////////////////////
 
-    if (options.verbose)
-        TLOG("Random seeding latent coordinates ...");
+    // TLOG("Pr : " << Pr.rows() << " x " << Pr.cols());
+    // TLOG("phi : " << phi.rows() << " x " << phi.cols());
 
     // d x N latent coordinate
-    Mat yy = (phi * Pr.transpose()) * 0.9;
+    Mat yy = Pr * phi.transpose();
+    yy.transposeInPlace();
+    yy *= 0.9;
     yy += Mat::Zero(d, N).unaryExpr(rnorm_jitter_op) * 0.1;
 
-    std::vector<std::shared_ptr<Mat>> grad_y_vec;
-    std::vector<std::shared_ptr<grad_adam_t>> adam_y_vec;
-    for (Index i = 0; i < N; ++i) {
-        grad_y_vec.push_back(std::make_shared<Mat>(d, 1));
-        adam_y_vec.push_back(std::make_shared<grad_adam_t>(0.5, 0.9, d, 1));
+    if (options.verbose) {
+        TLOG("Random seeding latent coordinates based on");
+        TLOG("the prob matrix: " << Pr.rows() << " x " << Pr.cols());
     }
+
+    std::vector<std::unique_ptr<Mat>> grad_y_vec;
+    std::vector<std::unique_ptr<grad_adam_t>> adam_y_vec;
+    for (Index i = 0; i < N; ++i) {
+        grad_y_vec.push_back(std::make_unique<Mat>(d, 1));
+        adam_y_vec.push_back(std::make_unique<grad_adam_t>(0.5, 0.9, d, 1));
+    }
+
+    if (options.verbose)
+        TLOG("Created gradient matrices");
 
     ////////////////////////////////////////////////////////////
     // Approximating assignment probability by t-distribution //
