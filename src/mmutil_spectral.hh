@@ -232,13 +232,13 @@ take_spectrum_laplacian(                         //
     return std::make_tuple(U, V, D);
 }
 
-template <typename Derived, typename Derived2, typename options_t>
-inline Mat
-_nystrom_proj(const std::string mtx_file,                 // matrix file
-              const Eigen::MatrixBase<Derived> &_weights, // row weights
-              const Eigen::MatrixBase<Derived2> &_proj,   // projection matrix
-              const options_t &options                    // options
-);
+// template <typename Derived, typename Derived2, typename options_t>
+// inline Mat
+// _nystrom_proj(const std::string mtx_file,                 // matrix file
+//               const Eigen::MatrixBase<Derived> &_weights, // row weights
+//               const Eigen::MatrixBase<Derived2> &_proj,   // projection matrix
+//               const options_t &options                    // options
+// );
 
 template <typename T>
 std::tuple<SpMat, IntVec>
@@ -351,42 +351,61 @@ take_spectrum_nystrom(const std::string mtx_file,                 // matrix file
     Mat U(N, rank);
     U.setZero();
 
-    using _reader_t = eigen_triplet_reader_remapped_cols_t;
+    // First read every triplet into memory
+    SpMat Xt = read_eigen_sparse(mtx_file).transpose();
+
+    TLOG("Read Eigen sparse matrix: " << Xt.cols() << " x " << Xt.rows());
 
     for (Index lb = 0; lb < N; lb += batch_size) {
-        _reader_t::index_map_t Remap;
+
         const Index ub = std::min(N, batch_size + lb);
+        std::vector<Index> sub_b(ub - lb);
+        std::iota(sub_b.begin(), sub_b.end(), lb);
 
         TLOG("Projection on the batch [" << lb << ", " << ub << ")");
+      
+	SpMat xx = row_sub(Xt, sub_b);
+        Mat xx_t = make_normalized_laplacian(xx.transpose(), ww, tau, norm, take_ln);
 
-        Index new_index = 0;
-        Index NNZ = 0;
-
-        for (Index old_index = lb; old_index < ub; ++old_index) {
-            Remap[old_index] = new_index;
-            NNZ += nnz_col(old_index);
-            new_index++;
-        }
-
-#ifdef DEBUG
-        TLOG("Non zeros = " << NNZ << ", " << new_index);
-#endif
-
-        _reader_t::TripletVec Tvec;
-        _reader_t reader(Tvec, Remap, NNZ);
-
-        visit_matrix_market_file(mtx_file, reader);
-
-        SpMat xx(reader.max_row, ub - lb);
-
-        xx.setFromTriplets(Tvec.begin(), Tvec.end());
-
-        Mat xx_t = make_normalized_laplacian(xx, ww, tau, norm, take_ln);
         Index i = 0;
         for (Index j = lb; j < ub; ++j) {
             U.row(j) += xx_t.row(i) * proj;
             i++;
         }
+
+//         _reader_t::index_map_t Remap;
+//         const Index ub = std::min(N, batch_size + lb);
+
+//         TLOG("Projection on the batch [" << lb << ", " << ub << ")");
+
+//         Index new_index = 0;
+//         Index NNZ = 0;
+
+//         for (Index old_index = lb; old_index < ub; ++old_index) {
+//             Remap[old_index] = new_index;
+//             NNZ += nnz_col(old_index);
+//             new_index++;
+//         }
+
+// #ifdef DEBUG
+//         TLOG("Non zeros = " << NNZ << ", " << new_index);
+// #endif
+
+//         _reader_t::TripletVec Tvec;
+//         _reader_t reader(Tvec, Remap, NNZ);
+
+//         visit_matrix_market_file(mtx_file, reader);
+
+//         SpMat xx(reader.max_row, ub - lb);
+
+//         xx.setFromTriplets(Tvec.begin(), Tvec.end());
+
+//         Mat xx_t = make_normalized_laplacian(xx, ww, tau, norm, take_ln);
+//         Index i = 0;
+//         for (Index j = lb; j < ub; ++j) {
+//             U.row(j) += xx_t.row(i) * proj;
+//             i++;
+//         }
     }
 
     TLOG("Finished Nystrom Approx.");
@@ -444,24 +463,6 @@ _nystrom_proj(const std::string mtx_file,                 // matrix file
         TLOG("Projection on the batch [" << lb << ", " << ub << ")");
       
 	SpMat xx = row_sub(Xt, sub_b);
-
-//         _reader_t::index_map_t Remap;
-//         Index new_index = 0;
-//         Index NNZ = 0;
-//         for (Index old_index = lb; old_index < ub; ++old_index) {
-//             Remap[old_index] = new_index;
-//             NNZ += nnz_col(old_index);
-//             new_index++;
-//         }
-// #ifdef DEBUG
-//         TLOG("Non zeros = " << NNZ << ", " << new_index);
-// #endif
-//         _reader_t::TripletVec Tvec;
-//         _reader_t reader(Tvec, Remap, NNZ);
-//         visit_matrix_market_file(mtx_file, reader);
-//         SpMat xx(reader.max_row, ub - lb);
-        // xx.setFromTriplets(Tvec.begin(), Tvec.end());
-
         Mat xx_t = make_normalized_laplacian(xx.transpose(), ww, tau, norm, take_ln);
 
         Index i = 0;
