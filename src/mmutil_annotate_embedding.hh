@@ -18,10 +18,10 @@ struct embedding_options_t {
         out = "output.txt.gz";
         embedding_dim = 2;
         embedding_epochs = 1000;
-        tol = 1e-4;
+        exaggeration = 100;
+        tol = 1e-8;
         verbose = false;
-        l2_penalty = 1e-1;
-        sig2 = 1e-2;
+        l2_penalty = 1e-4;
     }
 
     Str data_file;
@@ -31,9 +31,9 @@ struct embedding_options_t {
 
     Index embedding_dim;
     Index embedding_epochs;
+    Index exaggeration;
 
     Scalar tol;
-    Scalar sig2;
     Scalar l2_penalty;
 
     bool verbose;
@@ -52,14 +52,14 @@ parse_embedding_options(const int argc,     //
         "--prob (-p)             : probability matrix file\n"
         "--out (-o)              : Output file header\n"
         "\n"
-        "--sig2 (-s)             : variance of Gaussian kernel (default: 1.0)\n"
         "--embedding_dim (-d)    : latent dimensionality (default: 2)\n"
         "--embedding_epochs (-i) : Maximum iteration (default: 100)\n"
+        "--l2 (-l)               : L2 penalty (default: 1e-4)\n"
         "--tol (-t)              : Convergence criterion (default: 1e-4)\n"
         "--verbose (-v)          : Set verbose (default: false)\n"
         "\n";
 
-    const char *const short_opts = "m:p:o:d:i:t:s:hv";
+    const char *const short_opts = "m:p:o:d:i:t:l:hv";
 
     const option long_opts[] =
         { { "data", required_argument, nullptr, 'm' },             //
@@ -69,8 +69,8 @@ parse_embedding_options(const int argc,     //
           { "embed_dim", required_argument, nullptr, 'd' },        //
           { "dim", required_argument, nullptr, 'd' },              //
           { "embedding_epochs", required_argument, nullptr, 'i' }, //
-          { "sig2", required_argument, nullptr, 's' },             //
-          { "var", required_argument, nullptr, 's' },              //
+          { "l2", required_argument, nullptr, 'l' },               //
+          { "l2_penalty", required_argument, nullptr, 'l' },       //
           { "tol", required_argument, nullptr, 't' },              //
           { "verbose", no_argument, nullptr, 'v' },                //
           { nullptr, no_argument, nullptr, 0 } };
@@ -110,8 +110,8 @@ parse_embedding_options(const int argc,     //
             options.tol = std::stof(optarg);
             break;
 
-        case 's':
-            options.sig2 = std::stof(optarg);
+        case 'l':
+            options.l2_penalty = std::stof(optarg);
             break;
 
         case 'v': // -v or --verbose

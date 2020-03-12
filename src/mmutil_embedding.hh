@@ -9,6 +9,8 @@
 #ifndef MMUTIL_EMBEDDING_HH_
 #define MMUTIL_EMBEDDING_HH_
 
+// @param A N x N adjacency matrix
+// @param d target dimensionality
 template <typename OPTIONS>
 inline Mat
 train_tsne(const Mat A, const Index d, const OPTIONS &options)
@@ -34,17 +36,6 @@ train_tsne(const Mat A, const Index d, const OPTIONS &options)
     const Index N = A.rows();
 
     TLOG("Running t-SNE for adjacency matrix A: " << N << " x " << N);
-
-    // column-wise normalize
-
-    Mat p_phi = A;
-
-    for (Index k = 0; k < N; ++k) {
-        p_phi(k, k) = 0.;
-        const Scalar denom_k = p_phi.col(k).sum();
-        const Scalar denom_min = 1e-8;
-        p_phi.col(k) /= std::max(denom_k, denom_min);
-    }
 
     // Build graph Laplacian to initialize the coordinates
     Mat D = A.rowwise().sum();
@@ -97,12 +88,19 @@ train_tsne(const Mat A, const Index d, const OPTIONS &options)
 
     Scalar score_old = 0;
 
+    const Index tot_iter = options.embedding_epochs + options.exaggeration;
+    progress_bar_t<Index> prog(tot_iter, 1);
+
     const Scalar T = static_cast<Scalar>(options.embedding_epochs);
 
-    for (Index iter = 0; iter < options.embedding_epochs; ++iter) {
+    for (Index iter = 0; iter < tot_iter; ++iter) {
 
-        const Scalar tt = static_cast<Scalar>(iter);
-        const Scalar rate = (1.0 - tt / T) * 0.1;
+        Scalar rate = 1e-2;
+
+        if (iter >= options.exaggeration) {
+            Scalar tt = static_cast<Scalar>(iter - options.exaggeration);
+            rate *= 1.0 - (tt / T);
+        }
 
         for (Index k = 0; k < N; ++k) {
 
@@ -126,23 +124,29 @@ train_tsne(const Mat A, const Index d, const OPTIONS &options)
                 if (l == k)
                     continue;
 
+                Scalar p_lk = A(l, k);
+                if (iter < options.exaggeration)
+                    p_lk *= static_cast<Scalar>(N);
+
                 const Scalar d_lk = (phi.col(k) - phi.col(l)).norm();
                 const Scalar denom_lk = (1.0 + d_lk * d_lk);
-                const Scalar stuff = (p_phi(l, k) - q_phi(l, k)) / denom_lk;
+                const Scalar stuff = (p_lk - q_phi(l, k)) / denom_lk;
                 grad_phi += stuff * (phi.col(l) - phi.col(k));
             }
 
-            grad_phi -= phi.col(k) * 1e-2; // mild penalty
+            grad_phi -= phi.col(k) * options.l2_penalty; // mild penalty
 
             phi.col(k) += update_adam(adam_phi, grad_phi) * rate;
         }
 
-        Scalar score = p_phi.binaryExpr(q_phi, kl_op).sum();
+        Scalar score = A.binaryExpr(q_phi, kl_op).sum();
 
         const Scalar score_diff =
-            std::abs(score - score_old) / std::abs(score_old + 1e-4);
+            std::abs(score - score_old) / std::abs(score_old + 1.0);
 
-        if (score_diff < options.tol) {
+        prog(std::cerr);
+
+        if (iter > options.exaggeration && score_diff < options.tol) {
             TLOG("converged --> iter = " << iter << ", delta = " << score_diff);
             break;
         }
@@ -153,230 +157,132 @@ train_tsne(const Mat A, const Index d, const OPTIONS &options)
     TLOG("Finished the optimization: KL = " << score_old);
 
     if (options.verbose) {
-        TLOG("Make sure these two probabilities more or less match");
-
-        std::cerr << "p:" << std::endl;
-        std::cerr << p_phi << std::endl;
-        std::cerr << "vs." << std::endl;
-
-        std::cerr << "q:" << std::endl;
-        std::cerr << q_phi << std::endl;
-        std::cerr << std::endl;
+        TLOG("phi matrix: " << phi.rows() << " x " << phi.cols());
     }
-
-    TLOG("phi matrix: " << phi.rows() << " x " << phi.cols());
 
     return phi;
 }
 
-////////////////////////////////////////////////////////////////
-// Embedding soft-clustering results
-//
-// Pr : N x K assignment probability
-// X  : N x D data matrix
-//
-template <typename Derived, typename OPTIONS>
-std::tuple<Mat, Mat>
-run_cluster_embedding(const Eigen::MatrixBase<Derived> &_pr,
-                      const Mat &X,
-                      const OPTIONS &options)
+template <typename Derived, typename Derived2>
+inline Mat
+build_smooth_adjacency(Eigen::MatrixBase<Derived> &X,
+                       Eigen::MatrixBase<Derived2> &_target)
 {
 
-    const Derived &Pr = _pr.derived();
+    Mat xx = X.derived();                 // D x N
+    normalize_columns(xx);                // D x N
+    Derived2 &target = _target.derived(); // N x 1
+
+    const Index nn = xx.cols();
+    const Scalar beta_max = 20.;
+    Scalar beta = 1e-5;
+    auto exp_op_beta = [&beta](const Scalar &_d) -> Scalar {
+        return fasterexp(beta * _d);
+    };
+
+    auto ln_op = [](const Scalar &x) -> Scalar {
+        if (x < 1e-8)
+            return 1e-8;
+        return fasterlog(x) / fasterlog(2.0);
+    };
+
+    Scalar H_denom = fasterlog(static_cast<Scalar>(nn)) / fasterlog(2.0);
+
+    Vec pr_i(nn);
+    Vec dist_i(nn);
+    Mat pp(nn, nn);
+
+    for (Index i = 0; i < nn; ++i) {
+
+        beta = 1.0;
+
+        Scalar target_i = target(i);
+
+        for (Index _iter = 0; _iter < 100; _iter++) {
+            pr_i.setZero();
+
+            pr_i = (xx.transpose() * xx.col(i)).unaryExpr(exp_op_beta);
+            pr_i(i) = 0;
+            pr_i /= pr_i.sum() + 1e-8;
+
+            Scalar H = -((pr_i.unaryExpr(ln_op)).cwiseProduct(pr_i)).sum();
+            H /= H_denom;
+
+            if (H < target_i) {
+                beta *= .9;
+            } else {
+                beta *= 1.1;
+            }
+
+            if (beta > beta_max)
+                break;
+        }
+
+        pp.col(i) = pr_i;
+        // std::cout << beta << std::endl;
+    }
+
+    Mat ret = (pp + pp.transpose()) * 0.5 / static_cast<Scalar>(nn);
+
+    return ret;
+}
+
+////////////////////////////////////////////////////////////
+// Embedding data points based on soft-clustering results //
+// 							  //
+// X  : N x D data matrix				  //
+// Pr : N x K assignment probability			  //
+////////////////////////////////////////////////////////////
+
+template <typename Derived, typename Derived2, typename OPTIONS>
+std::tuple<Mat, Mat>
+train_embedding_by_cluster(const Eigen::MatrixBase<Derived> &_x,
+                           const Eigen::MatrixBase<Derived2> &_pr,
+                           const OPTIONS &options)
+{
+
+    const Derived &X = _x.derived();
+    const Derived2 &Pr = _pr.derived();
 
     const Index d = options.embedding_dim;
     const Index K = Pr.cols();
     const Index N = Pr.rows();
-    const Scalar sig2 = options.sig2;
-
-    //////////////////////
-    // simple operators //
-    //////////////////////
-
-    std::random_device rd{};
-    std::mt19937 gen{ rd() };
-    std::normal_distribution<Scalar> rnorm{ 0, 1 };
-
-    auto rnorm_jitter_op = [&rnorm, &gen](const Scalar &x) -> Scalar {
-        return x + rnorm(gen);
-    };
-
-    auto exp_op = [&sig2](const Scalar &x) -> Scalar {
-        return fasterexp(x / sig2);
-    };
-
-    auto t_op = [](const Scalar &x) -> Scalar {
-        const Scalar one = 1.0;
-        return one / (one + x * x);
-    };
-
-    auto t_grad_op = [](const Scalar &_g, const Scalar &_d) -> Scalar {
-        const Scalar one = 1.0;
-        return _g / (one + _d * _d);
-    };
-
-    auto kl_op = [](const Scalar &_p, const Scalar &_q) -> Scalar {
-        const Scalar eps = 1e-8;
-        return _p * fasterlog(_q + eps);
-    };
-
-    auto sigmoid_op = [](const Scalar x) -> Scalar {
-        const Scalar _pmin = 0.01;
-        const Scalar _pmax = 0.99;
-        return _sigmoid(x, _pmin, _pmax);
-    };
 
     ASSERT(X.rows() == Pr.rows(), "X and Pr should have the same # rows")
 
-    //////////////////////////////////////////
-    // smooth probability (no extreme zero) //
-    //////////////////////////////////////////
+    ///////////////////////////////////////////////
+    // smooth probability with target perplexity //
+    ///////////////////////////////////////////////
 
     Vec nsize = Pr.colwise().sum().transpose();                       // K x 1
     Mat C = (X.transpose() * Pr) * nsize.cwiseInverse().asDiagonal(); // D x K
-
-    Mat xt = X.transpose(); // D x N
-    Mat cc = C;             // D x K
-
-    normalize_columns(xt); // D x N
-    normalize_columns(cc); // D x K
-
-    Mat prob = (cc.transpose() * xt) / sig2; // K x N
-
-    Vec mass_K(K);
-    Vec pr_K(K);
-
-    for (Index i = 0; i < N; ++i) {
-        mass_K = prob.col(i);
-        normalized_exp(mass_K, pr_K);
-        prob.col(i) = pr_K;
-    }
-
-    TLOG("Constructed a smooth probability matrix");
-
-    using grad_adam_t = adam_t<Mat, Scalar>;
-
-    //////////////////////////////////////
-    // Embedded centroid matrix [d x K] //
-    //////////////////////////////////////
-
-    Mat p_phi = prob * prob.transpose() / static_cast<Scalar>(N);
+    Vec pr_size = nsize / nsize.sum();
+    Mat p_phi = build_smooth_adjacency(C, pr_size);
     Mat phi = train_tsne(p_phi, d, options);
 
-    TLOG("Finished embedding centroid by t-SNE");
+    // TLOG("phi:\n" << phi);
 
-    ////////////////////
-    // random seeding //
-    ////////////////////
+    Eigen::BDCSVD<Mat> svd;
+    svd.compute(C, Eigen::ComputeThinU | Eigen::ComputeThinV);
 
-    // TLOG("Pr : " << Pr.rows() << " x " << Pr.cols());
-    // TLOG("phi : " << phi.rows() << " x " << phi.cols());
+    Scalar tau = svd.singularValues().mean();
+    tau = std::sqrt(tau);
 
-    // d x N latent coordinate
-    Mat yy = Pr * phi.transpose();
-    yy.transposeInPlace();
-    yy *= 0.9;
-    yy += Mat::Zero(d, N).unaryExpr(rnorm_jitter_op) * 0.1;
+    auto safe_inverse = [&tau](const Scalar &x) -> Scalar {
+        return 1.0 / (x + tau);
+    };
 
-    if (options.verbose) {
-        TLOG("Random seeding latent coordinates based on");
-        TLOG("the prob matrix: " << Pr.rows() << " x " << Pr.cols());
-    }
+    TLOG("Projecting data into " << d << " dimensions");
 
-    std::vector<std::unique_ptr<Mat>> grad_y_vec;
-    std::vector<std::unique_ptr<grad_adam_t>> adam_y_vec;
-    grad_y_vec.reserve(N);
-    adam_y_vec.reserve(N);
-    for (Index i = 0; i < N; ++i) {
-        grad_y_vec.emplace_back(std::make_unique<Mat>(d, 1));
-        adam_y_vec.emplace_back(std::make_unique<grad_adam_t>(0.5, 0.9, d, 1));
-    }
+    Vec denom = svd.singularValues().unaryExpr(safe_inverse);
+    Mat proj = svd.matrixV() * denom.asDiagonal() * svd.matrixU().transpose();
+    Mat ww = phi * proj;
 
-    if (options.verbose)
-        TLOG("Created gradient matrices");
+    Mat yy = ww * X.transpose(); // d x N
+    yy.transposeInPlace();       // N x d
+    phi.transposeInPlace();      // K x d
 
-    ////////////////////////////////////////////////////////////
-    // Approximating assignment probability by t-distribution //
-    // delta = (y[j, d] - phi[k, d])			      //
-    // q[j, k] = 1 / (1 + norm(delta)^2)		      //
-    ////////////////////////////////////////////////////////////
-
-    Vec qq(K); // K x 1 temporary
-    Vec pp(K); // K x 1 temporary
-
-    progress_bar_t<Index> prog(options.embedding_epochs, 1);
-
-    std::vector<Index> indexes(N);
-    std::iota(indexes.begin(), indexes.end(), 0);
-
-    const Scalar T = options.embedding_epochs;
-    Scalar score_old = 0;
-    for (Index iter = 0; iter < options.embedding_epochs; ++iter) {
-
-        const Scalar tt = static_cast<Scalar>(iter);
-        const Scalar rate = (1.0 - tt / T) * 0.1;
-
-        Scalar score = 0;
-
-        std::shuffle(indexes.begin(), indexes.end(), gen);
-
-        for (Index j = 0; j < N; ++j) {
-
-            const Index i = indexes.at(j);
-
-            pp = prob.col(i);
-            qq.setZero();
-
-            // q = 1/(1 + distance^2)
-            for (Index k = 0; k < K; ++k) {
-                const Scalar d_ik = (yy.col(i) - phi.col(k)).norm();
-                qq(k) += 1.0 / (1.0 + d_ik * d_ik);
-            }
-            qq /= qq.sum();
-
-            score += pp.binaryExpr(qq, kl_op).sum();
-
-            // d[i,k] = norm(y[,i] - phi[,k])
-            // grad = sum_k (p(i,k) - q(i,k))/(1 + d[i,k]^2) * (y[,i] - phi[,k])
-
-            Mat &grad_y = *grad_y_vec[i].get();
-            grad_adam_t &adam_y = *adam_y_vec[i].get();
-
-            grad_y.setZero();
-
-            for (Index k = 0; k < K; ++k) {
-                const Scalar d_ik = (yy.col(i) - phi.col(k)).norm();
-                const Scalar pq_ik = prob(k, i) - qq(k);
-                const Scalar stuff = pq_ik / (1.0 + d_ik * d_ik);
-                grad_y += (phi.col(k) - yy.col(i)) * stuff;
-            }
-
-            grad_y -= yy.col(i) * options.l2_penalty;
-
-            yy.col(i) += update_adam(adam_y, grad_y) * rate;
-        }
-
-        prog.update();
-
-        const Scalar score_diff =
-            std::abs(score - score_old) / std::abs(score_old + 1e-4);
-
-        if (score_diff < options.tol) {
-            TLOG("converged --> iter = " << iter << ", delta = " << score_diff);
-            break;
-        }
-
-        score_old = score;
-
-        if (!options.verbose) {
-            prog(std::cerr);
-        } else {
-            TLOG("[" << iter << "] [" << score << "]");
-        }
-    }
-
-    phi.transposeInPlace(); // K x d
-    yy.transposeInPlace();  // N x d
+    TLOG("done");
 
     return std::make_tuple(yy, phi);
 }
@@ -412,7 +318,7 @@ embed_by_centroid(const Mat &X,                   //
         }
     }
 
-    return run_cluster_embedding(Pr, X, options);
+    return train_embedding_by_cluster(X, Pr, options);
 }
 
 #endif
