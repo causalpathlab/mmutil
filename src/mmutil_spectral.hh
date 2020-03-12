@@ -236,8 +236,8 @@ take_spectrum_laplacian(                         //
 // inline Mat
 // _nystrom_proj(const std::string mtx_file,                 // matrix file
 //               const Eigen::MatrixBase<Derived> &_weights, // row weights
-//               const Eigen::MatrixBase<Derived2> &_proj,   // projection matrix
-//               const options_t &options                    // options
+//               const Eigen::MatrixBase<Derived2> &_proj,   // projection
+//               matrix const options_t &options                    // options
 // );
 
 template <typename T>
@@ -351,10 +351,11 @@ take_spectrum_nystrom(const std::string mtx_file,                 // matrix file
     Mat U(N, rank);
     U.setZero();
 
-    // First read every triplet into memory
-    SpMat Xt = read_eigen_sparse(mtx_file).transpose();
+    // Every triplet into Memory --> not enough memory
+    // SpMat Xt = read_eigen_sparse(mtx_file).transpose();
+    // TLOG("Read Eigen sparse matrix: " << Xt.cols() << " x " << Xt.rows());
 
-    TLOG("Read Eigen sparse matrix: " << Xt.cols() << " x " << Xt.rows());
+    using _reader_t = eigen_triplet_reader_remapped_cols_t;
 
     for (Index lb = 0; lb < N; lb += batch_size) {
 
@@ -363,49 +364,43 @@ take_spectrum_nystrom(const std::string mtx_file,                 // matrix file
         std::iota(sub_b.begin(), sub_b.end(), lb);
 
         TLOG("Projection on the batch [" << lb << ", " << ub << ")");
-      
-	SpMat xx = row_sub(Xt, sub_b);
-        Mat xx_t = make_normalized_laplacian(xx.transpose(), ww, tau, norm, take_ln);
 
+        // SpMat xx = row_sub(Xt, sub_b);
+        // Mat xx_t = make_normalized_laplacian(xx.transpose(), ww, tau, norm,
+        // take_ln); Index i = 0; for (Index j = lb; j < ub; ++j) {
+        //     U.row(j) += xx_t.row(i) * proj;
+        //     i++;
+        // }
+
+        _reader_t::index_map_t Remap;
+        Index new_index = 0;
+        Index NNZ = 0;
+
+        for (Index old_index = lb; old_index < ub; ++old_index) {
+            Remap[old_index] = new_index;
+            NNZ += nnz_col(old_index);
+            new_index++;
+        }
+
+#ifdef DEBUG
+        TLOG("Non zeros = " << NNZ << ", " << new_index);
+#endif
+
+        _reader_t::TripletVec Tvec;
+        _reader_t reader(Tvec, Remap, NNZ);
+
+        visit_matrix_market_file(mtx_file, reader);
+
+        SpMat xx(reader.max_row, ub - lb);
+
+        xx.setFromTriplets(Tvec.begin(), Tvec.end());
+
+        Mat xx_t = make_normalized_laplacian(xx, ww, tau, norm, take_ln);
         Index i = 0;
         for (Index j = lb; j < ub; ++j) {
             U.row(j) += xx_t.row(i) * proj;
             i++;
         }
-
-//         _reader_t::index_map_t Remap;
-//         const Index ub = std::min(N, batch_size + lb);
-
-//         TLOG("Projection on the batch [" << lb << ", " << ub << ")");
-
-//         Index new_index = 0;
-//         Index NNZ = 0;
-
-//         for (Index old_index = lb; old_index < ub; ++old_index) {
-//             Remap[old_index] = new_index;
-//             NNZ += nnz_col(old_index);
-//             new_index++;
-//         }
-
-// #ifdef DEBUG
-//         TLOG("Non zeros = " << NNZ << ", " << new_index);
-// #endif
-
-//         _reader_t::TripletVec Tvec;
-//         _reader_t reader(Tvec, Remap, NNZ);
-
-//         visit_matrix_market_file(mtx_file, reader);
-
-//         SpMat xx(reader.max_row, ub - lb);
-
-//         xx.setFromTriplets(Tvec.begin(), Tvec.end());
-
-//         Mat xx_t = make_normalized_laplacian(xx, ww, tau, norm, take_ln);
-//         Index i = 0;
-//         for (Index j = lb; j < ub; ++j) {
-//             U.row(j) += xx_t.row(i) * proj;
-//             i++;
-//         }
     }
 
     TLOG("Finished Nystrom Approx.");
@@ -449,10 +444,9 @@ _nystrom_proj(const std::string mtx_file,                 // matrix file
     Mat U(N, rank);
     U.setZero();
 
-    // First read every triplet into memory
-    SpMat Xt = read_eigen_sparse(mtx_file).transpose();
-
-    TLOG("Read Eigen sparse matrix: " << Xt.cols() << " x " << Xt.rows());
+    // Every triplet into Memory --> not enough memory
+    // SpMat Xt = read_eigen_sparse(mtx_file).transpose();
+    // TLOG("Read Eigen sparse matrix: " << Xt.cols() << " x " << Xt.rows());
 
     for (Index lb = 0; lb < N; lb += batch_size) {
 
@@ -461,10 +455,34 @@ _nystrom_proj(const std::string mtx_file,                 // matrix file
         std::iota(sub_b.begin(), sub_b.end(), lb);
 
         TLOG("Projection on the batch [" << lb << ", " << ub << ")");
-      
-	SpMat xx = row_sub(Xt, sub_b);
-        Mat xx_t = make_normalized_laplacian(xx.transpose(), ww, tau, norm, take_ln);
 
+        // SpMat xx = row_sub(Xt, sub_b);
+        // Mat xx_t = make_normalized_laplacian(xx.transpose(), ww, tau, norm,
+        // take_ln); Index i = 0; for (Index j = lb; j < ub; ++j) {
+        //     U.row(j) += xx_t.row(i) * proj;
+        //     i++;
+        // }
+
+        _reader_t::index_map_t Remap;
+        Index new_index = 0;
+        Index NNZ = 0;
+
+        for (Index old_index = lb; old_index < ub; ++old_index) {
+            Remap[old_index] = new_index;
+            NNZ += nnz_col(old_index);
+            new_index++;
+        }
+
+        _reader_t::TripletVec Tvec;
+        _reader_t reader(Tvec, Remap, NNZ);
+
+        visit_matrix_market_file(mtx_file, reader);
+
+        SpMat xx(reader.max_row, ub - lb);
+
+        xx.setFromTriplets(Tvec.begin(), Tvec.end());
+
+        Mat xx_t = make_normalized_laplacian(xx, ww, tau, norm, take_ln);
         Index i = 0;
         for (Index j = lb; j < ub; ++j) {
             U.row(j) += xx_t.row(i) * proj;
@@ -591,47 +609,3 @@ parse_spectral_options(const int argc,     //
 }
 
 #endif
-
-// col_stat_collector_t collector;
-// visit_matrix_market_file(mtx_file, collector);
-// const Vec& s1         = collector.Col_S1;
-// const Vec& s2         = collector.Col_S2;
-// const IntVec& nnz_col = collector.Col_N;
-
-// const Index N  = collector.max_col;
-// const Index nn = std::min(N, Nsample);
-
-// ///////////////////////////////////////
-// // step 1 -- random column selection //
-// ///////////////////////////////////////
-
-// std::random_device rd;
-// std::mt19937 rgen(rd());
-
-// std::vector<Index> index_r(N);
-
-// if (options.sampling_method == options_t::CV) {
-//   const Scalar n = static_cast<Scalar>(collector.max_row);
-
-//   // coefficient of variation
-
-//   Vec mu = s1 / n;
-//   Vec score =
-//       ((s2 - s1.cwiseProduct(mu)) / std::max(n - 1.0, 1.0))
-//           .cwiseSqrt()
-//           .binaryExpr(mu, [](const Scalar& s, const Scalar& m) -> Scalar {
-//             return s / (m + 1e-8);
-//           });
-
-//   index_r = eigen_argsort_descending(score);
-
-// } else if (options.sampling_method == options_t::MEAN) {
-//   const Scalar n = static_cast<Scalar>(collector.max_row);
-
-//   Vec mu  = s1 / n;
-//   index_r = eigen_argsort_descending(mu);
-
-// } else {
-//   std::iota(index_r.begin(), index_r.end(), 0);
-//   std::shuffle(index_r.begin(), index_r.end(), rgen);
-// }
