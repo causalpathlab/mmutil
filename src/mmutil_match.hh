@@ -45,6 +45,8 @@ struct match_options_t {
         nystrom_batch = 10000;
 
         sampling_method = UNIFORM;
+
+        verbose = false;
     }
 
     Str src_mtx;
@@ -71,6 +73,8 @@ struct match_options_t {
     Index nystrom_batch;
 
     sampling_method_t sampling_method;
+
+    bool verbose;
 
     void set_sampling_method(const std::string _method)
     {

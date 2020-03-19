@@ -53,7 +53,7 @@ distribute_col(const std::string mtx_file,        // matrix market
             break; // stop over-assignment
     }
 
-    using copier_t = triplet_copier_remapped_cols_t<Index, Scalar>;
+    using copier_t = triplet_copier_remapped_cols_t<obgzf_stream, Index, Scalar>;
     using remap_t = copier_t::index_map_t;
 
     for (auto pp : distributed_columns) {

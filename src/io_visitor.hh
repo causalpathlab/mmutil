@@ -1,8 +1,10 @@
 #include <string>
 
 #include "utils/gzstream.hh"
+#include "utils/bgzstream.hh"
 #include "utils/strbuf.hh"
 #include "utils/util.hh"
+#include "ext/tabix/bgzf.h"
 
 #ifndef IO_VISITOR_HH_
 #define IO_VISITOR_HH_
@@ -110,7 +112,7 @@ visit_matrix_market_stream(IFS &ifs, FUN &fun)
         }
     }
 
-    fun.set_dimension(dims[0], dims[1], dims[2]);
+    fun.eval_after_header(dims[0], dims[1], dims[2]);
 
     /////////////////////////////
     // Read a list of triplets //
@@ -208,15 +210,21 @@ visit_matrix_market_stream(IFS &ifs, FUN &fun)
     }
     if (num_nz >= INTERVAL)
         std::cerr << std::endl;
-    fun.eval_end();
+    fun.eval_end_of_file();
 } // End of the visit
 
 template <typename FUN>
 void
 visit_matrix_market_file(const std::string filename, FUN &fun)
 {
-    if (filename.size() >= 3 &&
-        (filename.substr(filename.size() - 3) == ".gz")) {
+    if (bgzf_is_bgzf(filename.c_str()) > 0) {
+
+        ibgzf_stream ifs(filename.c_str(), std::ios::in);
+        visit_matrix_market_stream(ifs, fun);
+        ifs.close();
+
+    } else if (filename.size() >= 3 &&
+               (filename.substr(filename.size() - 3) == ".gz")) {
         igzstream ifs(filename.c_str(), std::ios::in);
         visit_matrix_market_stream(ifs, fun);
         ifs.close();

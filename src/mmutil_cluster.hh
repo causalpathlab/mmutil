@@ -153,11 +153,6 @@ struct num_sample_t : public check_positive_t<Index> {
     }
 };
 
-// inline void
-// estimate_dbscan_of_columns(const Mat &X,                                //
-//                            std::vector<std::vector<Index>> &membership, //
-//                            const cluster_options_t &options);
-
 inline std::vector<Index> random_membership(const num_clust_t num_clust, //
                                             const num_sample_t num_sample);
 
@@ -293,68 +288,6 @@ print_histogram(const std::vector<T> &nn, //
     }
     ofs << "</histogram>" << std::endl;
 }
-
-// inline void
-// estimate_dbscan_of_columns(const Mat &X,                                //
-//                            std::vector<std::vector<Index>> &membership, //
-//                            const cluster_options_t &options)
-// {
-//     //////////////////////////////////////
-//     // Overall algorithm:		      //
-//     // 1. Construct kNN graph	      //
-//     // 2. Prune edges and vertices      //
-//     // 3. Identify connected components //
-//     //////////////////////////////////////
-
-//     const Index N = X.cols();
-//     const Index D = X.rows();
-
-//     TLOG("Constructing kNN graph ... N=" << N << ", knn=" << options.knn);
-
-//     const Index nnlist = std::max(options.knn + 1, options.nlist);
-//     const Index bilink =
-//         std::max(std::min(options.bilink, X.rows() - 1),
-//         static_cast<Index>(2));
-
-//     std::vector<std::tuple<Index, Index, Scalar>> knn_index;
-//     auto _knn = search_knn(SrcDataT(X.data(), X.rows(), X.cols()), //
-//                            TgtDataT(X.data(), X.rows(), X.cols()), //
-//                            KNN(options.knn + 1),                   // itself
-//                            BILINK(bilink),                         //
-//                            NNLIST(nnlist),                         //
-//                            knn_index);
-
-//     if (_knn != EXIT_SUCCESS) {
-//         TLOG("Failed to search k-nearest neighbors");
-//         return;
-//     }
-
-//     auto mutual_knn_index = prune_mutual_knn(knn_index);
-//     TLOG("Found " << mutual_knn_index.size() << " mutual kNN edges");
-
-//     membership.clear();
-
-//     for (Index l = 1; l <= options.levels; ++l) {
-//         const Scalar rr =
-//             static_cast<Scalar>(l) / static_cast<Scalar>(options.levels);
-
-//         const Scalar cutoff = options.knn_cutoff * rr;
-
-//         UGraph G;
-//         build_boost_graph(mutual_knn_index, G, cutoff);
-//         std::vector<Index> _membership(N);
-//         boost::connected_components(G, &_membership[0]);
-//         const Index kk = sort_cluster_index(_membership, options.min_size);
-//         membership.push_back(_membership);
-
-//         TLOG("K = " << kk << " components with distance <= " << cutoff);
-//         if (options.verbose) {
-//             auto nn = count_frequency(_membership, options.min_size);
-//             print_histogram(nn, std::cout);
-//             std::cout << std::flush;
-//         }
-//     }
-// }
 
 template <typename F0, typename F>
 inline std::tuple<Mat, Mat, std::vector<Scalar>>

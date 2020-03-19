@@ -27,7 +27,7 @@ struct col_counter_on_valid_rows_t {
         max_elem = 0;
     }
 
-    void set_dimension(const index_t r, const index_t c, const index_t e)
+    void eval_after_header(const index_t r, const index_t c, const index_t e)
     {
         std::tie(max_row, max_col, max_elem) = std::make_tuple(r, c, e);
         Col_N.resize(max_col);
@@ -42,7 +42,7 @@ struct col_counter_on_valid_rows_t {
         }
     }
 
-    void eval_end()
+    void eval_end_of_file()
     {
         // TLOG("Found " << Col_N.sum() << std::endl);
     }
@@ -72,7 +72,7 @@ struct glob_triplet_copier_t {
     using index_map_t = std::unordered_map<index_t, index_t>;
 
     explicit glob_triplet_copier_t(
-        ogzstream &_ofs,               // output stream
+        obgzf_stream &_ofs,            // output stream
         const index_map_t &_remap_row, // row mapper
         const index_map_t &_remap_col) // column mapper
         : ofs(_ofs)
@@ -86,7 +86,7 @@ struct glob_triplet_copier_t {
         ASSERT(remap_col.size() > 0, "Empty Remap");
     }
 
-    void set_dimension(const index_t r, const index_t c, const index_t e)
+    void eval_after_header(const index_t r, const index_t c, const index_t e)
     {
         // nothing
     }
@@ -102,14 +102,14 @@ struct glob_triplet_copier_t {
         }
     }
 
-    void eval_end()
+    void eval_end_of_file()
     {
         // nothing
     }
 
     static constexpr char FS = ' ';
 
-    ogzstream &ofs;
+    obgzf_stream &ofs;
     const index_map_t &remap_row;
     const index_map_t &remap_col;
 
@@ -117,8 +117,6 @@ struct glob_triplet_copier_t {
     Index max_col;
     Index max_elem;
 };
-
-#include "mmutil_merge_col.hh"
 
 int
 run_merge_col(const std::string glob_row_file,
@@ -328,7 +326,7 @@ run_merge_col(const std::string glob_row_file,
     const Str output_mtx = output + ".mtx.gz";
 
     TLOG("Output matrix market file: " << output_mtx);
-    ogzstream ofs(output_mtx.c_str(), std::ios::out);
+    obgzf_stream ofs(output_mtx.c_str(), std::ios::out);
 
     // write the header
     {

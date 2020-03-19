@@ -29,11 +29,6 @@ main(const int argc, const char *argv[])
         return std::min(std::max(x, lb), ub);
     });
 
-    // if (options.method == cluster_options_t::DBSCAN) {
-    //     run_dbscan(Data, options);
-    //     return EXIT_SUCCESS;
-    // }
-
     run_mixture_model(Data, options);
     return EXIT_SUCCESS;
 }

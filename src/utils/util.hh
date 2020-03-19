@@ -38,6 +38,14 @@ std::string curr_time();
         }                 \
     }
 
+#define ASSERT_RET(cond, msg)    \
+    {                            \
+        if (!(cond)) {           \
+            ELOG(msg);           \
+            return EXIT_FAILURE; \
+        }                        \
+    }
+
 #define CHECK(cond)                   \
     {                                 \
         if ((cond) != EXIT_SUCCESS) { \

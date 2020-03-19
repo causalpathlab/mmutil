@@ -11,7 +11,8 @@ filter_col_by_nnz(const Index column_threshold,  //
                   const std::string output)
 {
     using Str = std::string;
-    using copier_t = triplet_copier_remapped_cols_t<Index, Scalar>;
+    using copier_t =
+        triplet_copier_remapped_cols_t<obgzf_stream, Index, Scalar>;
 
     std::vector<Str> column_names(0);
     CHECK(read_vector_file(column_file, column_names));

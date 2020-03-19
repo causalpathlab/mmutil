@@ -25,7 +25,7 @@ struct col_data_normalizer_t {
         max_elem = 0;
     }
 
-    void set_dimension(const index_t r, const index_t c, const index_t e)
+    void eval_after_header(const index_t r, const index_t c, const index_t e)
     {
         std::tie(max_row, max_col, max_elem) = std::make_tuple(r, c, e);
         ASSERT(max_col <= col_scale.size(), "Insufficient #denominators");
@@ -48,7 +48,7 @@ struct col_data_normalizer_t {
         }
     }
 
-    void eval_end()
+    void eval_end_of_file()
     {
         ofs.close();
 #ifdef DEBUG

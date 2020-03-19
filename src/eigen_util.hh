@@ -290,6 +290,39 @@ inline Eigen::
     return result;
 }
 
+template <typename Derived, typename Derived2>
+Eigen::Matrix<typename Derived::Scalar,
+              Eigen::Dynamic,
+              Eigen::Dynamic,
+              Eigen::ColMajor>
+hcat(const Eigen::MatrixBase<Derived> &_left,
+     const Eigen::MatrixBase<Derived2> &_right)
+{
+
+    using Scalar = typename Derived::Scalar;
+    using Index = typename Derived::Index;
+
+    using Mat =
+        Eigen::Matrix<Scalar, Eigen::Dynamic, Eigen::Dynamic, Eigen::ColMajor>;
+
+    const Derived &L = _left.derived();
+    const Derived2 &R = _right.derived();
+
+    ASSERT(L.rows() == R.rows(), "Must have the same number of rows");
+
+    Mat ret(L.rows(), L.cols() + R.cols());
+
+    for (Index j = 0; j < L.cols(); ++j) {
+        ret.col(j) = L.col(j);
+    }
+
+    for (Index j = 0; j < R.cols(); ++j) {
+        ret.col(j + L.cols()) = R.col(j);
+    }
+
+    return ret;
+}
+
 template <typename Derived>
 inline typename Derived::Scalar
 log_sum_exp(const Eigen::MatrixBase<Derived> &log_vec)

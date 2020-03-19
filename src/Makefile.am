@@ -1,12 +1,10 @@
 bin_PROGRAMS = mmutil_merge_col \
+    mmutil_index_col \
     mmutil_split_col \
     mmutil_filter_row \
     mmutil_filter_col \
     mmutil_select_row \
-    mmutil_select_col \
     mmutil_aggregate_col \
-    mmutil_rand_col \
-    mmutil_rand_conv_col \
     mmutil_normalize_col \
     mmutil_spectral_col \
     mmutil_match_col \
@@ -27,24 +25,31 @@ sgd = \
     inference/sgd_representation_gaussian.hh \
     inference/sgd_regression.hh
 
-common = mmutil.hh \
-    mmutil_stat.hh \
-    eigen_util.hh \
-    utils/sse.h \
-    utils/cast.h \
-    utils/math.hh \
-    utils/fastexp.h \
-    utils/fastlog.h \
-    utils/fastgamma.h \
-    std_util.hh \
+common = mmutil.hh                  \
+    mmutil_util.hh                  \
+    mmutil_stat.hh                  \
+    eigen_util.hh                   \
+    utils/sse.h                     \
+    utils/cast.h                    \
+    utils/math.hh                   \
+    utils/fastexp.h                 \
+    utils/fastlog.h                 \
+    utils/fastgamma.h               \
+    std_util.hh                     \
     io.hh eigen_io.hh io_visitor.hh \
-    utils/gzstream.hh \
-    utils/gzstream.cc \
-    utils/util.hh \
-    utils/check.hh \
-    utils/tuple_util.hh \
-    utils/progress.hh \
-    utils/strbuf.hh
+    utils/gzstream.hh               \
+    utils/gzstream.cc               \
+    utils/util.hh                   \
+    utils/check.hh                  \
+    utils/tuple_util.hh             \
+    utils/progress.hh               \
+    utils/strbuf.hh                 \
+    ext/tabix/bgzf.h                \
+    ext/tabix/bgzf.c                \
+    utils/bgzstream.hh              \
+    utils/bgzstream.cc              \
+    ext/tabix/kstring.c             \
+    ext/tabix/kstring.h
 
 hnswlib = ext/hnswlib/bruteforce.h \
     ext/hnswlib/hnswalg.h \
@@ -52,6 +57,16 @@ hnswlib = ext/hnswlib/bruteforce.h \
     ext/hnswlib/space_ip.h \
     ext/hnswlib/space_l2.h \
     ext/hnswlib/visited_list_pool.h
+
+############
+# indexing #
+############
+
+mmutil_index_col_SOURCES = \
+    mmutil_index_col.cc    \
+    mmutil_bgzf_util.hh    \
+    mmutil_index.hh        \
+    $(common)
 
 #################
 # merge / split #
@@ -121,9 +136,6 @@ mmutil_normalize_col_SOURCES = mmutil_normalize_col.cc \
 
 mmutil_match_col_SOURCES = mmutil_match_col.cc \
     mmutil_match.hh $(common) $(hnslib)
-
-mmutil_propagate_membership_SOURCES = mmutil_propagate_membership.cc \
-    mmutil_propagate_membership.hh $(common)
 
 mmutil_spectral_match_col_SOURCES = mmutil_spectral_match_col.cc \
     mmutil_match.hh $(common) $(hnslib) $(math)

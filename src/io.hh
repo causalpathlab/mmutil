@@ -16,9 +16,11 @@
 #include "eigen_util.hh"
 #include "io_visitor.hh"
 #include "utils/gzstream.hh"
+#include "utils/bgzstream.hh"
 #include "utils/strbuf.hh"
 #include "utils/tuple_util.hh"
 #include "utils/util.hh"
+#include "ext/tabix/bgzf.h"
 
 #ifndef UTIL_IO_HH_
 #define UTIL_IO_HH_
@@ -55,6 +57,14 @@ is_file_gz(const std::string filename)
     if (filename.size() < 3)
         return false;
     return filename.substr(filename.size() - 3) == ".gz";
+}
+
+bool
+is_file_bgz(const std::string filename)
+{
+    if (bgzf_is_bgzf(filename.c_str()) < 1)
+        return false;
+    return true;
 }
 
 std::shared_ptr<std::ifstream>
@@ -176,6 +186,28 @@ read_vector_file(const std::string filename, std::vector<T> &in)
 // read matrix market triplets and construct sparse matrix //
 /////////////////////////////////////////////////////////////
 
+struct mm_info_reader_t {
+    using index_t = std::ptrdiff_t;
+    explicit mm_info_reader_t()
+    {
+        max_row = 0;
+        max_col = 0;
+        max_elem = 0;
+    }
+
+    void set_file(BGZF *_fp) {}
+
+    void eval_after_header(const index_t r, const index_t c, const index_t e)
+    {
+        max_row = r;
+        max_col = c;
+        max_elem = e;
+    }
+    index_t max_row;
+    index_t max_col;
+    index_t max_elem;
+};
+
 template <typename T>
 struct _triplet_reader_remapped_cols_t {
     using scalar_t = float;
@@ -186,7 +218,7 @@ struct _triplet_reader_remapped_cols_t {
     using index_map_t = std::unordered_map<index_t, index_t>;
 
     explicit _triplet_reader_remapped_cols_t(TripletVec &_tvec,
-                                             const index_map_t &_remap,
+                                             index_map_t &_remap,
                                              const index_t _nnz = 0)
         : Tvec(_tvec)
         , remap(_remap)
@@ -195,12 +227,15 @@ struct _triplet_reader_remapped_cols_t {
         max_row = 0;
         max_col = 0;
         max_elem = 0;
-        Tvec.clear();
-        Tvec.reserve(NNZ);
+        if (NNZ > 0) {
+            Tvec.reserve(NNZ);
+        }
         ASSERT(remap.size() > 0, "Empty Remap");
     }
 
-    void set_dimension(const index_t r, const index_t c, const index_t e)
+    void set_file(BGZF *_fp) { fp = _fp; }
+
+    void eval_after_header(const index_t r, const index_t c, const index_t e)
     {
         max_row = r;
         max_col = c;
@@ -210,11 +245,11 @@ struct _triplet_reader_remapped_cols_t {
     void eval(const index_t row, const index_t col, const scalar_t weight)
     {
         if (remap.count(col) > 0) {
-            Tvec.emplace_back(T(row, remap.at(col), weight));
+            Tvec.emplace_back(T(row, remap[col], weight));
         }
     }
 
-    void eval_end()
+    void eval_end_of_file()
     {
 #ifdef DEBUG
         if (Tvec.size() < NNZ) {
@@ -225,11 +260,13 @@ struct _triplet_reader_remapped_cols_t {
 #endif
     }
 
+    BGZF *fp;
+
     index_t max_row;
     index_t max_col;
     index_t max_elem;
     TripletVec &Tvec;
-    const index_map_t &remap;
+    index_map_t &remap;
     const index_t NNZ;
 };
 
@@ -243,8 +280,8 @@ struct _triplet_reader_remapped_rows_cols_t {
     using index_map_t = std::unordered_map<index_t, index_t>;
 
     explicit _triplet_reader_remapped_rows_cols_t(TripletVec &_tvec,
-                                                  const index_map_t &_remap_row,
-                                                  const index_map_t &_remap_col,
+                                                  index_map_t &_remap_row,
+                                                  index_map_t &_remap_col,
                                                   const index_t _nnz = 0)
         : Tvec(_tvec)
         , remap_row(_remap_row)
@@ -254,13 +291,14 @@ struct _triplet_reader_remapped_rows_cols_t {
         max_row = 0;
         max_col = 0;
         max_elem = 0;
-        Tvec.clear();
-        Tvec.reserve(NNZ);
+        if (NNZ > 0) {
+            Tvec.reserve(NNZ);
+        }
         ASSERT(remap_row.size() > 0, "Empty Remap_Col");
         ASSERT(remap_col.size() > 0, "Empty Remap_Col");
     }
 
-    void set_dimension(const index_t r, const index_t c, const index_t e)
+    void eval_after_header(const index_t r, const index_t c, const index_t e)
     {
         max_row = r;
         max_col = c;
@@ -270,11 +308,11 @@ struct _triplet_reader_remapped_rows_cols_t {
     void eval(const index_t row, const index_t col, const scalar_t weight)
     {
         if (remap_col.count(col) > 0 && remap_row.count(row) > 0) {
-            Tvec.emplace_back(T(remap_row.at(row), remap_col.at(col), weight));
+            Tvec.emplace_back(T(remap_row[row], remap_col[col], weight));
         }
     }
 
-    void eval_end()
+    void eval_end_of_file()
     {
 #ifdef DEBUG
         if (Tvec.size() < NNZ) {
@@ -289,8 +327,8 @@ struct _triplet_reader_remapped_rows_cols_t {
     index_t max_col;
     index_t max_elem;
     TripletVec &Tvec;
-    const index_map_t &remap_row;
-    const index_map_t &remap_col;
+    index_map_t &remap_row;
+    index_map_t &remap_col;
     const index_t NNZ;
 };
 
@@ -307,11 +345,12 @@ struct _triplet_reader_t {
         max_row = 0;
         max_col = 0;
         max_elem = 0;
-        Tvec.clear();
         TLOG("Start reading a list of triplets");
     }
 
-    void set_dimension(const index_t r, const index_t c, const index_t e)
+    void set_fp(BGZF *_fp) { fp = _fp; }
+
+    void eval_after_header(const index_t r, const index_t c, const index_t e)
     {
         max_row = r;
         max_col = c;
@@ -324,7 +363,7 @@ struct _triplet_reader_t {
         Tvec.emplace_back(T(row, col, weight));
     }
 
-    void eval_end()
+    void eval_end_of_file()
     {
         if (Tvec.size() < max_elem) {
             WLOG("This file may have lost elements : " << Tvec.size() << " vs. "
@@ -332,6 +371,8 @@ struct _triplet_reader_t {
         }
         TLOG("Finished reading a list of triplets");
     }
+
+    BGZF *fp;
 
     index_t max_row;
     index_t max_col;
@@ -418,28 +459,22 @@ Eigen::SparseMatrix<eigen_triplet_reader_t::scalar_t, //
 read_eigen_sparse(const std::string mtx_file)
 {
     eigen_triplet_reader_t::TripletVec Tvec;
-
-    using SpMat = Eigen::SparseMatrix<eigen_triplet_reader_t::scalar_t, //
-                                      Eigen::RowMajor,                  //
-                                      std::ptrdiff_t>;
-
-    SpMat::Index max_row, max_col;
-
+    std::ptrdiff_t max_row, max_col;
     std::tie(Tvec, max_row, max_col) = read_eigen_matrix_market_file(mtx_file);
-
     TLOG(max_row << " x " << max_col << ", M = " << Tvec.size());
     return build_eigen_sparse(Tvec, max_row, max_col);
 }
 
 ////////////////////////////////////////////////////////////////
 
-template <typename Vec>
+template <typename VEC>
 Eigen::SparseMatrix<eigen_triplet_reader_t::scalar_t, //
                     Eigen::RowMajor,                  //
                     std::ptrdiff_t>
 read_eigen_sparse_subset_col(const std::string mtx_file, //
-                             const Vec &subcol)
+                             const VEC &subcol)
 {
+
     using _reader_t = eigen_triplet_reader_remapped_cols_t;
     using Index = _reader_t::index_t;
 
@@ -451,11 +486,11 @@ read_eigen_sparse_subset_col(const std::string mtx_file, //
 
     _reader_t::TripletVec Tvec;
     _reader_t reader(Tvec, Remap, subcol.size() * 1e4); // estimate NNZ
-    visit_matrix_market_file(mtx_file, reader);
 
+    TLOG("This might be slow... consider building an index file.");
+    visit_matrix_market_file(mtx_file, reader);
     const Index max_row = reader.max_row;
     const Index max_col = subcol.size();
-
     return build_eigen_sparse(Tvec, max_row, max_col);
 }
 
@@ -499,7 +534,7 @@ read_eigen_sparse_subset_rows_cols(const std::string mtx_file,
 // read and write triplets selectively //
 /////////////////////////////////////////
 
-template <typename INDEX, typename SCALAR>
+template <typename OFS, typename INDEX, typename SCALAR>
 struct triplet_copier_remapped_rows_t {
     using index_t = INDEX;
     using scalar_t = SCALAR;
@@ -524,7 +559,7 @@ struct triplet_copier_remapped_rows_t {
         ASSERT(remap.size() > 0, "Empty Remap");
     }
 
-    void set_dimension(const index_t r, const index_t c, const index_t e)
+    void eval_after_header(const index_t r, const index_t c, const index_t e)
     {
         std::tie(max_row, max_col, max_elem) = std::make_tuple(r, c, e);
         TLOG("Input size: " << max_row << " x " << max_col);
@@ -550,7 +585,7 @@ struct triplet_copier_remapped_rows_t {
         }
     }
 
-    void eval_end()
+    void eval_end_of_file()
     {
         ofs.close();
         if (elem_check != NNZ) {
@@ -566,7 +601,7 @@ struct triplet_copier_remapped_rows_t {
 
     index_t elem_check;
 
-    ogzstream ofs;
+    OFS ofs;
     static constexpr char FS = ' ';
 
     index_t max_row;
@@ -590,7 +625,7 @@ private:
     }
 };
 
-template <typename INDEX, typename SCALAR>
+template <typename OFS, typename INDEX, typename SCALAR>
 struct triplet_copier_remapped_cols_t {
     using index_t = INDEX;
     using scalar_t = SCALAR;
@@ -614,7 +649,7 @@ struct triplet_copier_remapped_cols_t {
         ASSERT(remap.size() > 0, "Empty Remap");
     }
 
-    void set_dimension(const index_t r, const index_t c, const index_t e)
+    void eval_after_header(const index_t r, const index_t c, const index_t e)
     {
         std::tie(max_row, max_col, max_elem) = std::make_tuple(r, c, e);
         TLOG("Input size: " << max_row << " x " << max_col);
@@ -642,7 +677,7 @@ struct triplet_copier_remapped_cols_t {
         }
     }
 
-    void eval_end()
+    void eval_end_of_file()
     {
         ofs.close();
         if (elem_check != NNZ) {
@@ -658,7 +693,7 @@ struct triplet_copier_remapped_cols_t {
 
     index_t elem_check;
 
-    ogzstream ofs;
+    OFS ofs;
     static constexpr char FS = ' ';
 
     index_t max_row;
@@ -691,45 +726,47 @@ void
 write_matrix_market_stream(OFS &ofs,
                            const Eigen::SparseMatrixBase<Derived> &out)
 {
-    ofs.precision(4);
 
     const Derived &M = out.derived();
 
     ofs << "%%MatrixMarket matrix coordinate integer general" << std::endl;
     ofs << M.rows() << " " << M.cols() << " " << M.nonZeros() << std::endl;
 
-    const typename Derived::Index INTERVAL = 1e6;
-    const typename Derived::Index max_triples = M.nonZeros();
     using Index = typename Derived::Index;
-    Index _num_triples = 0;
+    using Scalar = typename Derived::Scalar;
+    using SpMat = Eigen::SparseMatrix<Scalar, Eigen::RowMajor, std::ptrdiff_t>;
 
-    // column major
-    for (auto k = 0; k < M.outerSize(); ++k) {
-        for (typename Derived::InnerIterator it(M, k); it; ++it) {
-            const Index i = it.row() + 1; // fix zero-based to one-based
-            const Index j = it.col() + 1; // fix zero-based to one-based
-            const auto v = it.value();
-            ofs << i << " " << j << " " << v << std::endl;
+    // Should this be sorted by the column (the 2nd element)
+    if (M.IsRowMajor) {
+        SpMat Mt = M.transpose();
 
-            if (++_num_triples % INTERVAL == 0) {
-                std::cerr << "\r" << std::left << std::setfill('.')
-                          << std::setw(30) << "Writing " << std::right
-                          << std::setfill(' ') << std::setw(10)
-                          << (_num_triples / INTERVAL)
-                          << " x 1M triplets (total " << std::setw(10)
-                          << (max_triples / INTERVAL) << ")" << std::flush;
+        for (auto k = 0; k < Mt.outerSize(); ++k) {
+            for (typename Derived::InnerIterator it(Mt, k); it; ++it) {
+                const Index i = it.row() + 1; // fix zero-based to one-based
+                const Index j = it.col() + 1; // fix zero-based to one-based
+                const auto v = it.value();
+                ofs << j << " " << i << " " << v << std::endl;
+            }
+        }
+    } else {
+        for (auto k = 0; k < M.outerSize(); ++k) {
+            for (typename Derived::InnerIterator it(M, k); it; ++it) {
+                const Index i = it.row() + 1; // fix zero-based to one-based
+                const Index j = it.col() + 1; // fix zero-based to one-based
+                const auto v = it.value();
+                ofs << i << " " << j << " " << v << std::endl;
             }
         }
     }
-    std::cerr << std::endl;
 }
 
-template <typename T>
+template <typename Derived>
 void
-write_matrix_market_file(const std::string filename, T &out)
+write_matrix_market_file(const std::string filename,
+                         const Eigen::SparseMatrixBase<Derived> &out)
 {
     if (is_file_gz(filename)) {
-        ogzstream ofs(filename.c_str(), std::ios::out);
+        obgzf_stream ofs(filename.c_str(), std::ios::out);
         write_matrix_market_stream(ofs, out);
         ofs.close();
     } else {
@@ -755,8 +792,6 @@ write_tuple_stream(OFS &ofs, const Vec &vec)
         ofs << x;
         i++;
     };
-
-    ofs.precision(4);
 
     for (auto pp : vec) {
         i = 0;
@@ -784,7 +819,6 @@ template <typename OFS, typename Vec>
 void
 write_pair_stream(OFS &ofs, const Vec &vec)
 {
-    ofs.precision(4);
 
     for (auto pp : vec) {
         ofs << std::get<0>(pp) << " " << std::get<1>(pp) << std::endl;
@@ -810,7 +844,6 @@ template <typename OFS, typename Vec>
 void
 write_vector_stream(OFS &ofs, const Vec &vec)
 {
-    ofs.precision(4);
 
     for (auto pp : vec) {
         ofs << pp << std::endl;
@@ -1025,7 +1058,6 @@ template <typename OFS, typename Derived>
 void
 write_data_stream(OFS &ofs, const Eigen::MatrixBase<Derived> &out)
 {
-    // ofs.precision(4); --> this may be too strong
 
     const Derived &M = out.derived();
     using Index = typename Derived::Index;
@@ -1042,7 +1074,6 @@ template <typename OFS, typename Derived>
 void
 write_data_stream(OFS &ofs, const Eigen::SparseMatrixBase<Derived> &out)
 {
-    // ofs.precision(4); --> this may be too strong
 
     const Derived &M = out.derived();
     using Index = typename Derived::Index;

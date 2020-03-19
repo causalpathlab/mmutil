@@ -20,7 +20,7 @@ struct row_stat_collector_t {
         max_elem = 0;
     }
 
-    void set_dimension(const index_t r, const index_t c, const index_t e)
+    void eval_after_header(const index_t r, const index_t c, const index_t e)
     {
         std::tie(max_row, max_col, max_elem) = std::make_tuple(r, c, e);
 
@@ -45,7 +45,7 @@ struct row_stat_collector_t {
         }
     }
 
-    void eval_end()
+    void eval_end_of_file()
     {
 #ifdef DEBUG
         TLOG("Finished reading a list of triplets");
@@ -71,7 +71,7 @@ struct col_stat_collector_t {
         max_elem = 0;
     }
 
-    void set_dimension(const index_t r, const index_t c, const index_t e)
+    void eval_after_header(const index_t r, const index_t c, const index_t e)
     {
         std::tie(max_row, max_col, max_elem) = std::make_tuple(r, c, e);
 
@@ -102,7 +102,7 @@ struct col_stat_collector_t {
 #endif
     }
 
-    void eval_end()
+    void eval_end_of_file()
     {
 #ifdef DEBUG
         TLOG("S1  : " << Col_S1.sum());
@@ -131,7 +131,7 @@ struct row_col_stat_collector_t {
         max_elem = 0;
     }
 
-    void set_dimension(const index_t r, const index_t c, const index_t e)
+    void eval_after_header(const index_t r, const index_t c, const index_t e)
     {
         std::tie(max_row, max_col, max_elem) = std::make_tuple(r, c, e);
 
@@ -167,7 +167,7 @@ struct row_col_stat_collector_t {
         }
     }
 
-    void eval_end()
+    void eval_end_of_file()
     {
 #ifdef DEBUG
         TLOG("Finished reading a list of triplets");

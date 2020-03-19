@@ -1,5 +1,6 @@
 #include "mmutil_match.hh"
 #include "mmutil_spectral.hh"
+#include "mmutil_util.hh"
 
 int
 main(const int argc, const char *argv[])
@@ -11,19 +12,24 @@ main(const int argc, const char *argv[])
     ERR_RET(!file_exists(options.src_mtx), "No source data file");
     ERR_RET(!file_exists(options.tgt_mtx), "No target data file");
 
+    CHECK(convert_bgzip(options.src_mtx));
+    CHECK(convert_bgzip(options.tgt_mtx));
+    CHECK(build_mmutil_index(options.src_mtx));
+    CHECK(build_mmutil_index(options.tgt_mtx));
+
     /////////////////////////////
     // fliter out zero columns //
     /////////////////////////////
 
     using valid_set_t = std::unordered_set<Index>;
     using str_vec_t = std::vector<std::string>;
-    str_vec_t col_src_names, col_tgt_names;
+    str_vec_t src_names, tgt_names;
     valid_set_t valid_src, valid_tgt;
     Index Nsrc, Ntgt;
 
-    std::tie(valid_src, Nsrc, col_src_names) =
+    std::tie(valid_src, Nsrc, src_names) =
         find_nz_col_names(options.src_mtx, options.src_col);
-    std::tie(valid_tgt, Ntgt, col_tgt_names) =
+    std::tie(valid_tgt, Ntgt, tgt_names) =
         find_nz_col_names(options.tgt_mtx, options.tgt_col);
 
     TLOG("Filter out total zero columns");
@@ -39,42 +45,43 @@ main(const int argc, const char *argv[])
     // step 1. learn spectral on the target data //
     ///////////////////////////////////////////////
 
-    Mat u, v, d;
-    std::tie(u, v, d) =
-        take_spectrum_nystrom(options.tgt_mtx, weights, options);
+    svd_out_t svd = take_svd_online(options.tgt_mtx, weights, options);
 
-    TLOG("Target matrix: " << u.rows() << " x " << u.cols());
+    Mat dict = svd.U; // feature x factor
+    Mat d = svd.D;    // singular values
+    Mat tgt = svd.V;  // sample x factor
+
+    TLOG("Target matrix: " << tgt.rows() << " x " << tgt.cols());
 
     /////////////////////////////////////////////////////
     // step 2. project source data onto the same space //
     /////////////////////////////////////////////////////
 
-    Mat proj = v * d.cwiseInverse().asDiagonal(); // feature x rank
+    Mat proj = dict * d.cwiseInverse().asDiagonal(); // feature x rank
 
-    Mat u_src = _nystrom_proj(options.src_mtx, weights, proj, options);
+    Mat src = take_proj_online(options.src_mtx, weights, proj, options);
 
-    TLOG("Source matrix: " << u_src.rows() << " x " << u_src.cols());
+    TLOG("Source matrix: " << src.rows() << " x " << src.cols());
 
     //////////////////////////////
     // step 3. search kNN pairs //
     //////////////////////////////
 
-    ERR_RET(u_src.cols() != u.cols(),
-            "Found different number of features: " << u_src.cols() << " vs. "
-                                                   << u.cols());
+    ERR_RET(src.cols() != tgt.cols(),
+            "Found different number of spectral features:"
+                << src.cols() << " vs. " << tgt.cols());
 
-    u_src.transposeInPlace(); // Column-major
-    u.transposeInPlace();     //
-
-    u_src.colwise().normalize(); // Normalize for cosine distance
-    u.colwise().normalize();     //
+    src.transposeInPlace(); // rank x samples
+    tgt.transposeInPlace(); // rank x samples
+    normalize_columns(src); // For cosine distance
+    normalize_columns(tgt); //
 
     std::vector<std::tuple<Index, Index, Scalar>> out_index;
 
     TLOG("Running kNN search ...");
 
-    auto knn = search_knn(SrcDataT(u_src.data(), u_src.rows(), u_src.cols()),
-                          TgtDataT(u.data(), u.rows(), u.cols()),
+    auto knn = search_knn(SrcDataT(src.data(), src.rows(), src.cols()),
+                          TgtDataT(tgt.data(), tgt.rows(), tgt.cols()),
                           KNN(options.knn),       //
                           BILINK(options.bilink), //
                           NNLIST(options.nlist),  //
@@ -82,23 +89,21 @@ main(const int argc, const char *argv[])
 
     CHK_ERR_RET(knn, "Failed to search kNN");
 
-    std::vector<std::tuple<std::string, std::string, Scalar>> out_named;
+    auto dist2sim = [](std::tuple<Index, Index, Scalar> &tup) {
+        std::get<2>(tup) = fasterexp(- std::get<2>(tup));
+    };
+    std::for_each(out_index.begin(), out_index.end(), dist2sim);
 
-    for (auto tt : out_index) {
-        Index i, j;
-        Scalar d;
-        std::tie(i, j, d) = tt;
-        if (valid_src.count(i) > 0 && valid_tgt.count(j) > 0) {
-            out_named.push_back(
-                std::make_tuple(col_src_names.at(i), col_tgt_names.at(j), d));
-        }
-    }
+    TLOG("Convert distance to similarity");
 
-    const std::string out_file(options.out);
+    const Index max_row = src.cols();
+    const Index max_col = tgt.cols();
+    const SpMat A = build_eigen_sparse(out_index, max_row, max_col);
 
-    write_tuple_file(out_file, out_named);
+    write_matrix_market_file(options.out + ".mtx.gz", A);
+    write_vector_file(options.out + ".rows.gz", src_names);
+    write_vector_file(options.out + ".cols.gz", tgt_names);
 
-    TLOG("Wrote the matching file: " << out_file);
-
+    TLOG("Done");
     return EXIT_SUCCESS;
 }

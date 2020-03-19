@@ -1,49 +1,59 @@
 #include "mmutil.hh"
 #include "mmutil_spectral.hh"
+#include "mmutil_index.hh"
+#include "mmutil_util.hh"
+#include "mmutil_bgzf_util.hh"
+#include "svd.hh"
 
 int
 main(const int argc, const char *argv[])
 {
+
     spectral_options_t options;
+
     CHECK(parse_spectral_options(argc, argv, options));
-    ERR_RET(!file_exists(options.mtx), "No MTX data file");
 
-    using Str = std::string;
+    std::string mtx = options.mtx;
+    std::string idx = options.idx;
 
-    const Str mtx_file = options.mtx;
-    const Str output = options.out;
-
-    const Str wfile = options.row_weight_file;
-    Vec weights;
-    if (file_exists(wfile)) {
-        std::vector<Scalar> ww;
-        CHECK(read_vector_file(wfile, ww));
-        weights = eigen_vector(ww);
+    if (!is_file_bgz(mtx.c_str())) {
+        convert_bgzip(mtx);
     }
 
-    ///////////////////
-    // Read the data //
-    ///////////////////
+    if (idx.length() == 0) {
+        idx = mtx + ".index";
+    }
 
-    Mat U, V, D;
+    if (!file_exists(idx)) {
+        TLOG("Creating indexes: " << idx);
+        build_mmutil_index(mtx, idx);
+    }
 
-    std::tie(U, V, D) = take_spectrum_nystrom(options.mtx, //
-                                              weights,     //
-                                              options);
+    Mat ww;
 
-    // SpMat X0 = build_eigen_sparse(mtx_file);
-    // std::tie(U, V, D) = take_spectrum_laplacian(X0, tau_scale, rank,
-    // iter);
+    if (file_exists(options.row_weight_file)) {
+        CHECK(read_data_file(options.row_weight_file, ww));
+    }
 
-    const Str output_U_file = output + ".u.gz";
-    const Str output_V_file = output + ".v.gz";
-    const Str output_D_file = output + ".d.gz";
+    const std::string output = options.out;
+    const std::string output_U_file = output + ".feature_factor.gz";
+    const std::string output_V_file = output + ".sample_factor.gz";
+    const std::string output_D_file = output + ".factor.gz";
 
-    TLOG("Output results");
+    auto write_results = [&](const svd_out_t &svd) {
+        write_data_file(output_U_file, svd.U);
+        write_data_file(output_V_file, svd.V);
+        write_data_file(output_D_file, svd.D);
+        TLOG("Output results");
+    };
 
-    write_data_file(output_U_file, U);
-    write_data_file(output_V_file, V);
-    write_data_file(output_D_file, D);
+    if (options.em_iter > 0) {
+        svd_out_t svd = take_svd_online_em(mtx, idx, ww, options);
+        write_results(svd);
+    } else {
+        svd_out_t svd = take_svd_online(mtx, idx, ww, options);
+        write_results(svd);
+    }
 
     TLOG("Done");
 

@@ -45,7 +45,8 @@ filter_row_by_coeffvar(const Index Ntop,               //
                        const std::string output)
 {
     using Str = std::string;
-    using copier_t = triplet_copier_remapped_rows_t<Index, Scalar>;
+    using copier_t =
+        triplet_copier_remapped_rows_t<obgzf_stream, Index, Scalar>;
     using index_map_t = copier_t::index_map_t;
 
     ////////////////////////////////
