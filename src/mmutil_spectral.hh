@@ -522,6 +522,7 @@ take_svd_online_em(const std::string mtx_file,
     Sig = svd_u.singularValues();
     Mat proj = U * Sig.cwiseInverse().asDiagonal(); // feature x rank
 
+    Vt.setZero();
     for (Index lb = 0; lb < N; lb += batch_size) {
         const Index ub = std::min(N, batch_size + lb);
         Mat B = take_batch_data(lb, ub); // feature x sample
