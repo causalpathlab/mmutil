@@ -242,21 +242,8 @@ read_eigen_sparse_subset_col(std::string mtx_file,
     using Index = _reader_t::index_t;
 
     std::vector<idx_pair_t> index_tab;
-#ifdef DEBUG
-    TLOG("Reading the index file: " << index_file);
-#endif
-
     CHECK(read_mmutil_index(index_file, index_tab));
-
-#ifdef DEBUG
-    TLOG("Read the file: " << index_tab.size() << " elements");
-#endif
-
     const auto blocks = find_consecutive_blocks(index_tab, subcol);
-
-#ifdef DEBUG
-    TLOG("Found " << blocks.size() << " blocks");
-#endif
 
     _reader_t::TripletVec Tvec; // keep accumulating this
 
@@ -271,6 +258,52 @@ read_eigen_sparse_subset_col(std::string mtx_file,
         _reader_t reader(Tvec, remap);
         CHECK(peek_bgzf_header(mtx_file, reader));
         max_row = std::max(max_row, reader.max_row);
+        CHECK(visit_bgzf_block(mtx_file, block.lb_mem, block.ub_mem, reader));
+    }
+
+    SpMat X(max_row, max_col);
+    X.reserve(Tvec.size());
+    X.setFromTriplets(Tvec.begin(), Tvec.end());
+
+#ifdef DEBUG
+    TLOG("Constructed a sparse matrix with m = " << X.nonZeros());
+#endif
+
+    return X;
+}
+
+template <typename VEC>
+SpMat
+read_eigen_sparse_subset_row_col(std::string mtx_file,
+				 std::string index_file,
+				 const VEC &subrow,
+				 const VEC &subcol)
+{
+
+    using _reader_t = eigen_triplet_reader_remapped_rows_cols_t;
+    using Index = _reader_t::index_t;
+
+    std::vector<idx_pair_t> index_tab;
+    CHECK(read_mmutil_index(index_file, index_tab));
+    const auto blocks = find_consecutive_blocks(index_tab, subcol);
+
+    _reader_t::index_map_t remap_row;
+    for (Index new_index = 0; new_index < subrow.size(); ++new_index) {
+        const Index old_index = subrow.at(new_index);
+        remap_row[old_index] = new_index;
+    }
+
+    _reader_t::TripletVec Tvec; // keep accumulating this
+
+    Index max_col = 0;
+    Index max_row = subrow.size();
+    for (auto block : blocks) {
+        _reader_t::index_map_t remap_col;
+        for (Index old_index = block.lb; old_index < block.ub; ++old_index) {
+            remap_col[old_index] = max_col;
+            ++max_col;
+        }
+        _reader_t reader(Tvec, remap_row, remap_col);
         CHECK(visit_bgzf_block(mtx_file, block.lb_mem, block.ub_mem, reader));
     }
 

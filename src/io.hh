@@ -294,7 +294,7 @@ struct _triplet_reader_remapped_rows_cols_t {
         if (NNZ > 0) {
             Tvec.reserve(NNZ);
         }
-        ASSERT(remap_row.size() > 0, "Empty Remap_Col");
+        ASSERT(remap_row.size() > 0, "Empty Remap_Row");
         ASSERT(remap_col.size() > 0, "Empty Remap_Col");
     }
 

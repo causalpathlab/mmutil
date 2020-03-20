@@ -14,6 +14,9 @@
 #include "mmutil_spectral.hh"
 #include "mmutil_stat.hh"
 #include "utils/progress.hh"
+#include "mmutil_bgzf_util.hh"
+#include "mmutil_util.hh"
+#include "ext/tabix/bgzf.h"
 
 #ifndef MMUTIL_ANNOTATE_COL_
 #define MMUTIL_ANNOTATE_COL_
@@ -275,9 +278,6 @@ train_marker_genes(annotate_model_t &annot,
     std::normal_distribution<Scalar> rnorm(0., 1.);
 
     Mat xx = X;
-    Mat mu = L;
-
-    normalize_columns(mu);
     normalize_columns(xx);
 
     Scalar score;
@@ -302,11 +302,10 @@ train_marker_genes(annotate_model_t &annot,
     Mat Stat(M, K);           // feature x label
     Stat.setConstant(pseudo); // sum x(g,j) * z(j, k)
 
-    Mat scoreMat = mu.transpose() * xx;
     nsize.setConstant(pseudo);
     const Scalar eps = 1e-2;
 
-    for (Index j = 0; j < scoreMat.cols(); ++j) {
+    for (Index j = 0; j < xx.cols(); ++j) {
         xj = xx.col(j);
         Index argmax;
         const Vec &_score = annot.log_score(xj);
@@ -332,7 +331,7 @@ train_marker_genes(annotate_model_t &annot,
     // Memoized online update //
     ////////////////////////////
 
-    std::vector<Index> indexes(scoreMat.cols());
+    std::vector<Index> indexes(xx.cols());
     std::iota(indexes.begin(), indexes.end(), 0);
 
     Vec sj(K); // type x 1 score vector
@@ -755,69 +754,223 @@ run_annotation(const annotate_options_t &options)
     std::tie(Ltot, rows, labels) = read_annotation_matched(options);
 
     std::vector<std::string> columns;
-    CHECK(read_vector_file(options.col, columns));
+    CHK_ERR_RET(read_vector_file(options.col, columns),
+                "Failed to read the column file: " << options.col);
 
-    ///////////////////////////////////////////////
-    // step 1 : Initial sampling for pretraining //
-    ///////////////////////////////////////////////
+    CHK_ERR_RET(convert_bgzip(options.mtx),
+                "Failed to obtain a bgzipped file: " << options.mtx);
 
-    TLOG("Collecting row- and column-wise statistics");
+    std::string idx_file = options.mtx + ".index";
+    CHK_ERR_RET(build_mmutil_index(options.mtx, idx_file),
+                "Failed to construct an index file: " << idx_file);
 
-    row_col_stat_collector_t stat;
-    visit_matrix_market_file(options.mtx, stat);
-    const Index N = stat.max_col;
+    std::string mtx_file = options.mtx;
 
-    ASSERT(stat.max_col <= columns.size(), "Needs column names");
+    mm_info_reader_t info;
+    CHECK(peek_bgzf_header(mtx_file, info));
+    const Index D = info.max_row;
+    const Index N = info.max_col;
 
-    std::vector<Index> subrows;
-    std::vector<Index> subcols;
+    Index batch_size = options.batch_size;
 
-    std::tie(subrows, subcols) = select_rows_columns(Ltot, stat, options);
+    std::vector<Index> subrow;
 
-    TLOG("Training data [" << subrows.size() << " x " << subcols.size()
-                           << "] from [" << stat.max_row << " x "
-                           << stat.max_col << "]");
-
-    SpMat X0 =
-        read_eigen_sparse_subset_rows_cols(options.mtx, subrows, subcols);
-    Mat L = Mat(row_sub(Ltot, subrows));
-    Mat X = Mat(X0);
-
-    TLOG("Preprocessing X [" << X.rows() << " x " << X.cols() << "]");
+    Vec nnz = Ltot * Mat::Ones(Ltot.cols(), 1);
+    for (Index r = 0; r < nnz.size(); ++r) {
+        if (nnz(r) > 0)
+            subrow.emplace_back(r);
+    }
 
     auto log2_op = [](const Scalar &x) -> Scalar { return std::log2(1.0 + x); };
 
-    if (options.log_scale) {
-        X = X.unaryExpr(log2_op);
-    }
+    auto take_batch_data = [&](Index lb, Index ub) -> Mat {
+        std::vector<Index> subcol(ub - lb);
+        std::iota(subcol.begin(), subcol.end(), lb);
+        SpMat x = read_eigen_sparse_subset_row_col(mtx_file,
+                                                   idx_file,
+                                                   subrow,
+                                                   subcol);
 
-    normalize_columns(X);
+        if (options.log_scale) {
+            x = x.unaryExpr(log2_op);
+        }
 
-    //////////////////////////////////////////
-    // step2 : Train marker gene parameters //
-    //////////////////////////////////////////
+        Mat xx = Mat(x);
+        normalize_columns(xx);
+        return xx;
+    };
 
-    TLOG("Fine-tuning marker gene parameters");
-
+    Mat L = row_sub(Ltot, subrow);
     annotate_model_t annot(L);
 
-    train_marker_genes(annot, X, options);
+    ///////////////////////////////
+    // Initial greedy assignment //
+    ///////////////////////////////
 
-    write_data_file(options.out + ".marker_profile.gz", annot.mu);
-    write_vector_file(options.out + ".label_names.gz", labels);
+    const Index M = L.rows();
+    const Index K = L.cols();
+    std::vector<Index> membership(N);
+    std::fill(membership.begin(), membership.end(), 0);
+
+    Vec xj(M);
+    Vec nsize(K);
+    Vec mass(K);
+
+    const Scalar pseudo = 1.0;
+    Mat Stat(M, K); // feature x label
+    nsize.setConstant(pseudo);
+    Stat.setConstant(pseudo); // sum x(g,j) * z(j, k)
+
+    const Index max_em_iter = options.max_em_iter;
+    Vec score_trace(max_em_iter);
+    Scalar score_init = 0;
+
+    Mat mu = L;
+    normalize_columns(mu);
+
+    std::unordered_set<Index> taboo;
+
+    for (Index lb = 0; lb < N; lb += batch_size) {
+        const Index ub = std::min(N, batch_size + lb);
+
+        Mat xx = take_batch_data(lb, ub);
+
+        for (Index j = 0; j < xx.cols(); ++j) {
+            const Index i = j + lb;
+
+            xj = xx.col(j);
+            Index argmax = 0;
+            const Vec &_score = annot.log_score(xj);
+            _score.maxCoeff(&argmax);
+            score_init += _score(argmax);
+
+            if (!options.unconstrained_update) {
+                xj = xj.cwiseProduct(L.col(argmax));
+            }
+
+            if (xj.sum() > 0) {
+                nsize(argmax) += 1.0;
+                Stat.col(argmax) += xj;
+                membership[i] = argmax;
+            } else {
+                taboo.insert(i);
+            }
+        }
+
+        if (options.verbose) {
+            std::cerr << nsize.transpose() << "\r" << std::flush;
+        }
+    }
+
+    score_init /= static_cast<Scalar>(N);
+    annot.update_param(Stat, nsize);
+
+    if (options.verbose) {
+        TLOG("Finished greedy initialization");
+        TLOG("Found " << taboo.size() << " cells with no information");
+    }
+
+    ////////////////////////////
+    // Memoized online update //
+    ////////////////////////////
+
+    using DS = discrete_sampler_t<Scalar, Index>;
+    DS sampler_k(K); // sample discrete from log-mass
+
+    std::vector<Scalar> em_score_out;
+    Scalar score = score_init;
+    Vec sj(K); // type x 1 score vector
+    TLOG("Start training marker gene profiles");
+
+    for (Index iter = 0; iter < max_em_iter; ++iter) {
+        score = 0;
+
+        for (Index lb = 0; lb < N; lb += batch_size) {
+            const Index ub = std::min(N, batch_size + lb);
+
+            Mat xx = take_batch_data(lb, ub);
+
+            for (Index j = 0; j < xx.cols(); ++j) {
+
+                const Index i = j + lb;
+                if (taboo.count(i) > 0)
+                    continue;
+
+                xj = xx.col(j);
+
+                const Index k_prev = membership[i];
+
+                sj = annot.log_score(xj);
+                const Index k_now = sampler_k(sj);
+
+                score += sj(k_now);
+
+                if (k_now != k_prev) {
+
+                    nsize(k_prev) -= 1.0;
+                    nsize(k_now) += 1.0;
+
+                    if (options.unconstrained_update) {
+                        Stat.col(k_prev) -= xj;
+                        Stat.col(k_now) += xj;
+                    } else {
+                        Stat.col(k_prev) -= xj.cwiseProduct(L.col(k_prev));
+                        Stat.col(k_now) += xj.cwiseProduct(L.col(k_now));
+                    }
+
+                    membership[i] = k_now;
+                }
+
+                if (options.verbose) {
+                    std::cerr << nsize.transpose() << "\r" << std::flush;
+                }
+            }
+            annot.update_param(Stat, nsize);
+        }
+
+        score = score / static_cast<Scalar>(N);
+        score_trace(iter) = score;
+
+        Scalar diff = std::abs(score_trace(iter));
+
+        if (iter > 4) {
+            Scalar score_old = score_trace.segment(iter - 3, 2).sum();
+            Scalar score_new = score_trace.segment(iter - 1, 2).sum();
+            diff = std::abs(score_old - score_new) /
+                (std::abs(score_old) + options.em_tol);
+        } else if (iter > 0) {
+            diff = std::abs(score_trace(iter - 1) - score_trace(iter)) /
+                (std::abs(score_trace(iter) + options.em_tol));
+        }
+
+        TLOG("Iter [" << iter << "] score = " << score << ", diff = " << diff);
+
+        if (iter > 4 && diff < options.em_tol) {
+
+            TLOG("I[ " << iter << " ] D[ " << diff << " ]"
+                       << " --> converged < " << options.em_tol);
+
+            for (Index t = 0; t <= iter; ++t) {
+                em_score_out.emplace_back(score_trace(t));
+            }
+            break;
+        }
+    }
 
     std::vector<std::string> markers;
-    markers.reserve(subrows.size());
-    std::for_each(subrows.begin(), subrows.end(), [&](const auto r) {
+    markers.reserve(subrow.size());
+    std::for_each(subrow.begin(), subrow.end(), [&](const auto r) {
         markers.emplace_back(rows.at(r));
     });
     write_vector_file(options.out + ".marker_names.gz", markers);
+    write_vector_file(options.out + ".label_names.gz", labels);
+    write_data_file(options.out + ".marker_profile.gz", annot.mu);
 
-    /////////////////////////////////////////////////////
-    // step3: Assign labels to all the cells (columns) //
-    /////////////////////////////////////////////////////
+    write_vector_file(options.out + ".em_scores.gz", em_score_out);
 
-    const Index batch_size = options.batch_size;
+    //////////////////////////////////////////////
+    // Assign labels to all the cells (columns) //
+    //////////////////////////////////////////////
 
     using out_tup = std::tuple<std::string, std::string, Scalar>;
     std::vector<out_tup> output;
@@ -826,68 +979,26 @@ run_annotation(const annotate_options_t &options)
     Vec zi(annot.ntype);
     Mat Pr(annot.ntype, N);
 
-    SpMat xx_out(subrows.size(), 0);
-
     for (Index lb = 0; lb < N; lb += batch_size) {
         const Index ub = std::min(N, batch_size + lb);
-        std::vector<Index> subcols_b(ub - lb);
 
-        std::iota(subcols_b.begin(), subcols_b.end(), lb);
+        Mat xx = take_batch_data(lb, ub);
 
-        TLOG("Reading data on the batch [" << lb << ", " << ub << ")");
-
-        SpMat x0_b =
-            read_eigen_sparse_subset_rows_cols(options.mtx, subrows, subcols_b);
-
-	TLOG("Preprocessing X [" << x0_b.rows() << " x " << x0_b.cols() << "]");
-
-        Mat xx_b = Mat(x0_b);
-        Mat _col_norm = Mat::Ones(1, xx_b.rows()) * xx_b.cwiseProduct(xx_b);
-        _col_norm.transposeInPlace();
-
-        if (options.log_scale) {
-            xx_b = xx_b.unaryExpr(log2_op);
-        }
-
-	TLOG("Normalizing columns ...");
-
-        normalize_columns(xx_b);
-
-        if (options.output_count_matrix) {
-            xx_out = hcat(xx_out, x0_b);
-        }
-
-	progress_bar_t<Index> prog(xx_b.cols(), 1000);
-
-        for (Index j = 0; j < xx_b.cols(); ++j) {
-            const Index i = subcols_b.at(j);
-
-            if (_col_norm(j) < 1e-4) {
-                if (options.verbose)
-                    WLOG("Ignore this zero-norm column: " << columns.at(i));
-                continue;
-            }
-
-            const Vec &_score = annot.log_score(xx_b.col(j));
+        for (Index j = 0; j < xx.cols(); ++j) {
+            const Index i = j + lb;
+            const Vec &_score = annot.log_score(xx.col(j));
             normalized_exp(_score, zi);
+
             Index argmax;
             _score.maxCoeff(&argmax);
             output.emplace_back(columns.at(i), labels.at(argmax), zi(argmax));
 
             Pr.col(i) = zi;
-
-	    prog.update();
-            prog(std::cerr);
         }
-
-        TLOG("Done on the batch [" << lb << ", " << ub << ")");
+        TLOG("Annotated on the batch [" << lb << ", " << ub << ")");
     }
 
     Pr.transposeInPlace();
-
-    if (options.output_count_matrix) {
-        write_matrix_market_file(options.out + ".marker.mtx.gz", xx_out);
-    }
 
     write_tuple_file(options.out + ".annot.gz", output);
     write_data_file(options.out + ".annot_prob.gz", Pr);

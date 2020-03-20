@@ -269,18 +269,6 @@ nystrom_sample_columns(const std::string mtx_file,
     return std::make_tuple(X, nnz_col);
 }
 
-struct take_info_t {
-    void eval_after_header(Index r, Index c, Index n)
-    {
-        max_row = r;
-        max_col = c;
-        max_nnz = n;
-    }
-    void set_file(BGZF *_fp) { fp = _fp; }
-    Index max_row, max_col, max_nnz;
-    BGZF *fp;
-};
-
 struct svd_out_t {
     Mat U;
     Mat D;
@@ -389,11 +377,10 @@ take_svd_online_em(const std::string mtx_file,
     CHECK(convert_bgzip(mtx_file));
     CHECK(build_mmutil_index(mtx_file, idx_file));
 
-    take_info_t info;
+    mm_info_reader_t info;
     CHECK(peek_bgzf_header(mtx_file, info));
     const Index numFeat = info.max_row;
     const Index N = info.max_col;
-    const Index M = info.max_nnz;
 
     Vec ww(numFeat, 1);
     ww.setOnes();
@@ -530,7 +517,7 @@ take_svd_online_em(const std::string mtx_file,
             Vt.col(i + lb) += proj.transpose() * B.col(i);
         }
 
-	TLOG("Re-calibrating batch [" << lb << ", " << ub << ")");
+        TLOG("Re-calibrating batch [" << lb << ", " << ub << ")");
     }
 
     Vt.transposeInPlace();
@@ -570,21 +557,21 @@ take_proj_online(const std::string mtx_file,
 
     ASSERT(is_file_bgz(mtx_file), "convert this to bgzipped file");
 
-    mm_info_reader_t reader;
+    mm_info_reader_t info;
 
-    CHECK(peek_bgzf_header(mtx_file, reader));
+    CHECK(peek_bgzf_header(mtx_file, info));
 
     const Scalar tau = options.tau;
     const Scalar norm = options.col_norm;
     const Index batch_size = options.nystrom_batch;
     const bool take_ln = options.log_scale;
 
-    const Index D = reader.max_row;
-    const Index N = reader.max_col;
+    const Index D = info.max_row;
+    const Index N = info.max_col;
     const Derived2 proj = _proj.derived();
     const Index rank = proj.cols();
 
-    ASSERT(proj.rows() == reader.max_row,
+    ASSERT(proj.rows() == info.max_row,
            "Projection matrix should have the same number of rows");
 
     Vec ww(D, 1);
