@@ -27,9 +27,9 @@ main(const int argc, const char *argv[])
         convert_bgzip(mtx_file);
     }
 
-    std::string index_file = argv[2];
+    std::string index_file = mtx_file + ".index";
     if (argc > 2) {
-        index_file = mtx_file + ".index";
+        index_file = argv[2];
     }
 
     CHECK(build_mmutil_index(mtx_file, index_file));
