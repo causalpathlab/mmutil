@@ -176,12 +176,11 @@ find_consecutive_blocks(const std::vector<idx_pair_t> &index,
     ASSERT(N > 1, "Empty index map");
 
     std::unordered_set<Index> _subset;
+    _subset.clear();
     _subset.reserve(subcol.size());
     std::copy(subcol.begin(),
               subcol.end(),
               std::inserter(_subset, _subset.end()));
-
-    const Index gap = 100;
 
 #ifdef DEBUG
     TLOG("Built a subset of " << _subset.size() << " columns");
@@ -190,6 +189,7 @@ find_consecutive_blocks(const std::vector<idx_pair_t> &index,
     std::vector<idx_pair_t> blocks;
     bool in_frag = false;
     Index beg = 0, end = 0;
+    Index Nmax = 0;
     for (Index j = 0; j < N; ++j) {
         const Index i = std::get<0>(index[j]);
         if (_subset.count(i) > 0) {
@@ -202,6 +202,7 @@ find_consecutive_blocks(const std::vector<idx_pair_t> &index,
             in_frag = false;
             blocks.emplace_back(std::make_tuple(beg, end));
         }
+        Nmax = std::max(Nmax, i);
     }
 
     if (in_frag) {
@@ -214,17 +215,17 @@ find_consecutive_blocks(const std::vector<idx_pair_t> &index,
     std::vector<memory_block_t> ret;
 
     for (auto b : blocks) {
-        Index lb, lb_mem, ub = N, ub_mem = 0;
+        Index lb, lb_mem, ub = (Nmax + 1), ub_mem = 0;
         std::tie(lb, lb_mem) = index[std::get<0>(b)];
 
         if (std::get<1>(b) < (N - 1)) {
             std::tie(ub, ub_mem) = index[std::get<1>(b)];
+        } else if (std::get<1>(b) == (N - 1)) {
         }
 
 #ifdef DEBUG
         TLOG("Block [" << lb << ", " << ub << ")");
 #endif
-
         ret.emplace_back(memory_block_t{ lb, lb_mem, ub, ub_mem });
     }
     return ret;

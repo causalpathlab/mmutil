@@ -332,7 +332,6 @@ take_svd_online(const std::string mtx_file,
 
     Mat U = svd.matrixU();
     Mat Sig = svd.singularValues();
-    Mat V;
 
     TLOG("Finished initial SVD");
 
@@ -341,8 +340,8 @@ take_svd_online(const std::string mtx_file,
     //////////////////////////////////
 
     Mat proj = U * Sig.cwiseInverse().asDiagonal(); // feature x rank
-    V.resize(N, rank);
-    V.setZero();
+    Mat Vt(rank, N);
+    Vt.setZero();
 
     for (Index lb = 0; lb < N; lb += batch_size) {
 
@@ -355,16 +354,16 @@ take_svd_online(const std::string mtx_file,
         B.transposeInPlace();
 
         for (Index i = 0; i < (ub - lb); ++i) {
-            V.row(i + lb) += B.row(i) * proj;
+            Vt.col(i + lb) += proj.transpose() * B.col(i);
         }
 
-        if (options.verbose)
-            TLOG("Re-calibrating batch [" << lb << ", " << ub << ")");
+        TLOG("Re-calibrating batch [" << lb << ", " << ub << ")");
     }
 
     TLOG("Finished Nystrom projection");
 
-    return svd_out_t{ U, Sig, V };
+    Vt.transposeInPlace();
+    return svd_out_t{ U, Sig, Vt };
 }
 
 /**
@@ -530,8 +529,7 @@ take_svd_online_em(const std::string mtx_file,
             Vt.col(i + lb) += proj.transpose() * B.col(i);
         }
 
-        if (options.verbose)
-            TLOG("Re-calibrating batch [" << lb << ", " << ub << ")");
+	TLOG("Re-calibrating batch [" << lb << ", " << ub << ")");
     }
 
     Vt.transposeInPlace();
