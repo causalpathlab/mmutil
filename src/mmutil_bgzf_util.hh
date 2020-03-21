@@ -356,10 +356,15 @@ visit_bgzf(const std::string bgz_file, FUN &fun)
     while (bgzf_getline(fp, '\n', str) >= 0) {
 
         if (str->l < 1 || str->s[0] == '%') {
+            std::string temp(str->s);
+            WLOG("Found comment line in the middle [" << num_nz << "]\n"
+                                                      << temp);
+            state = S_EOW;
             continue; // skip comment
         }
 
         num_cols = 0;
+        strbuf.clear();
         for (size_t pos = 0; pos < str->l; ++pos) {
             const char c = str->s[pos];
             if (std::isspace(c) && strbuf.size() > 0) {
@@ -377,7 +382,8 @@ visit_bgzf(const std::string bgz_file, FUN &fun)
         }
 
         if (num_cols < 3) {
-            WLOG("Found an incomplete line [" << num_nz << "]");
+            WLOG("Found this incomplete line [" << num_nz << "]");
+            state = S_EOW;
             continue;
         }
 

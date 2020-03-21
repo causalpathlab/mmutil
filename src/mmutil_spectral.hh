@@ -94,7 +94,7 @@ struct spectral_options_t {
    @param norm_target targetting normalization value
    @param log_trans do log(1+x) transformation
 
-   Why is this graph Laplacian?
+   Why is this a graph Laplacian?
    (1) We let adjacency matrix A = X'X assuming elements in X are non-negative
    (2) Let the Laplacian L = I - D^{-1/2} A D^{-1/2}
    = I - D^{-1/2} (X'X) D^{-1/2}
@@ -111,7 +111,10 @@ make_normalized_laplacian(const Eigen::SparseMatrixBase<Derived> &_X0,
     const Derived2 &weights = _weights.derived();
     const Index max_row = X0.rows();
 
-    ASSERT(weights.rows() == max_row, "We need weights on each row");
+    ASSERT(weights.rows() == max_row,
+           "We need weights on each row. W: "
+               << weights.rows() << " x " << weights.cols()
+               << " vs. X: " << X0.rows() << " x " << X0.cols());
     ASSERT(weights.cols() == 1, "Provide summary vector");
 
     auto trans_fun = [&log_trans](const Scalar &x) -> Scalar {
@@ -310,6 +313,7 @@ take_svd_online(const std::string mtx_file,
 
     if (_weights.size() > 0) {
         ww = _weights.derived();
+        ASSERT(ww.rows() == X.rows(), "");
     }
 
     RandomizedSVD<Mat> svd(rank, lu_iter);

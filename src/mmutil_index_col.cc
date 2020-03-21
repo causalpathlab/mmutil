@@ -25,6 +25,8 @@ main(const int argc, const char *argv[])
 
     if (!is_file_bgz(mtx_file)) {
         convert_bgzip(mtx_file);
+    } else {
+        TLOG("This file is bgzipped: " << mtx_file);
     }
 
     std::string index_file = mtx_file + ".index";

@@ -15,8 +15,12 @@ convert_bgzip(IFS &ifs, OFS &ofs)
     Index lines = 0;
     std::string line;
     while (std::getline(ifs, line)) {
-        ofs << line << std::endl;
-        ++lines;
+        if (line.length() > 4) { // at least i <space> j <space> w
+            ofs << line << std::endl;
+            ++lines;
+        } else {
+            WLOG("Ignore this line in #" << lines << ": " << line);
+        }
     }
     return lines;
 }

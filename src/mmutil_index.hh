@@ -112,16 +112,16 @@ private:
 // index bgzipped matrix market file //
 ///////////////////////////////////////
 
-int build_mmutil_index(std::string bgz_file,        // bgzip file
+int build_mmutil_index(std::string mtx_file,        // bgzip file
                        std::string index_file = "") // index file
 {
 
     if (index_file.length() == 0) {
-        index_file = bgz_file + ".index";
+        index_file = mtx_file + ".index";
     }
 
-    if (bgzf_is_bgzf(bgz_file.c_str()) != 1) {
-        ELOG("This file is not bgzipped: " << bgz_file);
+    if (bgzf_is_bgzf(mtx_file.c_str()) != 1) {
+        ELOG("This file is not bgzipped: " << mtx_file);
         return EXIT_FAILURE;
     }
 
@@ -130,8 +130,26 @@ int build_mmutil_index(std::string bgz_file,        // bgzip file
         return EXIT_SUCCESS;
     }
 
+    mm_info_reader_t info;
+    CHECK(peek_bgzf_header(mtx_file, info));
+
     mm_column_indexer_t indexer;
-    CHECK(visit_bgzf(bgz_file, indexer));
+    CHECK(visit_bgzf(mtx_file, indexer));
+
+    const mm_column_indexer_t::map_t &_map = indexer();
+
+    //////////////////////////////////////////
+    // Check if we can find all the columns //
+    //////////////////////////////////////////
+
+    const Index sz = _map.size();
+    const Index last_col = sz > 0 ? std::get<0>(_map[sz - 1]) : 0;
+
+    if (last_col != (info.max_col - 1)) {
+        ELOG("Failed to index all the columns: " << last_col << " < "
+                                                 << (info.max_col - 1));
+        return EXIT_FAILURE;
+    }
 
     ogzstream ofs(index_file.c_str(), std::ios::out);
     write_tuple_stream(ofs, indexer());
@@ -155,6 +173,7 @@ read_mmutil_index(std::string index_file, std::vector<idx_pair_t> &_index)
     std::sort(_index.begin(), _index.end(), less_op);
 
     const Index N = _index.size();
+
     if (N < 1)
         return EXIT_FAILURE;
     return ret;
@@ -241,14 +260,25 @@ read_eigen_sparse_subset_col(std::string mtx_file,
     using _reader_t = eigen_triplet_reader_remapped_cols_t;
     using Index = _reader_t::index_t;
 
+    mm_info_reader_t info;
+    CHECK(peek_bgzf_header(mtx_file, info));
+
     std::vector<idx_pair_t> index_tab;
     CHECK(read_mmutil_index(index_file, index_tab));
+
+    const Index sz = index_tab.size();
+    const Index last_col = sz > 0 ? std::get<0>(index_tab[sz - 1]) : 0;
+    ASSERT(last_col == (info.max_col - 1),
+           "This index file is corrupted: " << last_col << " < "
+                                            << (info.max_col - 1) << ", "
+                                            << index_file);
+
     const auto blocks = find_consecutive_blocks(index_tab, subcol);
 
     _reader_t::TripletVec Tvec; // keep accumulating this
 
     Index max_col = 0;
-    Index max_row = 0;
+    Index max_row = info.max_row;
     for (auto block : blocks) {
         _reader_t::index_map_t remap;
         for (Index j = block.lb; j < block.ub; ++j) {
@@ -256,8 +286,6 @@ read_eigen_sparse_subset_col(std::string mtx_file,
             ++max_col;
         }
         _reader_t reader(Tvec, remap);
-        CHECK(peek_bgzf_header(mtx_file, reader));
-        max_row = std::max(max_row, reader.max_row);
         CHECK(visit_bgzf_block(mtx_file, block.lb_mem, block.ub_mem, reader));
     }
 
@@ -275,9 +303,9 @@ read_eigen_sparse_subset_col(std::string mtx_file,
 template <typename VEC>
 SpMat
 read_eigen_sparse_subset_row_col(std::string mtx_file,
-				 std::string index_file,
-				 const VEC &subrow,
-				 const VEC &subcol)
+                                 std::string index_file,
+                                 const VEC &subrow,
+                                 const VEC &subcol)
 {
 
     using _reader_t = eigen_triplet_reader_remapped_rows_cols_t;
