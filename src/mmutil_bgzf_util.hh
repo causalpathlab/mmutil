@@ -62,10 +62,10 @@ visit_bgzf_block(const std::string bgz_file,
     auto read_triplet = [&]() {
         switch (num_cols) {
         case 0:
-            row = strbuf.take_int();
+            row = strbuf.take_uint64();
             break;
         case 1:
-            col = strbuf.take_int();
+            col = strbuf.take_uint64();
             break;
         case 2:
             weight = strbuf.take_float();
@@ -173,13 +173,13 @@ peek_bgzf_header(const std::string bgz_file, FUN &fun)
     auto read_header_triplet = [&]() {
         switch (num_cols) {
         case 0:
-            max_row = strbuf.take_int();
+            max_row = strbuf.take_uint64();
             break;
         case 1:
-            max_col = strbuf.take_int();
+            max_col = strbuf.take_uint64();
             break;
         case 2:
-            max_nnz = strbuf.take_int();
+            max_nnz = strbuf.take_uint64();
             break;
         }
         state = S_EOW;
@@ -194,6 +194,7 @@ peek_bgzf_header(const std::string bgz_file, FUN &fun)
     while (nheader == 0 && bgzf_getline(fp, '\n', str) >= 0) {
 
         if (str->l < 1 || str->s[0] == '%') {
+            state = S_EOW;
             continue; // skip comment
         }
 
@@ -272,13 +273,13 @@ visit_bgzf(const std::string bgz_file, FUN &fun)
     auto read_header_triplet = [&]() {
         switch (num_cols) {
         case 0:
-            max_row = strbuf.take_int();
+            max_row = strbuf.take_uint64();
             break;
         case 1:
-            max_col = strbuf.take_int();
+            max_col = strbuf.take_uint64();
             break;
         case 2:
-            max_nnz = strbuf.take_int();
+            max_nnz = strbuf.take_uint64();
             break;
         }
         state = S_EOW;
@@ -291,6 +292,8 @@ visit_bgzf(const std::string bgz_file, FUN &fun)
     // Don't advance the file pointer
 
     while (nheader == 0 && bgzf_getline(fp, '\n', str) >= 0) {
+
+        std::cerr << str->s << std::endl;
 
         if (str->l < 1 || str->s[0] == '%') {
             state = S_EOW;
@@ -339,10 +342,10 @@ visit_bgzf(const std::string bgz_file, FUN &fun)
     auto read_triplet = [&]() {
         switch (num_cols) {
         case 0:
-            row = strbuf.take_int();
+            row = strbuf.take_uint64();
             break;
         case 1:
-            col = strbuf.take_int();
+            col = strbuf.take_uint64();
             break;
         case 2:
             weight = strbuf.take_float();
