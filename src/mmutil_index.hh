@@ -55,10 +55,8 @@ struct mm_column_indexer_t {
     void eval_after_header(Index max_row, Index max_col, Index max_nnz)
     {
         ASSERT(fp_set, "BGZF file pointer must be set");
-#ifdef DEBUG
         TLOG("#Rows: " << max_row << ", #Cols: " << max_col
                        << ", #NZ: " << max_nnz);
-#endif
         last_col = 0; // coordinate index
         first_off = last_off = bgzf_tell(fp);
     }
@@ -88,9 +86,7 @@ struct mm_column_indexer_t {
     void eval_end_of_file()
     {
         fp_set = false;
-#ifdef DEBUG
-        TLOG("Finished reading the file: " << lineno << " lines");
-#endif
+        TLOG("Finished indexing the file of " << lineno << " lines");
     }
 
     BGZF *fp; // little unsafe
