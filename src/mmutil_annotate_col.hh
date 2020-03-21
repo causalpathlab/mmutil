@@ -783,13 +783,14 @@ run_annotation(const annotate_options_t &options)
 
     auto log2_op = [](const Scalar &x) -> Scalar { return std::log2(1.0 + x); };
 
+    std::vector<idx_pair_t> idx_tab;
+    CHECK(read_mmutil_index(idx_file, idx_tab));
+
     auto take_batch_data = [&](Index lb, Index ub) -> Mat {
         std::vector<Index> subcol(ub - lb);
         std::iota(subcol.begin(), subcol.end(), lb);
-        SpMat x = read_eigen_sparse_subset_row_col(mtx_file,
-                                                   idx_file,
-                                                   subrow,
-                                                   subcol);
+        SpMat x =
+            read_eigen_sparse_subset_row_col(mtx_file, idx_tab, subrow, subcol);
 
         if (options.log_scale) {
             x = x.unaryExpr(log2_op);

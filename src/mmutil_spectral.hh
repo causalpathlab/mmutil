@@ -184,27 +184,11 @@ make_normalized_laplacian(const Eigen::SparseMatrixBase<Derived> &_X0,
    @param idx_file
    @param options
  */
-template <typename T>
-std::tuple<SpMat, IntVec> nystrom_sample_columns(const std::string mtx_file,
-                                                 const std::string idx_file,
-                                                 const T &options);
-
-/**
-   @param mtx_file
-   @param options
- */
-template <typename T>
-std::tuple<SpMat, IntVec>
-nystrom_sample_columns(const std::string mtx_file, const T &options)
-{
-    return nystrom_sample_columns(mtx_file, "", options);
-}
-
-template <typename T>
+template <typename OPTIONS>
 std::tuple<SpMat, IntVec>
 nystrom_sample_columns(const std::string mtx_file,
-                       const std::string idx_file,
-                       const T &options)
+                       std::vector<idx_pair_t> &idx_tab,
+                       const OPTIONS &options)
 {
     TLOG("Collecting stats from the matrix file " << mtx_file);
 
@@ -227,7 +211,7 @@ nystrom_sample_columns(const std::string mtx_file,
 
     std::vector<Index> index_r(N);
 
-    if (options.sampling_method == T::CV) {
+    if (options.sampling_method == OPTIONS::CV) {
         const Scalar nn = static_cast<Scalar>(collector.max_row);
         const Scalar mm = std::max(nn - 1.0, 1.0);
 
@@ -241,7 +225,7 @@ nystrom_sample_columns(const std::string mtx_file,
 
         index_r = eigen_argsort_descending(score);
 
-    } else if (options.sampling_method == T::MEAN) {
+    } else if (options.sampling_method == OPTIONS::MEAN) {
         const Scalar n = static_cast<Scalar>(collector.max_row);
 
         Vec mu = s1 / n;
@@ -258,13 +242,7 @@ nystrom_sample_columns(const std::string mtx_file,
     if (options.verbose)
         TLOG("Sampled " << nn << " columns");
 
-    SpMat X;
-
-    if (file_exists(idx_file)) {
-        X = read_eigen_sparse_subset_col(mtx_file, idx_file, subcol);
-    } else {
-        X = read_eigen_sparse_subset_col(mtx_file, subcol);
-    }
+    SpMat X = read_eigen_sparse_subset_col(mtx_file, idx_tab, subcol);
 
     if (options.verbose)
         TLOG("Constructed sparse matrix: " << X.rows() << " x " << X.cols());
@@ -299,13 +277,17 @@ take_svd_online(const std::string mtx_file,
     const Index batch_size = options.nystrom_batch;
     const bool take_ln = options.log_scale;
 
+    CHECK(build_mmutil_index(mtx_file, idx_file));
+    std::vector<idx_pair_t> idx_tab;
+    CHECK(read_mmutil_index(idx_file, idx_tab));
+
     //////////////////////////
     // step1 -- subsampling //
     //////////////////////////
 
     SpMat X;
     IntVec nnz_col;
-    std::tie(X, nnz_col) = nystrom_sample_columns(mtx_file, idx_file, options);
+    std::tie(X, nnz_col) = nystrom_sample_columns(mtx_file, idx_tab, options);
     const Index N = nnz_col.size();
 
     Vec ww(X.rows(), 1);
@@ -341,7 +323,7 @@ take_svd_online(const std::string mtx_file,
         std::vector<Index> sub_b(ub - lb);
         std::iota(sub_b.begin(), sub_b.end(), lb);
 
-        SpMat b = read_eigen_sparse_subset_col(mtx_file, idx_file, sub_b);
+        SpMat b = read_eigen_sparse_subset_col(mtx_file, idx_tab, sub_b);
         Mat B = make_normalized_laplacian(b, ww, tau, norm, take_ln);
         B.transposeInPlace();
 
@@ -380,6 +362,8 @@ take_svd_online_em(const std::string mtx_file,
 
     CHECK(convert_bgzip(mtx_file));
     CHECK(build_mmutil_index(mtx_file, idx_file));
+    std::vector<idx_pair_t> idx_tab;
+    CHECK(read_mmutil_index(idx_file, idx_tab));
 
     mm_info_reader_t info;
     CHECK(peek_bgzf_header(mtx_file, info));
@@ -404,7 +388,7 @@ take_svd_online_em(const std::string mtx_file,
     auto take_batch_data = [&](Index lb, Index ub) -> Mat {
         std::vector<Index> sub_b(ub - lb);
         std::iota(sub_b.begin(), sub_b.end(), lb);
-        SpMat x = read_eigen_sparse_subset_col(mtx_file, idx_file, sub_b);
+        SpMat x = read_eigen_sparse_subset_col(mtx_file, idx_tab, sub_b);
 
         return make_normalized_laplacian(x, ww, tau, norm, take_ln);
     };
@@ -559,7 +543,9 @@ take_proj_online(const std::string mtx_file,
                  const options_t &options)
 {
 
-    ASSERT(is_file_bgz(mtx_file), "convert this to bgzipped file");
+    CHECK(build_mmutil_index(mtx_file, idx_file));
+    std::vector<idx_pair_t> idx_tab;
+    CHECK(read_mmutil_index(idx_file, idx_tab));
 
     mm_info_reader_t info;
 
@@ -594,7 +580,7 @@ take_proj_online(const std::string mtx_file,
         std::vector<Index> sub_b(ub - lb);
         std::iota(sub_b.begin(), sub_b.end(), lb);
 
-        SpMat b = read_eigen_sparse_subset_col(mtx_file, idx_file, sub_b);
+        SpMat b = read_eigen_sparse_subset_col(mtx_file, idx_tab, sub_b);
         Mat B = make_normalized_laplacian(b, ww, tau, norm, take_ln);
         B.transposeInPlace();
 
