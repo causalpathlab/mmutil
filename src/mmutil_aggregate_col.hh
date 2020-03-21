@@ -2,6 +2,8 @@
 #include <unordered_map>
 #include "mmutil.hh"
 #include "mmutil_stat.hh"
+#include "mmutil_index.hh"
+#include "mmutil_bgzf_util.hh"
 #include "eigen_util.hh"
 #include "io.hh"
 
@@ -126,6 +128,7 @@ parse_aggregate_options(const int argc,     //
 
 int
 aggregate_col(const std::string mtx_file,
+              const std::string idx_file,
               const std::string prob_file,
               const std::string ind_file,
               const std::string lab_file,
@@ -179,6 +182,11 @@ aggregate_col(const std::string mtx_file,
     ASSERT(Z.rows() == Nsample, "rows(Z) != Nsample");
     const Scalar eps = 1e-8;
 
+    // Indexing if needed
+    CHECK(build_mmutil_index(mtx_file, idx_file));
+    std::vector<idx_pair_t> idx_tab;
+    CHECK(read_mmutil_index(idx_file, idx_tab));
+
     auto nz = [&eps](const Scalar &x) -> Scalar { return x < eps ? 0. : 1.0; };
 
     for (Index k = 0; k < K; ++k) {
@@ -210,8 +218,8 @@ aggregate_col(const std::string mtx_file,
 
             std::iota(subcols_b.begin(), subcols_b.end(), lb);
             TLOG("Reading data on the batch [" << lb << ", " << ub << ")");
-
-            SpMat X_b = read_eigen_sparse_subset_col(mtx_file, subcols_b);
+            SpMat X_b =
+                read_eigen_sparse_subset_col(mtx_file, idx_tab, subcols_b);
             SpMat Zk_b = row_sub(Zk, subcols_b);
 
             SpMat S0_b = X_b.unaryExpr(nz) * Zk_b;     //

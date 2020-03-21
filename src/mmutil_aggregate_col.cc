@@ -8,6 +8,7 @@ main(const int argc, const char *argv[])
     CHECK(parse_aggregate_options(argc, argv, options));
 
     CHECK(aggregate_col(options.mtx,
+                        options.mtx + ".index",
                         options.prob,
                         options.ind,
                         options.lab,

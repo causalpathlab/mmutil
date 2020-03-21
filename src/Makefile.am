@@ -3,7 +3,6 @@ bin_PROGRAMS = mmutil_merge_col \
     mmutil_split_col \
     mmutil_filter_row \
     mmutil_filter_col \
-    mmutil_select_row \
     mmutil_aggregate_col \
     mmutil_normalize_col \
     mmutil_spectral_col \
@@ -28,6 +27,8 @@ sgd = \
 common = mmutil.hh                  \
     mmutil_util.hh                  \
     mmutil_stat.hh                  \
+    mmutil_bgzf_util.hh             \
+    mmutil_index.hh                 \
     eigen_util.hh                   \
     utils/sse.h                     \
     utils/cast.h                    \
@@ -64,8 +65,6 @@ hnswlib = ext/hnswlib/bruteforce.h \
 
 mmutil_index_col_SOURCES = \
     mmutil_index_col.cc    \
-    mmutil_bgzf_util.hh    \
-    mmutil_index.hh        \
     $(common)
 
 #################
