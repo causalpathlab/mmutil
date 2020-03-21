@@ -59,6 +59,7 @@ struct mm_column_indexer_t {
                        << ", #NZ: " << max_nnz);
         last_col = 0; // coordinate index
         first_off = last_off = bgzf_tell(fp);
+        col2file.reserve(max_col);
     }
 
     void eval(Index row, Index col, Scalar weight)
