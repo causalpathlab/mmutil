@@ -139,6 +139,8 @@ int build_mmutil_index(std::string mtx_file,        // bgzip file
     // Check if we can find all the columns //
     //////////////////////////////////////////
 
+    TLOG("Check the index size: " << _map.size() << " vs. " << info.max_col);
+
     const Index sz = _map.size();
     const Index last_col = sz > 0 ? std::get<0>(_map[sz - 1]) : 0;
 
@@ -148,9 +150,13 @@ int build_mmutil_index(std::string mtx_file,        // bgzip file
         return EXIT_FAILURE;
     }
 
+    TLOG("Writing " << index_file << "...");
+
     ogzstream ofs(index_file.c_str(), std::ios::out);
-    write_tuple_stream(ofs, indexer());
+    write_tuple_stream(ofs, _map);
     ofs.close();
+
+    TLOG("Built the file: " << index_file);
 
     return EXIT_SUCCESS;
 }
