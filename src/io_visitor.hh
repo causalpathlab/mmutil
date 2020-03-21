@@ -124,10 +124,10 @@ visit_matrix_market_stream(IFS &ifs, FUN &fun)
     auto read_triplet = [&]() {
         switch (num_cols) {
         case 0:
-            row = strbuf.take_int();
+            row = strbuf.take_uint64();
             break;
         case 1:
-            col = strbuf.take_int();
+            col = strbuf.take_uint64();
             break;
         case 2:
             weight = strbuf.take_float();

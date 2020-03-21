@@ -69,7 +69,7 @@ struct strbuf_t {
         str = data;
     }
 
-    const float take_float() const
+    inline const float take_float() const
     {
         // if (is_data_na()) return NAN;
         // return std::atof(data);
@@ -130,9 +130,10 @@ struct strbuf_t {
         return r;
     }
 
-    const int take_int() const
+    template <typename T>
+    inline const T _take_int() const
     {
-        int x = 0;
+        T x = 0;
         bool neg = false;
         const char *p = data;
         // while (isspace(*p)) ++p;  // ignore white space
@@ -148,12 +149,12 @@ struct strbuf_t {
             x = -x;
         }
 
-#ifdef DEBUG
-        ASSERT(std::atoi(data) == x,
-               data << " : " << std::atoi(data) << " vs. " << x);
-#endif
         return x;
     }
+
+    inline const int take_int32() const { return _take_int<int>(); }
+    inline const int take_uint32() const { return _take_int<unsigned int>(); }
+    inline const int take_uint64() const { return _take_int<std::ptrdiff_t>(); }
 
 private:
     bool is_data_na()
