@@ -153,10 +153,12 @@ struct strbuf_t {
     }
 
     inline const int take_int32() const { return _take_int<int>(); }
+
     inline const unsigned int take_uint32() const
     {
         return _take_int<unsigned int>();
     }
+
     inline const std::ptrdiff_t take_uint64() const
     {
         return _take_int<std::ptrdiff_t>();
