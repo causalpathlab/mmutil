@@ -272,7 +272,6 @@ take_svd_online(const std::string mtx_file,
 
     const Scalar tau = options.tau;
     const Scalar norm = options.col_norm;
-    const Index rank = options.rank;
     const Index lu_iter = options.lu_iter;
     const Index batch_size = options.nystrom_batch;
     const bool take_ln = options.log_scale;
@@ -298,7 +297,7 @@ take_svd_online(const std::string mtx_file,
         ASSERT(ww.rows() == X.rows(), "");
     }
 
-    RandomizedSVD<Mat> svd(rank, lu_iter);
+    RandomizedSVD<Mat> svd(options.rank, lu_iter);
     {
         Mat xx = make_normalized_laplacian(X, ww, tau, norm, take_ln);
         svd.compute(xx);
@@ -307,7 +306,8 @@ take_svd_online(const std::string mtx_file,
     Mat U = svd.matrixU();
     Mat Sig = svd.singularValues();
 
-    TLOG("Finished initial SVD");
+    const Index rank = U.cols();
+    TLOG("Finished initial SVD: Effective number of factors = " << rank);
 
     //////////////////////////////////
     // step 2 -- Nystrom projection //
@@ -317,21 +317,23 @@ take_svd_online(const std::string mtx_file,
     Mat Vt(rank, N);
     Vt.setZero();
 
+    TLOG("Projection using the matrix: " << proj.rows() << " x "
+                                         << proj.cols());
+
     for (Index lb = 0; lb < N; lb += batch_size) {
 
         const Index ub = std::min(N, batch_size + lb);
         std::vector<Index> sub_b(ub - lb);
         std::iota(sub_b.begin(), sub_b.end(), lb);
 
+        TLOG("Re-calibrating batch [" << lb << ", " << ub << ")");
+
         SpMat b = read_eigen_sparse_subset_col(mtx_file, idx_tab, sub_b);
         Mat B = make_normalized_laplacian(b, ww, tau, norm, take_ln);
-        B.transposeInPlace();
 
         for (Index i = 0; i < (ub - lb); ++i) {
             Vt.col(i + lb) += proj.transpose() * B.col(i);
         }
-
-        TLOG("Re-calibrating batch [" << lb << ", " << ub << ")");
     }
 
     TLOG("Finished Nystrom projection");
@@ -355,7 +357,6 @@ take_svd_online_em(const std::string mtx_file,
 {
     const Scalar tau = options.tau;
     const Scalar norm = options.col_norm;
-    const Index rank = options.rank;
     const Index lu_iter = options.lu_iter;
     const Index batch_size = options.nystrom_batch;
     const bool take_ln = options.log_scale;
@@ -379,6 +380,8 @@ take_svd_online_em(const std::string mtx_file,
                "The dim of weight vector differs from the data matrix: "
                    << ww.rows() << " vs. " << numFeat);
     }
+
+    const Index rank = std::min(std::min(options.rank, numFeat), N);
 
     Mat U(numFeat, rank);
     Mat Sig(rank, 1);
