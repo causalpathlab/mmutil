@@ -498,8 +498,9 @@ estimate_mixture_of_columns(const Mat &X, const cluster_options_t &options)
             Z.col(i) = z_i;
         }
 
-        prior.update(Z, 1.0);
+        _elbo /= static_cast<Scalar>(N * D);
         elbo.push_back(_elbo);
+        prior.update(Z, 1.0);
 
         if (t >= options.min_iter) {
             const Scalar diff = std::abs(elbo.at(t) - elbo.at(t - 1));
@@ -507,7 +508,6 @@ estimate_mixture_of_columns(const Mat &X, const cluster_options_t &options)
                 break;
         }
 
-        _elbo /= static_cast<Scalar>(N * D);
         const Index tt = 1 + t + options.burnin_iter;
         TLOG("VB Iter [" << std::setw(5) << tt << "] [" << std::setw(10)
                          << _elbo << "]");

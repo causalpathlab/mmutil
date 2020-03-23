@@ -153,6 +153,11 @@ run_mixture_model(const Mat &Data, const cluster_options_t &options)
         write_data_file(options.out + ".data.gz", Data);
     }
 
+    Z.transposeInPlace();
+    write_data_file(options.out + ".clust_prob.gz", Z);
+
+    write_vector_file(options.out + ".score.gz", score);
+
     TLOG("Done fitting a mixture model");
 }
 
