@@ -21,13 +21,13 @@
 #ifndef MMUTIL_ANNOTATE_COL_
 #define MMUTIL_ANNOTATE_COL_
 
-struct annotate_options_t;
-struct annotate_model_t;
+struct annotation_options_t;
+struct annotation_model_t;
 
-int run_annotation(const annotate_options_t &options);
+int run_annotation(const annotation_options_t &options);
 
 template <typename T>
-std::tuple<SpMat, std::vector<std::string>, std::vector<std::string>>
+std::tuple<SpMat, SpMat, std::vector<std::string>, std::vector<std::string>>
 read_annotation_matched(const T &options);
 
 template <typename Derived, typename T>
@@ -38,7 +38,7 @@ select_rows_columns(const Eigen::SparseMatrixBase<Derived> &ltot,
 
 template <typename Derived, typename T>
 void
-train_marker_genes(annotate_model_t &annot,
+train_marker_genes(annotation_model_t &annot,
                    const Eigen::MatrixBase<Derived> &_X, // expression matrix
                    const T &options);
 
@@ -121,35 +121,41 @@ select_rows_columns(const Eigen::SparseMatrixBase<Derived> &ltot,
 // Refine annotation vocabulary //
 //////////////////////////////////
 
-struct annotate_model_t {
+struct annotation_model_t {
 
-    explicit annotate_model_t(const Mat lab)
-        : L(lab)
-        , nmarker(L.rows())
-        , ntype(L.cols())
+    explicit annotation_model_t(const Mat lab,
+                                const Mat anti_lab,
+                                const Scalar _kmax)
+        : nmarker(lab.rows())
+        , ntype(lab.cols())
         , mu(nmarker, ntype)
-        , mu_null(nmarker, ntype)
-        , kappa(ntype)
-        , rbar(ntype)
+        , mu_anti(nmarker, ntype)
         , log_normalizer(ntype)
         , score(ntype)
-        , kappa_init(1.0)
-        , kappa_max(std::max(fastlog(static_cast<Scalar>(nmarker)), kappa_init))
+        , kappa_init(1.0)  //
+        , kappa_max(_kmax) //
+        , kappa(kappa_init)
+        , kappa_anti(kappa_init)
     {
         // initialization
-        kappa.setConstant(kappa_init);
+        kappa = kappa_init;
+        kappa_anti = kappa_init;
         log_normalizer.setZero();
-        mu = L;
-        indep_kappa = false;
+        mu.setZero();
+        mu_anti.setZero();
+        mu += lab;
+        mu_anti += anti_lab;
     }
 
-    template <typename Derived, typename Derived2>
+    template <typename Derived, typename Derived2, typename Derived3>
     void update_param(const Eigen::MatrixBase<Derived> &_xsum,
-                      const Eigen::MatrixBase<Derived2> &_nsum)
+                      const Eigen::MatrixBase<Derived2> &_xsum_anti,
+                      const Eigen::MatrixBase<Derived3> &_nsum)
     {
 
         const Derived &Stat = _xsum.derived();
-        const Derived2 &nsize = _nsum.derived();
+        const Derived2 &Stat_anti = _xsum_anti.derived();
+        const Derived3 &nsize = _nsum.derived();
 
         //////////////////////////////////////////////////
         // concentration parameter for von Mises-Fisher //
@@ -164,16 +170,12 @@ struct annotate_model_t {
 
         const Scalar d = static_cast<Scalar>(nmarker);
 
-#ifdef DEBUG
-        ASSERT(!indep_kappa, "Unstable! Share kappa!");
-#endif
-
         // We may need to share this kappa estimate across all the
         // types since some of the types might be
         // under-represented.
 
         const Scalar r = Stat.rowwise().sum().norm() / nsize.sum();
-        rbar.setConstant(r);
+        const Scalar r0 = Stat_anti.rowwise().sum().norm() / nsize.sum();
 
         Scalar _kappa = r * (d - r * r) / (1.0 - r * r);
 
@@ -181,7 +183,15 @@ struct annotate_model_t {
             _kappa = kappa_max;
         }
 
-        kappa.setConstant(_kappa);
+        kappa = _kappa;
+
+        Scalar _kappa_anti = r0 * (d - r0 * r0) / (1.0 - r0 * r0);
+
+        if (_kappa_anti > kappa_max) {
+            _kappa_anti = kappa_max;
+        }
+
+        kappa_anti = _kappa_anti;
 
         ////////////////////////
         // update mean vector //
@@ -189,7 +199,20 @@ struct annotate_model_t {
 
         mu = Stat * nsize.cwiseInverse().asDiagonal();
         normalize_columns(mu);
-        update_log_normalizer();
+
+        mu_anti = Stat_anti * nsize.cwiseInverse().asDiagonal();
+        normalize_columns(mu_anti);
+        // update_log_normalizer();
+    }
+
+    template <typename Derived>
+    inline const Vec &log_score(const Eigen::MatrixBase<Derived> &_x)
+    {
+        const Derived &x = _x.derived();
+        score = (mu.transpose() * x) * kappa;
+        score -= (mu_anti.transpose() * x);
+        // score += log_normalizer; // not needed
+        return score;
     }
 
     void update_log_normalizer()
@@ -218,214 +241,45 @@ struct annotate_model_t {
             return ret;
         };
 
-        log_normalizer = kappa.unaryExpr(_log_denom);
+        log_normalizer.setConstant(_log_denom(kappa));
 
         // std::cout << "\n\nnormalizer:\n"
         //           << log_normalizer.transpose() << std::endl;
     }
 
-    template <typename Derived>
-    inline const Vec &log_score(const Eigen::MatrixBase<Derived> &_x)
-    {
-        const Derived &x = _x.derived();
-        score = (mu.transpose() * x).cwiseProduct(kappa);
-        score += log_normalizer; // not needed
-        return score;
-    }
-
-    const Mat L;
     const Index nmarker;
     const Index ntype;
 
     Mat mu;             // refined marker x type matrix
-    Mat mu_null;        // permuted marker x type matrix
-    Vec kappa;          // von Mises-Fisher concentration
-    Vec rbar;           // temporary
+    Mat mu_anti;        // permuted marker x type matrix
     Vec log_normalizer; // log-normalizer
     Vec score;          // temporary score
 
-    bool indep_kappa;
-
     const Scalar kappa_init;
     const Scalar kappa_max;
+    Scalar kappa;
+    Scalar kappa_anti;
 };
-
-template <typename Derived, typename T>
-void
-train_marker_genes(annotate_model_t &annot,
-                   const Eigen::MatrixBase<Derived> &_X,
-                   const T &options)
-{
-
-    const Mat &L = annot.L;
-    const Derived &X = _X.derived();
-    const Index M = L.rows();
-    const Index K = L.cols();
-
-    if (options.indep_kappa) {
-        annot.indep_kappa = true;
-        if (options.verbose)
-            TLOG("Separate kappa ");
-    }
-
-    ASSERT(M > 1, "Must have more than two rows");
-
-    using DS = discrete_sampler_t<Scalar, Index>;
-    DS sampler_k(K); // sample discrete from log-mass
-
-    std::random_device rd;
-    std::mt19937 rgen(rd());
-    std::normal_distribution<Scalar> rnorm(0., 1.);
-
-    Mat xx = X;
-    normalize_columns(xx);
-
-    Scalar score;
-
-    Vec xj(M);
-    Vec nsize(K);
-    Vec mass(K);
-    std::vector<Index> membership(xx.cols());
-    std::fill(membership.begin(), membership.end(), 0);
-
-    const Index max_em_iter = options.max_em_iter;
-    Vec score_trace(max_em_iter);
-
-    progress_bar_t<Index> prog(max_em_iter, 1);
-
-    ///////////////////////////////
-    // Initial greedy assignment //
-    ///////////////////////////////
-
-    const Scalar pseudo = 1.0;
-
-    Mat Stat(M, K);           // feature x label
-    Stat.setConstant(pseudo); // sum x(g,j) * z(j, k)
-
-    nsize.setConstant(pseudo);
-    const Scalar eps = 1e-2;
-
-    for (Index j = 0; j < xx.cols(); ++j) {
-        xj = xx.col(j);
-        Index argmax;
-        const Vec &_score = annot.log_score(xj);
-        _score.maxCoeff(&argmax);
-
-        if (!options.unconstrained_update) {
-            xj = xj.cwiseProduct(L.col(argmax));
-        }
-
-        membership[j] = argmax;
-        nsize(argmax) += 1.0;
-        Stat.col(argmax) += xj;
-    }
-
-    annot.update_param(Stat, nsize);
-
-    if (options.verbose) {
-        std::cerr << "N:     " << nsize.transpose() << "\n" << std::endl;
-        std::cerr << "kappa: " << annot.kappa.transpose() << "\n" << std::endl;
-    }
-
-    ////////////////////////////
-    // Memoized online update //
-    ////////////////////////////
-
-    std::vector<Index> indexes(xx.cols());
-    std::iota(indexes.begin(), indexes.end(), 0);
-
-    Vec sj(K); // type x 1 score vector
-
-    for (Index iter = 0; iter < max_em_iter; ++iter) {
-        score = 0;
-        std::shuffle(indexes.begin(), indexes.end(), rgen);
-
-        for (Index j : indexes) {
-
-            xj = xx.col(j);
-
-            const Index k_prev = membership.at(j);
-
-#ifdef DEBUG
-            ASSERT(k_prev >= 0 && k_prev < K, "k_prev in [0, K)");
-#endif
-
-            // Index k;
-            // score += sj.maxCoeff(&k);
-
-            sj = annot.log_score(xj);
-            const Index k_now = sampler_k(sj);
-
-#ifdef DEBUG
-            ASSERT(k_now >= 0 && k_now < K, "k_now in [0, K)");
-#endif
-
-            score += sj(k_now);
-
-            if (k_now != k_prev) {
-
-                nsize(k_prev) -= 1.0;
-                nsize(k_now) += 1.0;
-
-                if (options.unconstrained_update) {
-                    Stat.col(k_prev) -= xj;
-                    Stat.col(k_now) += xj;
-                } else {
-                    Stat.col(k_prev) -= xj.cwiseProduct(L.col(k_prev));
-                    Stat.col(k_now) += xj.cwiseProduct(L.col(k_now));
-                }
-
-                membership[j] = k_now;
-            }
-        }
-
-        annot.update_param(Stat, nsize);
-
-        score = score / static_cast<Scalar>(indexes.size());
-        score_trace(iter) = score;
-
-        Scalar diff = std::abs(score_trace(iter));
-
-        if (iter > 0) {
-            diff = std::abs(score_trace(iter - 1) - score_trace(iter));
-        }
-
-        prog.update();
-
-        if (!options.verbose) {
-            prog(std::cerr);
-        } else {
-            TLOG("[" << iter << "] [" << score << "]");
-            std::cerr << "N:     " << nsize.transpose() << "\n" << std::endl;
-            std::cerr << "kappa: " << annot.kappa.transpose() << "\n"
-                      << std::endl;
-        }
-
-        if (iter >= 10 && diff < options.em_tol) {
-            if (!options.verbose)
-                std::cerr << "\r" << std::endl;
-            TLOG("I[ " << iter << " ] D[ " << diff << " ]"
-                       << " --> converged < " << options.em_tol);
-            break;
-        }
-    }
-
-    if (!options.verbose)
-        std::cerr << "\r" << std::endl;
-}
 
 /////////////////////////////
 // read matched annotation //
 /////////////////////////////
 
 template <typename T>
-std::tuple<SpMat, std::vector<std::string>, std::vector<std::string>>
+std::tuple<SpMat, SpMat, std::vector<std::string>, std::vector<std::string>>
 read_annotation_matched(const T &options)
 {
     using Str = std::string;
 
-    std::vector<std::tuple<Str, Str>> pair_vec;
-    read_pair_file<Str, Str>(options.ann, pair_vec);
+    std::vector<std::tuple<Str, Str>> ann_pair_vec;
+    if (options.ann.size() > 0) {
+        read_pair_file<Str, Str>(options.ann, ann_pair_vec);
+    }
+
+    std::vector<std::tuple<Str, Str>> anti_pair_vec;
+    if (options.anti_ann.size() > 0) {
+        read_pair_file<Str, Str>(options.anti_ann, anti_pair_vec);
+    }
 
     std::vector<Str> row_vec;
     read_vector_file(options.row, row_vec);
@@ -434,7 +288,7 @@ read_annotation_matched(const T &options)
     for (Index j = 0; j < row_vec.size(); ++j) {
         if (row_pos.count(row_vec.at(j)) > 0) {
             WLOG("Duplicate row/feature name: " << row_vec.at(j));
-            WLOG("Will ignore the first one");
+            WLOG("Will ignore the previous one");
         }
         row_pos[row_vec.at(j)] = j;
     }
@@ -442,7 +296,7 @@ read_annotation_matched(const T &options)
     std::unordered_map<Str, Index> label_pos; // label name -> label index
     {
         Index j = 0;
-        for (auto pp : pair_vec) {
+        for (auto pp : ann_pair_vec) {
             // ignore missing genes
             if (row_pos.count(std::get<0>(pp)) == 0)
                 continue;
@@ -456,12 +310,23 @@ read_annotation_matched(const T &options)
     using ET = Eigen::Triplet<Scalar>;
     std::vector<ET> triples;
 
-    for (auto pp : pair_vec) {
+    for (auto pp : ann_pair_vec) {
         if (row_pos.count(std::get<0>(pp)) > 0 &&
             label_pos.count(std::get<1>(pp)) > 0) {
             Index r = row_pos.at(std::get<0>(pp));
             Index l = label_pos.at(std::get<1>(pp));
             triples.push_back(ET(r, l, 1.0));
+        }
+    }
+
+    std::vector<ET> anti_triples;
+
+    for (auto pp : anti_pair_vec) {
+        if (row_pos.count(std::get<0>(pp)) > 0 &&
+            label_pos.count(std::get<1>(pp)) > 0) {
+            Index r = row_pos.at(std::get<0>(pp));
+            Index l = label_pos.at(std::get<1>(pp));
+            anti_triples.push_back(ET(r, l, 1.0));
         }
     }
 
@@ -472,41 +337,45 @@ read_annotation_matched(const T &options)
     L.reserve(triples.size());
     L.setFromTriplets(triples.begin(), triples.end());
 
+    SpMat L0(max_rows, max_labels);
+    L0.reserve(anti_triples.size());
+    L0.setFromTriplets(anti_triples.begin(), anti_triples.end());
+
     std::vector<Str> labels(max_labels);
     std::vector<Str> rows(max_rows);
 
-    for (auto pp : label_pos) {
+    for (auto pp : label_pos)
         labels[std::get<1>(pp)] = std::get<0>(pp);
-    }
 
-    for (auto pp : row_pos) {
+    for (auto pp : row_pos)
         rows[std::get<1>(pp)] = std::get<0>(pp);
-    }
 
-    if (options.verbose)
+    if (options.verbose) {
         for (auto l : labels) {
             TLOG("Annotation Labels: " << l);
         }
+    }
 
-    return std::make_tuple(L, rows, labels);
+    return std::make_tuple(L, L0, rows, labels);
 }
 
 //////////////////////
 // Argument parsing //
 //////////////////////
 
-struct annotate_options_t {
+struct annotation_options_t {
     using Str = std::string;
 
     typedef enum { UNIFORM, CV, MEAN } sampling_method_t;
     const std::vector<Str> METHOD_NAMES;
 
-    annotate_options_t()
+    annotation_options_t()
     {
         mtx = "";
         col = "";
         row = "";
         ann = "";
+        anti_ann = "";
         out = "output.txt.gz";
 
         col_norm = 10000;
@@ -522,23 +391,20 @@ struct annotate_options_t {
         sampling_method = CV;
 
         em_tol = 1e-4;
-
-        // tau = 1.0;
-        // rank = 10;
-        // lu_iter = 5;
+        kappa_max = 100.;
 
         balance_marker_size = false;
         unconstrained_update = false;
         output_count_matrix = false;
 
         verbose = false;
-        indep_kappa = false;
     }
 
     Str mtx;
     Str col;
     Str row;
     Str ann;
+    Str anti_ann;
     Str out;
 
     Scalar col_norm;
@@ -565,23 +431,19 @@ struct annotate_options_t {
         }
     }
 
-    // Scalar tau;
-    // Index rank;
-    // Index lu_iter;
-
     bool balance_marker_size;
     bool unconstrained_update;
     bool output_count_matrix;
 
-    bool indep_kappa;
     bool verbose;
+    Scalar kappa_max;
 };
 
 template <typename T>
 int
-parse_annotate_options(const int argc,     //
-                       const char *argv[], //
-                       T &options)
+parse_annotation_options(const int argc,     //
+                         const char *argv[], //
+                         T &options)
 {
     const char *_usage =
         "\n"
@@ -591,17 +453,16 @@ parse_annotate_options(const int argc,     //
         "--col (-c)             : data column file\n"
         "--feature (-f)         : data row file (features)\n"
         "--row (-f)             : data row file (features)\n"
-        "--ann (-a)             : row annotation file\n"
+        "--ann (-a)             : row annotation file (each line contains a tuple of feature and label)\n"
+        "--anti (-A)            : row anti-annotation file  (each line contains a tuple of feature and label)\n"
         "--out (-o)             : Output file header\n"
         "\n"
-        "--indep_kappa (-p)     : Independent concentration (default: false)\n"
-        "--unconstrained (-d)   : Unconstrained dictionary (default: false)\n"
         "--log_scale (-L)       : Data in a log-scale (default: false)\n"
         "--raw_scale (-R)       : Data in a raw-scale (default: true)\n"
         "\n"
         "--initial_sample (-I)  : Initial sample size (default: 100000)\n"
         "--batch_size (-B)      : Batch size (default: 100000)\n"
-        "--sampling_method (-M) : Sampling method: CV (default), "
+        "--kappa_max (-K)       : maximum kappa value (default: 100)\n"
         "MEAN, UNIFORM\n"
         "\n"
         "--em_iter (-i)         : EM iteration (default: 100)\n"
@@ -612,34 +473,31 @@ parse_annotate_options(const int argc,     //
         "--output_mtx_file (-O) : Write a count matrix of the markers (default: false)\n"
         "\n";
 
-    const char *const short_opts = "m:c:f:a:o:I:B:M:LRi:t:hbd:u:r:l:kOv";
+    const char *const short_opts = "m:c:f:a:A:o:I:B:K:M:LRi:t:hbd:u:r:l:kOv";
 
     const option long_opts[] =
-        { { "mtx", required_argument, nullptr, 'm' },             //
-          { "data", required_argument, nullptr, 'm' },            //
-          { "col", required_argument, nullptr, 'c' },             //
-          { "row", required_argument, nullptr, 'f' },             //
-          { "feature", required_argument, nullptr, 'f' },         //
-          { "ann", required_argument, nullptr, 'a' },             //
-          { "out", required_argument, nullptr, 'o' },             //
-          { "log_scale", no_argument, nullptr, 'L' },             //
-          { "raw_scale", no_argument, nullptr, 'R' },             //
-          { "initial_sample", required_argument, nullptr, 'I' },  //
-          { "batch_size", required_argument, nullptr, 'B' },      //
-          { "sampling_method", required_argument, nullptr, 'M' }, //
-          { "em_iter", required_argument, nullptr, 'i' },         //
-          { "em_tol", required_argument, nullptr, 't' },          //
-          { "help", no_argument, nullptr, 'h' },                  //
-          { "balance_marker", no_argument, nullptr, 'b' },        //
-          { "balance_markers", no_argument, nullptr, 'b' },       //
-          { "unconstrained_update", no_argument, nullptr, 'd' },  //
-          { "unconstrained", no_argument, nullptr, 'd' },         //
-          { "output_mtx_file", no_argument, nullptr, 'O' },       //
-          // { "tau", required_argument, nullptr, 'u' },             //
-          // { "rank", required_argument, nullptr, 'r' },            //
-          // { "lu_iter", required_argument, nullptr, 'l' },         //
-          { "indep_kappa", required_argument, nullptr, 'p' }, //
-          { "verbose", no_argument, nullptr, 'v' },           //
+        { { "mtx", required_argument, nullptr, 'm' },            //
+          { "data", required_argument, nullptr, 'm' },           //
+          { "col", required_argument, nullptr, 'c' },            //
+          { "row", required_argument, nullptr, 'f' },            //
+          { "feature", required_argument, nullptr, 'f' },        //
+          { "ann", required_argument, nullptr, 'a' },            //
+          { "anti", required_argument, nullptr, 'A' },           //
+          { "out", required_argument, nullptr, 'o' },            //
+          { "log_scale", no_argument, nullptr, 'L' },            //
+          { "raw_scale", no_argument, nullptr, 'R' },            //
+          { "initial_sample", required_argument, nullptr, 'I' }, //
+          { "batch_size", required_argument, nullptr, 'B' },     //
+          { "kappa_max", required_argument, nullptr, 'K' },      //
+          { "em_iter", required_argument, nullptr, 'i' },        //
+          { "em_tol", required_argument, nullptr, 't' },         //
+          { "help", no_argument, nullptr, 'h' },                 //
+          { "balance_marker", no_argument, nullptr, 'b' },       //
+          { "balance_markers", no_argument, nullptr, 'b' },      //
+          { "unconstrained_update", no_argument, nullptr, 'd' }, //
+          { "unconstrained", no_argument, nullptr, 'd' },        //
+          { "output_mtx_file", no_argument, nullptr, 'O' },      //
+          { "verbose", no_argument, nullptr, 'v' },              //
           { nullptr, no_argument, nullptr, 0 } };
 
     while (true) {
@@ -667,6 +525,10 @@ parse_annotate_options(const int argc,     //
 
         case 'a':
             options.ann = std::string(optarg);
+            break;
+
+        case 'A':
+            options.anti_ann = std::string(optarg);
             break;
 
         case 'o':
@@ -707,17 +569,8 @@ parse_annotate_options(const int argc,     //
         case 'd':
             options.unconstrained_update = true;
             break;
-        // case 'u':
-        //     options.tau = std::stof(optarg);
-        //     break;
-        // case 'r':
-        //     options.rank = std::stoi(optarg);
-        //     break;
-        // case 'l':
-        //     options.lu_iter = std::stoi(optarg);
-        //     break;
-        case 'k':
-            options.indep_kappa = true;
+        case 'K':
+            options.kappa_max = std::stof(optarg);
             break;
         case 'O':
             options.output_count_matrix = true;
@@ -740,18 +593,19 @@ parse_annotate_options(const int argc,     //
 }
 
 int
-run_annotation(const annotate_options_t &options)
+run_annotation(const annotation_options_t &options)
 {
     //////////////////////////////////////////////////////////
     // Read the annotation information to construct initial //
     // type-specific marker gene profiles                   //
     //////////////////////////////////////////////////////////
 
-    SpMat Ltot; // gene x label
+    SpMat L_fg, L_bg; // gene x label
+
     std::vector<std::string> rows;
     std::vector<std::string> labels;
 
-    std::tie(Ltot, rows, labels) = read_annotation_matched(options);
+    std::tie(L_fg, L_bg, rows, labels) = read_annotation_matched(options);
 
     std::vector<std::string> columns;
     CHK_ERR_RET(read_vector_file(options.col, columns),
@@ -775,7 +629,7 @@ run_annotation(const annotate_options_t &options)
 
     std::vector<Index> subrow;
 
-    Vec nnz = Ltot * Mat::Ones(Ltot.cols(), 1);
+    Vec nnz = L_fg * Mat::Ones(L_fg.cols(), 1);
     for (Index r = 0; r < nnz.size(); ++r) {
         if (nnz(r) > 0)
             subrow.emplace_back(r);
@@ -801,8 +655,10 @@ run_annotation(const annotate_options_t &options)
         return xx;
     };
 
-    Mat L = row_sub(Ltot, subrow);
-    annotate_model_t annot(L);
+    Mat L = row_sub(L_fg, subrow);
+    Mat L0 = row_sub(L_bg, subrow);
+
+    annotation_model_t annot(L, L0, options.kappa_max);
 
     ///////////////////////////////
     // Initial greedy assignment //
@@ -817,10 +673,12 @@ run_annotation(const annotate_options_t &options)
     Vec nsize(K);
     Vec mass(K);
 
-    const Scalar pseudo = 1.0;
-    Mat Stat(M, K); // feature x label
+    const Scalar pseudo = 1e-4;
+    Mat Stat(M, K);      // feature x label
+    Mat Stat_anti(M, K); // feature x label
     nsize.setConstant(pseudo);
-    Stat.setConstant(pseudo); // sum x(g,j) * z(j, k)
+    Stat.setConstant(pseudo);      // sum x(g,j) * z(j, k)
+    Stat_anti.setConstant(pseudo); // sum x0(g,j) * z(j, k)
 
     const Index max_em_iter = options.max_em_iter;
     Vec score_trace(max_em_iter);
@@ -845,13 +703,10 @@ run_annotation(const annotate_options_t &options)
             _score.maxCoeff(&argmax);
             score_init += _score(argmax);
 
-            if (!options.unconstrained_update) {
-                xj = xj.cwiseProduct(L.col(argmax));
-            }
-
             if (xj.sum() > 0) {
                 nsize(argmax) += 1.0;
-                Stat.col(argmax) += xj;
+                Stat.col(argmax) += xj.cwiseProduct(L.col(argmax));
+                Stat_anti.col(argmax) += xj.cwiseProduct(L0.col(argmax));
                 membership[i] = argmax;
             } else {
                 taboo.insert(i);
@@ -864,99 +719,144 @@ run_annotation(const annotate_options_t &options)
     }
 
     score_init /= static_cast<Scalar>(N);
-    annot.update_param(Stat, nsize);
+    annot.update_param(Stat, Stat_anti, nsize);
 
-    if (options.verbose) {
-        TLOG("Finished greedy initialization");
-        TLOG("Found " << taboo.size() << " cells with no information");
-    }
+    TLOG("Finished greedy initialization");
+    TLOG("Found " << taboo.size() << " cells with no information");
 
     ////////////////////////////
     // Memoized online update //
     ////////////////////////////
 
-    using DS = discrete_sampler_t<Scalar, Index>;
-    DS sampler_k(K); // sample discrete from log-mass
-
     std::vector<Scalar> em_score_out;
-    Scalar score = score_init;
-    Vec sj(K); // type x 1 score vector
-    TLOG("Start training marker gene profiles");
 
-    for (Index iter = 0; iter < max_em_iter; ++iter) {
-        score = 0;
+    auto monte_carlo_update = [&]() {
+        using DS = discrete_sampler_t<Scalar, Index>;
+        DS sampler_k(K); // sample discrete from log-mass
+        Scalar score = score_init;
+        Vec sj(K); // type x 1 score vector
 
-        for (Index lb = 0; lb < N; lb += batch_size) {
-            const Index ub = std::min(N, batch_size + lb);
+        for (Index iter = 0; iter < max_em_iter; ++iter) {
+            score = 0;
 
-            Mat xx = take_batch_data(lb, ub);
+            for (Index lb = 0; lb < N; lb += batch_size) {     // batch
+                const Index ub = std::min(N, batch_size + lb); //
 
-            for (Index j = 0; j < xx.cols(); ++j) {
+                Mat xx = take_batch_data(lb, ub);
 
-                const Index i = j + lb;
-                if (taboo.count(i) > 0)
-                    continue;
+                for (Index j = 0; j < xx.cols(); ++j) {
 
-                xj = xx.col(j);
+                    const Index i = j + lb;
 
-                const Index k_prev = membership[i];
+                    if (taboo.count(i) > 0)
+                        continue;
 
-                sj = annot.log_score(xj);
-                const Index k_now = sampler_k(sj);
+                    xj = xx.col(j);
 
-                score += sj(k_now);
+                    const Index k_prev = membership[i];
+                    sj = annot.log_score(xj);
+                    const Index k_now = sampler_k(sj);
+                    score += sj(k_now);
 
-                if (k_now != k_prev) {
+                    if (k_now != k_prev) {
 
-                    nsize(k_prev) -= 1.0;
-                    nsize(k_now) += 1.0;
+                        nsize(k_prev) -= 1.0;
+                        nsize(k_now) += 1.0;
 
-                    if (options.unconstrained_update) {
-                        Stat.col(k_prev) -= xj;
-                        Stat.col(k_now) += xj;
-                    } else {
                         Stat.col(k_prev) -= xj.cwiseProduct(L.col(k_prev));
                         Stat.col(k_now) += xj.cwiseProduct(L.col(k_now));
+
+                        Stat_anti.col(k_prev) -=
+                            xj.cwiseProduct(L0.col(k_prev));
+                        Stat_anti.col(k_now) += xj.cwiseProduct(L0.col(k_now));
+
+                        membership[i] = k_now;
                     }
 
-                    membership[i] = k_now;
-                }
+                    if (options.verbose) {
+                        std::cerr << nsize.transpose() << "\r" << std::flush;
+                    }
+                } // end of data iteration
+                annot.update_param(Stat, Stat_anti, nsize);
+            } // end of batch iteration
 
-                if (options.verbose) {
-                    std::cerr << nsize.transpose() << "\r" << std::flush;
-                }
+            score = score / static_cast<Scalar>(N);
+            score_trace(iter) = score;
+
+            Scalar diff = std::abs(score_trace(iter));
+
+            if (iter > 4) {
+                Scalar score_old = score_trace.segment(iter - 3, 2).sum();
+                Scalar score_new = score_trace.segment(iter - 1, 2).sum();
+                diff = std::abs(score_old - score_new) /
+                    (std::abs(score_old) + options.em_tol);
+            } else if (iter > 0) {
+                diff = std::abs(score_trace(iter - 1) - score_trace(iter)) /
+                    (std::abs(score_trace(iter) + options.em_tol));
             }
-            annot.update_param(Stat, nsize);
-        }
 
-        score = score / static_cast<Scalar>(N);
-        score_trace(iter) = score;
+            TLOG("Iter [" << iter << "] score = " << score
+                          << ", diff = " << diff << ", kappa = " << annot.kappa
+                          << ", kappa_null = " << annot.kappa_anti);
 
-        Scalar diff = std::abs(score_trace(iter));
+            if (iter > 4 && diff < options.em_tol) {
 
-        if (iter > 4) {
-            Scalar score_old = score_trace.segment(iter - 3, 2).sum();
-            Scalar score_new = score_trace.segment(iter - 1, 2).sum();
-            diff = std::abs(score_old - score_new) /
-                (std::abs(score_old) + options.em_tol);
-        } else if (iter > 0) {
-            diff = std::abs(score_trace(iter - 1) - score_trace(iter)) /
-                (std::abs(score_trace(iter) + options.em_tol));
-        }
+                TLOG("Converged < " << options.em_tol);
 
-        TLOG("Iter [" << iter << "] score = " << score << ", diff = " << diff);
-
-        if (iter > 4 && diff < options.em_tol) {
-
-            TLOG("I[ " << iter << " ] D[ " << diff << " ]"
-                       << " --> converged < " << options.em_tol);
-
-            for (Index t = 0; t <= iter; ++t) {
-                em_score_out.emplace_back(score_trace(t));
+                for (Index t = 0; t <= iter; ++t) {
+                    em_score_out.emplace_back(score_trace(t));
+                }
+                break;
             }
-            break;
+        } // end of EM iteration
+    };
+
+    annotation_model_t null_annot(L, L0, options.kappa_max);
+
+    auto null_update = [&]() {
+        Mat null_stat(M, K);      // feature x label
+        Mat null_stat_anti(M, K); // feature x label
+        Vec null_nsize(K);
+        null_stat.setConstant(pseudo);
+        null_stat_anti.setConstant(pseudo);
+        null_nsize.setConstant(pseudo);
+
+        std::vector<Index> null_membership(N);
+        std::fill(null_membership.begin(), null_membership.end(), 0);
+
+        Vec sj(K);    // type x 1 score vector
+        sj.setZero(); // just zero mass
+        using DS = discrete_sampler_t<Scalar, Index>;
+        DS sampler_k(K); // sample discrete from log-mass
+
+        for (Index lb = 0; lb < N; lb += batch_size) {     // batch
+            const Index ub = std::min(N, batch_size + lb); //
+            Mat xx = take_batch_data(lb, ub);
+            for (Index j = 0; j < xx.cols(); ++j) {
+                const Index i = j + lb;
+                xj = xx.col(j);
+                sj.setZero();
+                const Index k_rand = sampler_k(sj);
+                sj = annot.log_score(xj);
+                const Index k = sampler_k(sj);
+
+                // adding null stat applying  different context
+                null_stat.col(k) += L.col(k_rand).cwiseProduct(xj);
+                null_stat_anti.col(k) += L0.col(k_rand).cwiseProduct(xj);
+
+                null_membership[i] = k;
+                null_nsize(k) += 1.0;
+            }
         }
-    }
+
+        null_annot.update_param(null_stat, null_stat_anti, null_nsize);
+    };
+
+    TLOG("Start training marker gene profiles");
+    monte_carlo_update();
+
+    TLOG("Training the null models ...");
+    null_update();
 
     std::vector<std::string> markers;
     markers.reserve(subrow.size());
@@ -966,6 +866,7 @@ run_annotation(const annotate_options_t &options)
     write_vector_file(options.out + ".marker_names.gz", markers);
     write_vector_file(options.out + ".label_names.gz", labels);
     write_data_file(options.out + ".marker_profile.gz", annot.mu);
+    write_data_file(options.out + ".marker_profile_anti.gz", annot.mu_anti);
 
     write_vector_file(options.out + ".em_scores.gz", em_score_out);
 
@@ -973,12 +874,14 @@ run_annotation(const annotate_options_t &options)
     // Assign labels to all the cells (columns) //
     //////////////////////////////////////////////
 
-    using out_tup = std::tuple<std::string, std::string, Scalar>;
+    using out_tup = std::tuple<std::string, std::string, Scalar, Scalar>;
     std::vector<out_tup> output;
 
     output.reserve(N);
     Vec zi(annot.ntype);
+    Vec null_zi(annot.ntype);
     Mat Pr(annot.ntype, N);
+    Mat null_Pr(annot.ntype, N);
 
     for (Index lb = 0; lb < N; lb += batch_size) {
         const Index ub = std::min(N, batch_size + lb);
@@ -992,17 +895,26 @@ run_annotation(const annotate_options_t &options)
 
             Index argmax;
             _score.maxCoeff(&argmax);
-            output.emplace_back(columns.at(i), labels.at(argmax), zi(argmax));
-
             Pr.col(i) = zi;
+
+            const Vec &_score_null = null_annot.log_score(xx.col(j));
+            normalized_exp(_score_null, null_zi);
+            null_Pr.col(i) = null_zi;
+
+            output.emplace_back(columns.at(i),
+                                labels.at(argmax),
+                                zi(argmax),
+                                null_zi(argmax));
         }
         TLOG("Annotated on the batch [" << lb << ", " << ub << ")");
     }
 
     Pr.transposeInPlace();
+    null_Pr.transposeInPlace();
 
     write_tuple_file(options.out + ".annot.gz", output);
     write_data_file(options.out + ".annot_prob.gz", Pr);
+    write_data_file(options.out + ".null_prob.gz", null_Pr);
 
     TLOG("Done");
     return EXIT_SUCCESS;

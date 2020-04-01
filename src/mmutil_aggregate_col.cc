@@ -13,7 +13,8 @@ main(const int argc, const char *argv[])
                         options.ind,
                         options.lab,
                         options.out,
-                        options.batch_size));
+                        options.batch_size,
+                        options.log_scale));
 
     TLOG("Done");
     return EXIT_SUCCESS;

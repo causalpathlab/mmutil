@@ -1,19 +1,39 @@
 #include "mmutil.hh"
 #include "mmutil_stat.hh"
+#include "mmutil_bgzf_util.hh"
 
-#ifndef MMUTIL_DISTRIBUTE_COL_HH_
-#define MMUTIL_DISTRIBUTE_COL_HH_
+#ifndef MMUTIL_SPLIT_COL_HH_
+#define MMUTIL_SPLIT_COL_HH_
 
+/**
+   @param mtx_file
+   @param idx_file
+   @param column_file
+   @param membership_file
+   @param output
+ */
 void
-distribute_col(const std::string mtx_file,        // matrix market
-               const std::string membership_file, // membership
-               const std::string output)
-{ //
+split_columns(const std::string mtx_file,
+              const std::string idx_file,
+              const std::string column_file,
+              const std::string membership_file,
+              const std::string output)
+{
 
     using Str = std::string;
 
+    // Read the columns and construct name -> index
+
+    // For each cluster/label:
+    //  identify blocks
+
     std::unordered_map<Str, Str> _column_membership;
     CHECK(read_dict_file(membership_file, _column_membership));
+
+    // for each cluster/label:
+    // 0. count number of columns
+    // 1. open output mtx file
+    // 2.
 
     // Filter out zero count columns
     col_stat_collector_t collector;
@@ -53,7 +73,8 @@ distribute_col(const std::string mtx_file,        // matrix market
             break; // stop over-assignment
     }
 
-    using copier_t = triplet_copier_remapped_cols_t<obgzf_stream, Index, Scalar>;
+    using copier_t =
+        triplet_copier_remapped_cols_t<obgzf_stream, Index, Scalar>;
     using remap_t = copier_t::index_map_t;
 
     for (auto pp : distributed_columns) {

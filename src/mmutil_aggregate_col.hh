@@ -25,6 +25,9 @@ struct aggregate_options_t {
         out = "output";
         batch_size = 10000;
         verbose = false;
+
+        raw_scale = true;
+        log_scale = false;
     }
 
     Str mtx;
@@ -35,6 +38,9 @@ struct aggregate_options_t {
 
     Index batch_size;
     bool verbose;
+
+    bool raw_scale;
+    bool log_scale;
 };
 
 template <typename OPTIONS>
@@ -46,14 +52,16 @@ parse_aggregate_options(const int argc,     //
     const char *_usage =
         "\n"
         "[Arguments]\n"
-        "--mtx (-m)        : data MTX file (M x N)\n"
-        "--data (-m)       : data MTX file (M x N)\n"
-        "--prob (-p)       : annotation/clustering probability (N x K)\n"
-        "--ind (-i)        : N x 1 sample to individual (n)\n"
-        "--lab (-l)        : K x 1 label name\n"
-        "--out (-o)        : Output file header\n"
+        "--mtx (-m)               : data MTX file (M x N)\n"
+        "--data (-m)              : data MTX file (M x N)\n"
+        "--prob (-p)              : annotation/clustering probability (N x K)\n"
+        "--ind (-i)               : N x 1 sample to individual (n)\n"
+        "--lab (-l)               : K x 1 label name\n"
+        "--out (-o)               : Output file header\n"
         "\n"
-        "--batch_size (-B) : Batch size (default: 10000)\n"
+        "--log_scale (-L)         : Data in a log-scale (default: false)\n"
+        "--raw_scale (-R)         : Data in a raw-scale (default: true)\n"
+        "--batch_size (-B)        : Batch size (default: 10000)\n"
         "\n"
         "[Output]\n"
         "${output}_${lab}.s0.gz   : (M x n) sum 1 * z[j,k]\n"
@@ -62,7 +70,7 @@ parse_aggregate_options(const int argc,     //
         "${output}_${lab}.cols.gz : (n x 1) name of the columns\n"
         "\n";
 
-    const char *const short_opts = "m:p:i:l:o:B:hv";
+    const char *const short_opts = "m:p:i:l:o:B:LRhv";
 
     const option long_opts[] =
         { { "mtx", required_argument, nullptr, 'm' },        //
@@ -75,6 +83,8 @@ parse_aggregate_options(const int argc,     //
           { "batch_size", required_argument, nullptr, 'B' }, //
           { "batchsize", required_argument, nullptr, 'B' },  //
           { "verbose", no_argument, nullptr, 'v' },          //
+          { "log_scale", no_argument, nullptr, 'L' },        //
+          { "raw_scale", no_argument, nullptr, 'R' },        //
           { nullptr, no_argument, nullptr, 0 } };
 
     while (true) {
@@ -106,6 +116,14 @@ parse_aggregate_options(const int argc,     //
         case 'B':
             options.batch_size = std::stoi(optarg);
             break;
+        case 'L':
+            options.log_scale = true;
+            options.raw_scale = false;
+            break;
+        case 'R':
+            options.log_scale = false;
+            options.raw_scale = true;
+            break;
         case 'v': // -v or --verbose
             options.verbose = true;
             break;
@@ -133,7 +151,8 @@ aggregate_col(const std::string mtx_file,
               const std::string ind_file,
               const std::string lab_file,
               const std::string output,
-              const Index batch_size = 30000)
+              const Index batch_size = 30000,
+              const bool log_scale = false)
 {
 
     Mat Z;
@@ -189,6 +208,8 @@ aggregate_col(const std::string mtx_file,
 
     auto nz = [&eps](const Scalar &x) -> Scalar { return x < eps ? 0. : 1.0; };
 
+    auto log2_op = [](const Scalar &x) -> Scalar { return std::log2(1.0 + x); };
+
     for (Index k = 0; k < K; ++k) {
 
         TLOG("Aggregating on " << lab.at(k) << "...");
@@ -220,6 +241,11 @@ aggregate_col(const std::string mtx_file,
             TLOG("Reading data on the batch [" << lb << ", " << ub << ")");
             SpMat X_b =
                 read_eigen_sparse_subset_col(mtx_file, idx_tab, subcols_b);
+
+            if (log_scale) {
+                X_b = X_b.unaryExpr(log2_op);
+            }
+
             SpMat Zk_b = row_sub(Zk, subcols_b);
 
             SpMat S0_b = X_b.unaryExpr(nz) * Zk_b;     //

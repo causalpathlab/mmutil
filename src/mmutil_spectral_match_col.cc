@@ -90,7 +90,7 @@ main(const int argc, const char *argv[])
     CHK_ERR_RET(knn, "Failed to search kNN");
 
     auto dist2sim = [](std::tuple<Index, Index, Scalar> &tup) {
-        std::get<2>(tup) = fasterexp(- std::get<2>(tup));
+        std::get<2>(tup) = fasterexp(-std::get<2>(tup));
     };
     std::for_each(out_index.begin(), out_index.end(), dist2sim);
 

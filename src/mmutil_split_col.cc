@@ -20,22 +20,22 @@ print_help(const char *fname)
 int
 main(const int argc, const char *argv[])
 {
-    if (argc < 4) {
-        print_help(argv[0]);
-        return EXIT_FAILURE;
-    }
+    // if (argc < 5) {
+    //     print_help(argv[0]);
+    //     return EXIT_FAILURE;
+    // }
 
-    using Str = std::string;
+    // using Str = std::string;
 
-    const Str mtx_file(argv[1]);
-    const Str membership_file(argv[2]);
-    const Str output(argv[3]);
+    // const Str mtx_file(argv[1]);
+    // const Str membership_file(argv[2]);
+    // const Str output(argv[3]);
 
-    ERR_RET(!file_exists(mtx_file), "missing the mtx file");
-    ERR_RET(!file_exists(membership_file), "missing the mtx file");
+    // ERR_RET(!file_exists(mtx_file), "missing the mtx file");
+    // ERR_RET(!file_exists(membership_file), "missing the mtx file");
 
-    distribute_col(mtx_file, membership_file, output);
+    // split_columns(mtx_file, membership_file, output);
 
-    TLOG("Done");
+    // TLOG("Done");
     return EXIT_SUCCESS;
 }
