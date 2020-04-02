@@ -175,7 +175,6 @@ struct annotation_model_t {
         // under-represented.
 
         const Scalar r = Stat.rowwise().sum().norm() / nsize.sum();
-        const Scalar r0 = Stat_anti.rowwise().sum().norm() / nsize.sum();
 
         Scalar _kappa = r * (d - r * r) / (1.0 - r * r);
 
@@ -184,6 +183,8 @@ struct annotation_model_t {
         }
 
         kappa = _kappa;
+
+        const Scalar r0 = Stat_anti.rowwise().sum().norm() / nsize.sum();
 
         Scalar _kappa_anti = r0 * (d - r0 * r0) / (1.0 - r0 * r0);
 
@@ -197,10 +198,10 @@ struct annotation_model_t {
         // update mean vector //
         ////////////////////////
 
-        mu = Stat * nsize.cwiseInverse().asDiagonal();
+	mu = Stat * nsize.cwiseInverse().asDiagonal();
         normalize_columns(mu);
 
-        mu_anti = Stat_anti * nsize.cwiseInverse().asDiagonal();
+	mu_anti = - Stat_anti * nsize.cwiseInverse().asDiagonal();
         normalize_columns(mu_anti);
         // update_log_normalizer();
     }
@@ -210,7 +211,7 @@ struct annotation_model_t {
     {
         const Derived &x = _x.derived();
         score = (mu.transpose() * x) * kappa;
-        score -= (mu_anti.transpose() * x);
+        score -= (mu_anti.transpose() * x) * kappa_anti;
         // score += log_normalizer; // not needed
         return score;
     }
