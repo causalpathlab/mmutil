@@ -471,7 +471,7 @@ template <typename VEC>
 Eigen::SparseMatrix<eigen_triplet_reader_t::scalar_t, //
                     Eigen::RowMajor,                  //
                     std::ptrdiff_t>
-read_eigen_sparse_subset_col(const std::string mtx_file, //
+read_eigen_sparse_subset_cols(const std::string mtx_file, //
                              const VEC &subcol)
 {
 
@@ -529,6 +529,7 @@ read_eigen_sparse_subset_rows_cols(const std::string mtx_file,
 
     return build_eigen_sparse(Tvec, max_row, max_col);
 }
+
 
 /////////////////////////////////////////
 // read and write triplets selectively //

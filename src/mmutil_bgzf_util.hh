@@ -10,6 +10,8 @@
 #ifndef MMUTIL_BGZF_UTIL_HH_
 #define MMUTIL_BGZF_UTIL_HH_
 
+namespace mmutil { namespace bgzf {
+
 /// @param bgz_file : bgzipped file name
 /// @param fun      : a functor with
 ///                   (1) set_file(FP*)
@@ -93,7 +95,7 @@ visit_bgzf_block(const std::string bgz_file,
     while ((bgzf_getline(fp, '\n', str)) >= 0) {
 
         if (str->l < 1 || str->s[0] == '%') {
-            WLOG("Found comment line in the middle:\n" << str->s);
+            WLOG("mmutil_bgzf_util.hh: Found comment line in the middle:\n" << str->s);
             state = S_EOW;
             continue; // skip comment
         }
@@ -117,7 +119,7 @@ visit_bgzf_block(const std::string bgz_file,
         }
 
         if (num_cols < 3) {
-            WLOG("Found this incomplete line: " << str->s);
+            WLOG("mmutil_bgzf_util.hh: Found this incomplete line: " << str->s);
             state = S_EOW;
             continue;
         }
@@ -226,7 +228,7 @@ peek_bgzf_header(const std::string bgz_file, FUN &fun)
         }
     }
 
-    ASSERT(nheader == 1, "Failed to read the header");
+    ASSERT(nheader == 1, "mmutil_bgzf_util.hh: Failed to read the header");
 
     fun.eval_after_header(max_row, max_col, max_nnz);
 
@@ -328,7 +330,7 @@ visit_bgzf(const std::string bgz_file, FUN &fun)
         }
     }
 
-    ASSERT(nheader == 1, "Failed to read the header");
+    ASSERT(nheader == 1, "mmutil_bgzf_util.hh: Failed to read the header");
 
     fun.eval_after_header(max_row, max_col, max_nnz);
 
@@ -373,7 +375,7 @@ visit_bgzf(const std::string bgz_file, FUN &fun)
     while (bgzf_getline(fp, '\n', str) >= 0) {
 
         if (str->l < 1 || str->s[0] == '%') {
-            WLOG("Found comment line in the middle [" << num_nz << "]\n"
+            WLOG("mmutil_bgzf_util.hh: Found comment line in the middle [" << num_nz << "]\n"
                                                       << str->s);
             state = S_EOW;
             continue; // skip comment
@@ -398,7 +400,7 @@ visit_bgzf(const std::string bgz_file, FUN &fun)
         }
 
         if (num_cols < 3) {
-            WLOG("Found this incomplete line [" << num_nz << "]");
+            WLOG("mmutil_bgzf_util.hh: mmutil_bgzf_util.hh: Found this incomplete line [" << num_nz << "]");
             state = S_EOW;
             continue;
         }
@@ -419,5 +421,7 @@ visit_bgzf(const std::string bgz_file, FUN &fun)
 
     return EXIT_SUCCESS;
 }
+
+}} // namespace mmutil, bgz
 
 #endif

@@ -1,6 +1,6 @@
+#include "mmutil_util.hh"
 #include "mmutil_index.hh"
 #include "utils/bgzstream.hh"
-#include "mmutil_util.hh"
 
 void
 print_help(const std::string exe)
@@ -16,6 +16,9 @@ print_help(const std::string exe)
 int
 main(const int argc, const char *argv[])
 {
+
+    using namespace mmutil::index;
+
     if (argc < 2) {
         print_help(argv[0]);
         return EXIT_FAILURE;

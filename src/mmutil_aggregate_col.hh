@@ -28,6 +28,8 @@ struct aggregate_options_t {
 
         raw_scale = true;
         log_scale = false;
+
+        col_norm = 0;
     }
 
     Str mtx;
@@ -41,6 +43,8 @@ struct aggregate_options_t {
 
     bool raw_scale;
     bool log_scale;
+
+    Scalar col_norm;
 };
 
 template <typename OPTIONS>
@@ -62,6 +66,7 @@ parse_aggregate_options(const int argc,     //
         "--log_scale (-L)         : Data in a log-scale (default: false)\n"
         "--raw_scale (-R)         : Data in a raw-scale (default: true)\n"
         "--batch_size (-B)        : Batch size (default: 10000)\n"
+        "--col_norm (-N)          : Column-wise normalization (default: 0, nothing)\n"
         "\n"
         "[Output]\n"
         "${output}_${lab}.s0.gz   : (M x n) sum 1 * z[j,k]\n"
@@ -70,7 +75,7 @@ parse_aggregate_options(const int argc,     //
         "${output}_${lab}.cols.gz : (n x 1) name of the columns\n"
         "\n";
 
-    const char *const short_opts = "m:p:i:l:o:B:LRhv";
+    const char *const short_opts = "m:p:i:l:o:B:LRN:hv";
 
     const option long_opts[] =
         { { "mtx", required_argument, nullptr, 'm' },        //
@@ -85,6 +90,7 @@ parse_aggregate_options(const int argc,     //
           { "verbose", no_argument, nullptr, 'v' },          //
           { "log_scale", no_argument, nullptr, 'L' },        //
           { "raw_scale", no_argument, nullptr, 'R' },        //
+          { "col_norm", required_argument, nullptr, 'N' },   //
           { nullptr, no_argument, nullptr, 0 } };
 
     while (true) {
@@ -109,6 +115,9 @@ parse_aggregate_options(const int argc,     //
             break;
         case 'l':
             options.lab = std::string(optarg);
+            break;
+        case 'N':
+            options.col_norm = std::stof(optarg);
             break;
         case 'o':
             options.out = std::string(optarg);
@@ -152,7 +161,8 @@ aggregate_col(const std::string mtx_file,
               const std::string lab_file,
               const std::string output,
               const Index batch_size = 30000,
-              const bool log_scale = false)
+              const bool log_scale = false,
+              const Scalar col_norm = 0)
 {
 
     Mat Z;
@@ -202,9 +212,9 @@ aggregate_col(const std::string mtx_file,
     const Scalar eps = 1e-8;
 
     // Indexing if needed
-    CHECK(build_mmutil_index(mtx_file, idx_file));
-    std::vector<idx_pair_t> idx_tab;
-    CHECK(read_mmutil_index(idx_file, idx_tab));
+    CHECK(mmutil::index::build_mmutil_index(mtx_file, idx_file));
+    std::vector<mmutil::index::idx_pair_t> idx_tab;
+    CHECK(mmutil::index::read_mmutil_index(idx_file, idx_tab));
 
     auto nz = [&eps](const Scalar &x) -> Scalar { return x < eps ? 0. : 1.0; };
 
@@ -239,11 +249,17 @@ aggregate_col(const std::string mtx_file,
 
             std::iota(subcols_b.begin(), subcols_b.end(), lb);
             TLOG("Reading data on the batch [" << lb << ", " << ub << ")");
-            SpMat X_b =
-                read_eigen_sparse_subset_col(mtx_file, idx_tab, subcols_b);
+            SpMat X_b = mmutil::index::read_eigen_sparse_subset_col(mtx_file,
+                                                                    idx_tab,
+                                                                    subcols_b);
 
             if (log_scale) {
                 X_b = X_b.unaryExpr(log2_op);
+            }
+
+            if (col_norm >= 1.0) {
+                normalize_columns(X_b);
+                X_b *= col_norm;
             }
 
             SpMat Zk_b = row_sub(Zk, subcols_b);

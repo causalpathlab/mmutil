@@ -17,7 +17,7 @@ main(const int argc, const char *argv[])
     std::string idx = options.idx;
 
     if (!is_file_bgz(mtx.c_str())) {
-        convert_bgzip(mtx);
+        mmutil::bgzf::convert_bgzip(mtx);
     }
 
     if (idx.length() == 0) {
@@ -26,7 +26,7 @@ main(const int argc, const char *argv[])
 
     if (!file_exists(idx)) {
         TLOG("Creating indexes: " << idx);
-        build_mmutil_index(mtx, idx);
+        mmutil::index::build_mmutil_index(mtx, idx);
     }
 
     Mat ww;

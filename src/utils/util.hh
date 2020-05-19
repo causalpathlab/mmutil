@@ -15,19 +15,19 @@
 
 std::string curr_time();
 
-#define TLOG(msg)                                                             \
-    {                                                                         \
-        std::cerr << "         [" << curr_time() << "] " << msg << std::endl; \
+#define TLOG(msg)                                                    \
+    {                                                                \
+        std::cerr << "[" << curr_time() << "] " << msg << std::endl; \
     }
 
-#define ELOG(msg)                                                             \
-    {                                                                         \
-        std::cerr << "[Error  ][" << curr_time() << "] " << msg << std::endl; \
+#define ELOG(msg)                                                            \
+    {                                                                        \
+        std::cerr << "[" << curr_time() << "] [Error] " << msg << std::endl; \
     }
 
-#define WLOG(msg)                                                             \
-    {                                                                         \
-        std::cerr << "[Warning][" << curr_time() << "] " << msg << std::endl; \
+#define WLOG(msg)                                                              \
+    {                                                                          \
+        std::cerr << "[" << curr_time() << "] [Warning] " << msg << std::endl; \
     }
 
 #define ASSERT(cond, msg) \

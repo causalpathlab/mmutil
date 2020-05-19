@@ -8,6 +8,7 @@ bin_PROGRAMS = mmutil_merge_col \
     mmutil_spectral_col \
     mmutil_match_col \
     mmutil_annotate_col \
+    mmutil_doublet_qc \
     mmutil_embed_annot \
     mmutil_spectral_match_col \
     mmutil_spectral_cluster_col
@@ -77,6 +78,20 @@ mmutil_merge_col_SOURCES = mmutil_run_merge_col.cc \
 mmutil_split_col_SOURCES = mmutil_split_col.cc \
     mmutil_split_col.hh \
     $(common)
+
+###########
+# Doublet #
+###########
+
+mmutil_doublet_qc_SOURCES = \
+	mmutil_normalize.hh \
+	mmutil_match.hh \
+	mmutil_spectral.hh \
+	mmutil_doublet_qc.hh \
+	mmutil_doublet_qc.cc \
+        inference/sampler.hh \
+	link_community.hh \
+        $(common)
 
 ##############
 # Annotation #

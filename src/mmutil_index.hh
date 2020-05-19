@@ -13,6 +13,10 @@
 #ifndef MMUTIL_INDEX_HH_
 #define MMUTIL_INDEX_HH_
 
+namespace mmutil { namespace index {
+
+using namespace mmutil::bgzf;
+
 using idx_pair_t = std::tuple<Index, Index>;
 
 /**
@@ -257,48 +261,66 @@ find_consecutive_blocks(const std::vector<idx_pair_t> &index,
     TLOG("Built a subset of " << _subset.size() << " columns");
 #endif
 
+    ASSERT(_subset.size() == subcol.size(),
+           "mmutil_index: duplicate items in subcol");
+
     std::vector<idx_pair_t> blocks;
-    bool in_frag = false;
+    bool in_block = false;
     Index beg = 0, end = 0;
     Index Nmax = 0;
     for (Index j = 0; j < N; ++j) {
         const Index i = std::get<0>(index[j]);
+
         if (_subset.count(i) > 0) {
-            if (!in_frag) {     // beginning of the block
-                in_frag = true; //
-                beg = j;        // from this j
+            if (!in_block) {     // beginning of the block
+                in_block = true; //
+                beg = j;         // from this j
             }
-        } else if (in_frag) {
+            // still in the block
+        } else if (in_block) {
             end = j; // finish the block here
-            in_frag = false;
-            blocks.emplace_back(std::make_tuple(beg, end));
+            in_block = false;
+            blocks.emplace_back(beg, end);
         }
         Nmax = std::max(Nmax, i);
     }
 
-    if (in_frag) {
-        blocks.emplace_back(std::make_tuple(beg, N));
+    if (in_block) {
+        blocks.emplace_back(beg, N);
+#ifdef DEBUG
+        TLOG("Including the last");
+#endif
     }
 
 #ifdef DEBUG
     TLOG("Identified " << blocks.size() << " block(s)");
+    Index nDebug = 0;
 #endif
-    std::vector<memory_block_t> ret;
 
+    std::vector<memory_block_t> ret;
     for (auto b : blocks) {
         Index lb, lb_mem, ub = (Nmax + 1), ub_mem = 0;
         std::tie(lb, lb_mem) = index[std::get<0>(b)];
 
-        if (std::get<1>(b) < (N - 1)) {
+        if (std::get<1>(b) < N) { // ub location
             std::tie(ub, ub_mem) = index[std::get<1>(b)];
-        } else if (std::get<1>(b) == (N - 1)) {
+        } else {
+            ASSERT(std::get<1>(b) == N, "mmutil_index: cannot exceed N");
+            ub = Nmax + 1;
+            ub_mem = 0;
         }
 
 #ifdef DEBUG
-        TLOG("Block [" << lb << ", " << ub << ")");
+        nDebug += (ub - lb);
 #endif
         ret.emplace_back(memory_block_t{ lb, lb_mem, ub, ub_mem });
     }
+
+#ifdef DEBUG
+    ASSERT(nDebug == subcol.size(),
+           "mmutil_index: " << nDebug << " vs. " << (subcol.size()));
+#endif
+
     return ret;
 }
 
@@ -350,19 +372,24 @@ read_eigen_sparse_subset_col(std::string mtx_file,
 #ifdef DEBUG
     CHECK(check_index_tab(mtx_file, index_tab));
 #endif
+
+    Index max_col = 0;                   // Make sure that
+    _reader_t::index_map_t subcol_order; // we keep the same order
+    for (auto k : subcol) {              // of subcol
+        subcol_order[k] = max_col++;
+    }
+
     const auto blocks = find_consecutive_blocks(index_tab, subcol);
 
     _reader_t::TripletVec Tvec; // keep accumulating this
-
-    Index max_col = 0;
     Index max_row = info.max_row;
     for (auto block : blocks) {
-        _reader_t::index_map_t remap;
+        _reader_t::index_map_t loc_map;
         for (Index j = block.lb; j < block.ub; ++j) {
-            remap[j] = max_col;
-            ++max_col;
+            loc_map[j] = subcol_order[j];
         }
-        _reader_t reader(Tvec, remap);
+        _reader_t reader(Tvec, loc_map);
+
         CHECK(visit_bgzf_block(mtx_file, block.lb_mem, block.ub_mem, reader));
     }
 
@@ -404,6 +431,12 @@ read_eigen_sparse_subset_row_col(std::string mtx_file,
     using _reader_t = eigen_triplet_reader_remapped_rows_cols_t;
     using Index = _reader_t::index_t;
 
+    Index max_col = 0;                   // Make sure that
+    _reader_t::index_map_t subcol_order; // we keep the same order
+    for (auto k : subcol) {              // of subcol
+        subcol_order[k] = max_col++;
+    }
+
     const auto blocks = find_consecutive_blocks(index_tab, subcol);
 
     _reader_t::index_map_t remap_row;
@@ -414,13 +447,11 @@ read_eigen_sparse_subset_row_col(std::string mtx_file,
 
     _reader_t::TripletVec Tvec; // keep accumulating this
 
-    Index max_col = 0;
     Index max_row = subrow.size();
     for (auto block : blocks) {
         _reader_t::index_map_t remap_col;
         for (Index old_index = block.lb; old_index < block.ub; ++old_index) {
-            remap_col[old_index] = max_col;
-            ++max_col;
+            remap_col[old_index] = subcol_order[old_index];
         }
         _reader_t reader(Tvec, remap_row, remap_col);
         CHECK(visit_bgzf_block(mtx_file, block.lb_mem, block.ub_mem, reader));
@@ -437,4 +468,6 @@ read_eigen_sparse_subset_row_col(std::string mtx_file,
     return X;
 }
 
+} // namespace index
+} // namespace mmutil
 #endif

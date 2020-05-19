@@ -60,7 +60,7 @@ struct cluster_options_t {
         row_weight_file = "";
 
         initial_sample = 10000;
-        nystrom_batch = 10000;
+        batch_size = 10000;
 
         sampling_method = UNIFORM;
 
@@ -117,7 +117,7 @@ struct cluster_options_t {
     }
 
     Index initial_sample;
-    Index nystrom_batch;
+    Index batch_size;
 
     sampling_method_t sampling_method;
 
@@ -610,7 +610,7 @@ parse_cluster_options(const int argc,     //
         "--log_scale (-L)        : Data in a log-scale (default: true)\n"
         "--raw_scale (-R)        : Data in a raw-scale (default: false)\n"
         "--initial_sample (-S)   : Nystrom sample size (default: 10000)\n"
-        "--nystrom_batch (-B)    : Nystrom batch size (default: 10000)\n"
+        "--batch_size (-B)    : Nystrom batch size (default: 10000)\n"
         "--sampling_method (-N)  : Nystrom sampling method: UNIFORM (default), "
         "CV, MEAN\n"
         "--verbose (-O)          : Output more words (default: false)\n"
@@ -698,7 +698,7 @@ parse_cluster_options(const int argc,     //
           { "log_scale", no_argument, nullptr, 'L' },             //
           { "raw_scale", no_argument, nullptr, 'R' },             //
           { "initial_sample", required_argument, nullptr, 'S' },  //
-          { "nystrom_batch", required_argument, nullptr, 'B' },   //
+          { "batch_size", required_argument, nullptr, 'B' },   //
           { "sampling_method", required_argument, nullptr, 'N' }, //
           { "kmeanspp", no_argument, nullptr, 'i' },              //
           { "help", no_argument, nullptr, 'h' },                  //
@@ -794,7 +794,7 @@ parse_cluster_options(const int argc,     //
             options.initial_sample = std::stoi(optarg);
             break;
         case 'B':
-            options.nystrom_batch = std::stoi(optarg);
+            options.batch_size = std::stoi(optarg);
             break;
         case 'L':
             options.log_scale = true;

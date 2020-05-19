@@ -22,8 +22,8 @@ struct match_options_t {
     match_options_t()
     {
         knn = 1;
-        bilink = 10;
-        nlist = 10;
+        bilink = 10; // 2 ~ 100 (bi-directional link per element)
+        nlist = 10;  // knn ~ N (nearest neighbour)
 
         src_mtx = "";
         src_col = "";
@@ -42,7 +42,7 @@ struct match_options_t {
         row_weight_file = "";
 
         initial_sample = 10000;
-        nystrom_batch = 10000;
+        batch_size = 10000;
 
         sampling_method = UNIFORM;
 
@@ -70,7 +70,7 @@ struct match_options_t {
     std::string row_weight_file;
 
     Index initial_sample;
-    Index nystrom_batch;
+    Index batch_size;
 
     sampling_method_t sampling_method;
 
@@ -161,6 +161,14 @@ struct TgtDataT {
 // each row = each data point		 //
 ///////////////////////////////////////////
 
+/**
+   @param SrcSparseRowT each row = each data point
+   @param TgtSparseRowT each row = each data point
+   @param KNN number of neighbours
+   @param BILINK the size bidirectional list
+   @param NNlist the size of neighbouring list
+   @param OUT
+ */
 int search_knn(const SrcSparseRowsT _SrcRows, //
                const TgtSparseRowsT _TgtRows, //
                const KNN _knn,                //
@@ -174,15 +182,20 @@ int search_knn(const SrcSparseRowsT _SrcRows, //
 // each column = each data point //
 ///////////////////////////////////
 
+/**
+   @param SrcDataT each column = each data point
+   @param TgtDataT each column = each data point
+   @param KNN number of neighbours
+   @param BILINK the size bidirectional list
+   @param NNlist the size of neighbouring list
+   @param OUT
+ */
 int search_knn(const SrcDataT _SrcData, //
                const TgtDataT _TgtData, //
                const KNN _knn,          //
                const BILINK _bilink,    //
                const NNLIST _nnlist,    //
                index_triplet_vec &out);
-
-template <typename TVEC>
-inline TVEC prune_mutual_knn(const TVEC &knn_index);
 
 ////////////////////////////////////////////////////////////////
 
@@ -208,7 +221,8 @@ search_knn(const SrcSparseRowsT _SrcRows, //
     std::size_t param_nnlist = _nnlist.val;
 
     if (param_bilink >= vecdim) {
-        WLOG("too big M value: " << param_bilink << " vs. " << vecdim);
+        WLOG("Unnecessarily too big M value: " << param_bilink << " vs. "
+                                               << vecdim);
         param_bilink = vecdim - 1;
     }
 
@@ -397,7 +411,7 @@ search_knn(const SrcDataT _SrcData, //
 
 template <typename TVEC>
 inline TVEC
-prune_mutual_knn(const TVEC &knn_index)
+keep_reciprocal_knn(const TVEC &knn_index, bool undirected = false)
 {
     // Make sure that we could only consider reciprocal kNN pairs
     std::unordered_map<std::tuple<Index, Index>,
@@ -426,7 +440,7 @@ prune_mutual_knn(const TVEC &knn_index)
 
     std::for_each(knn_index.begin(), knn_index.end(), _count);
 
-    auto is_mutual = [&edge_count](const auto &tt) {
+    auto is_mutual = [&edge_count, &undirected](const auto &tt) {
         Index i, j, temp;
         std::tie(i, j, std::ignore) = tt;
         if (i == j)
@@ -436,17 +450,19 @@ prune_mutual_knn(const TVEC &knn_index)
             i = j;
             j = temp;
         }
+        if (undirected)
+            return (edge_count[{ i, j }] > 1) && (i <= j);
         return (edge_count[{ i, j }] > 1);
     };
 
-    std::vector<std::tuple<Index, Index, Scalar>> mutual_knn_index;
-    mutual_knn_index.reserve(knn_index.size());
+    std::vector<std::tuple<Index, Index, Scalar>> reciprocal_knn_index;
+    reciprocal_knn_index.reserve(knn_index.size());
     std::copy_if(knn_index.begin(),
                  knn_index.end(),
-                 std::back_inserter(mutual_knn_index),
+                 std::back_inserter(reciprocal_knn_index),
                  is_mutual);
 
-    return mutual_knn_index;
+    return reciprocal_knn_index;
 }
 
 inline std::tuple<std::unordered_set<Index>, Index>
@@ -567,7 +583,7 @@ parse_match_options(const int argc,     //
         "--rank (-r)           : The maximal rank of SVD (default: rank = 50)\n"
         "--lu_iter (-i)           : # of LU iterations (default: lu_iter = 5)\n"
         "--initial_sample (-S) : Nystrom sample size (default: 10000)\n"
-        "--nystrom_batch (-B)  : Nystrom batch size (default: 10000)\n"
+        "--batch_size (-B)  : Nystrom batch size (default: 10000)\n"
         "--sampling_method (-M) : Nystrom sampling method: UNIFORM (default), "
         "CV, MEAN\n"
         "\n"
@@ -621,7 +637,7 @@ parse_match_options(const int argc,     //
           { "log_scale", no_argument, nullptr, 'L' },             //
           { "raw_scale", no_argument, nullptr, 'R' },             //
           { "initial_sample", required_argument, nullptr, 'S' },  //
-          { "nystrom_batch", required_argument, nullptr, 'B' },   //
+          { "batch_size", required_argument, nullptr, 'B' },      //
           { "sampling_method", required_argument, nullptr, 'M' }, //
           { "help", no_argument, nullptr, 'h' },                  //
           { nullptr, no_argument, nullptr, 0 } };
@@ -683,7 +699,7 @@ parse_match_options(const int argc,     //
             options.initial_sample = std::stoi(optarg);
             break;
         case 'B':
-            options.nystrom_batch = std::stoi(optarg);
+            options.batch_size = std::stoi(optarg);
             break;
         case 'L':
             options.log_scale = true;

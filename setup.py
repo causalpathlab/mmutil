@@ -9,7 +9,7 @@ _inc_dirs = [
 ]
 
 _compile_args = [
-    '--std=c++17',
+    '--std=c++14',
     '-O3',
     '-DNDEBUG',
     '-DNPY_NO_DEPRECATED_API',
@@ -17,7 +17,6 @@ _compile_args = [
     '-Wno-maybe-uninitialized',
     '-Wno-unused-variable'
 ]
-
 
 mmutil_module = Extension(
     'mmutil',
@@ -34,9 +33,9 @@ with open("README.md", "r") as fh:
 
 setup(
     name="mmutil",
-    version="0.1.0",
+    version="0.2.0",
     author="Yongjin Park",
-    author_email="yongjin.peter.park@gmail.com",
+    author_email="yongjin.park@ubc.ca",
     description='matrix market utility',
     long_description=_description,
     long_description_content_type="text/markdown",

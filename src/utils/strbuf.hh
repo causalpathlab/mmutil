@@ -50,7 +50,7 @@ struct strbuf_t {
     inline const T lexical_cast()
     {
 #ifdef DEBUG
-        ASSERT(size() > 0, "empty strbuf_t");
+        ASSERT(size() > 0, "strbuf.hh: empty strbuf_t");
 #endif
 
         T var = (T)NAN;
@@ -124,8 +124,8 @@ struct strbuf_t {
             r = -r;
         }
 #ifdef DEBUG
-        ASSERT(std::abs(std::atof(data) - r) < 1e-8,
-               data << " : " << std::atof(data) << " vs. " << r);
+        ASSERT(std::abs(std::atof(data) - r) < 1e-4,
+               "strbuf.hh: " << data << " vs. " << std::atof(data) << " vs. " << r);
 #endif
         return r;
     }

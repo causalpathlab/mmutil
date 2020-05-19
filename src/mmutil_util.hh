@@ -6,6 +6,8 @@
 #ifndef MMUTIL_UTIL_HH_
 #define MMUTIL_UTIL_HH_
 
+namespace mmutil { namespace bgzf {
+
 /// @param ifs : input file stream
 /// @param ofs : output file stream
 template <typename IFS, typename OFS>
@@ -66,4 +68,5 @@ convert_bgzip(std::string in_file)
     return EXIT_SUCCESS;
 }
 
+}} // namespace
 #endif

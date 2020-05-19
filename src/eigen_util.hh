@@ -435,7 +435,6 @@ normalize_columns(Eigen::MatrixBase<Derived> &_mat)
 {
     using Index = typename Derived::Index;
     using Scalar = typename Derived::Scalar;
-    using RowVec = typename Eigen::internal::plain_row_type<Derived>::type;
 
     Derived &mat = _mat.derived();
     const Scalar eps = 1e-8;
@@ -443,6 +442,35 @@ normalize_columns(Eigen::MatrixBase<Derived> &_mat)
     for (Index c = 0; c < mat.cols(); ++c) {
         const Scalar denom = std::max(mat.col(c).norm(), eps);
         mat.col(c) /= denom;
+    }
+}
+
+template <typename Derived>
+void
+normalize_columns(Eigen::SparseMatrixBase<Derived> &_mat)
+{
+    using Index = typename Derived::Index;
+    using Scalar = typename Derived::Scalar;
+
+    Derived &mat = _mat.derived();
+    const Scalar eps = 1e-8;
+
+    std::vector<Scalar> col_norm(mat.cols());
+    std::fill(col_norm.begin(), col_norm.end(), 0.0);
+
+    for (Index k = 0; k < mat.outerSize(); ++k) {
+        for (typename Derived::InnerIterator it(mat, k); it; ++it) {
+            const Scalar x = it.value();
+            col_norm[it.col()] += x * x;
+        }
+    }
+
+    for (Index k = 0; k < mat.outerSize(); ++k) {
+        for (typename Derived::InnerIterator it(mat, k); it; ++it) {
+            const Scalar x = it.value();
+            const Scalar denom = std::sqrt(col_norm[it.col()]);
+            it.valueRef() = x / std::max(denom, eps);
+        }
     }
 }
 
@@ -465,5 +493,73 @@ setConstant(Eigen::MatrixBase<Derived> &mat, const typename Derived::Scalar val)
     Derived &Mat = mat.derived();
     Mat = Mat.setConstant(val);
 }
+
+template <typename T>
+struct running_stat_t {
+    using Scalar = typename T::Scalar;
+    using Index = typename T::Index;
+
+    explicit running_stat_t(const Index _d1, const Index _d2)
+        : d1{ _d1 }
+        , d2{ _d2 }
+    {
+        Cum.resize(d1, d2);
+        SqCum.resize(d1, d2);
+        Mean.resize(d1, d2);
+        Var.resize(d1, d2);
+        reset();
+    }
+
+    void reset()
+    {
+        setConstant(SqCum, 0.0);
+        setConstant(Cum, 0.0);
+        setConstant(Mean, 0.0);
+        setConstant(Var, 0.0);
+        n = 0.0;
+    }
+
+    template <typename Derived>
+    void operator()(const Eigen::MatrixBase<Derived> &X)
+    {
+        Cum += X;
+        SqCum += X.cwiseProduct(X);
+        ++n;
+    }
+
+    template <typename Derived>
+    void operator()(const Eigen::SparseMatrixBase<Derived> &X)
+    {
+        Cum += X;
+        SqCum += X.cwiseProduct(X);
+        ++n;
+    }
+
+    const T &mean()
+    {
+        if (n > 0) {
+            Mean = Cum / n;
+        }
+        return Mean;
+    }
+
+    const T &var()
+    {
+        if (n > 0) {
+            Mean = Cum / n;
+            Var = SqCum / n - Mean.cwiseProduct(Mean);
+        }
+        return Var;
+    }
+
+    const Index d1;
+    const Index d2;
+
+    T Cum;
+    T SqCum;
+    T Mean;
+    T Var;
+    Scalar n;
+};
 
 #endif

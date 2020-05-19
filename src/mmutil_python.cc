@@ -2,7 +2,7 @@
 
 #include "mmutil_python_io.hh"
 #include "mmutil_python_merge.hh"
-#include "mmutil_python_spectral.hh"
+// #include "mmutil_python_spectral.hh"
 
 static PyMethodDef mmutil_methods[] = {
     { "read_triplets",
@@ -17,10 +17,10 @@ static PyMethodDef mmutil_methods[] = {
       (PyCFunction)mmutil_write_numpy,
       METH_VARARGS,
       _write_numpy_desc },
-    { "take_svd",
-      (PyCFunction)mmutil_take_svd,
-      METH_VARARGS | METH_KEYWORDS,
-      _take_svd_desc },
+    // { "take_svd",
+    //   (PyCFunction)mmutil_take_svd,
+    //   METH_VARARGS | METH_KEYWORDS,
+    //   _take_svd_desc },
     { "merge_files",
       (PyCFunction)mmutil_merge_files,
       METH_VARARGS | METH_KEYWORDS,
@@ -31,7 +31,6 @@ static PyMethodDef mmutil_methods[] = {
 const char *module_desc = "* read_triplets\n"
                           "* read_triplets_numpy\n"
                           "* write_numpy\n"
-                          "* take_svd\n"
                           "* merge_files\n"
                           "\n";
 

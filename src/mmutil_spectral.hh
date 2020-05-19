@@ -38,7 +38,7 @@ struct spectral_options_t {
         row_weight_file = "";
 
         initial_sample = 10000;
-        nystrom_batch = 10000;
+        batch_size = 10000;
 
         sampling_method = CV;
 
@@ -47,6 +47,7 @@ struct spectral_options_t {
 
         em_iter = 0;
         em_tol = 1e-2;
+        em_recalibrate = true;
     }
 
     Str mtx;
@@ -64,10 +65,11 @@ struct spectral_options_t {
     Str row_weight_file;
 
     Index initial_sample;
-    Index nystrom_batch;
+    Index batch_size;
 
     Index em_iter;
     Scalar em_tol;
+    bool em_recalibrate;
 
     sampling_method_t sampling_method;
 
@@ -179,6 +181,47 @@ make_normalized_laplacian(const Eigen::SparseMatrixBase<Derived> &_X0,
     return ret;
 }
 
+template <typename Derived, typename Derived2>
+inline Mat
+make_normalized_laplacian(const Eigen::MatrixBase<Derived> &_X0,
+                          const Eigen::MatrixBase<Derived2> &_weights,
+                          const float tau_scale,
+                          const float norm_target,
+                          const bool log_trans = true)
+{
+
+    Mat xx = _X0.derived();
+    const Derived2 &ww = _weights.derived();
+
+    normalize_columns(xx);
+    xx *= norm_target;
+
+    auto log_op = [](const Scalar &x) -> Scalar {
+        return x >= 0. ? std::log(1.0 + x) : 0.;
+    };
+
+    if (log_trans)
+        xx = xx.unaryExpr(log_op);
+
+    const Mat _rr = ww.unaryExpr([](const Scalar &x) -> Scalar {
+        return x <= 0.0 ? 0.0 : std::sqrt(1.0 / x);
+    });
+
+    const Mat col_deg =
+        xx.cwiseProduct(xx).transpose() * Mat::Ones(xx.rows(), 1);
+
+    const Scalar tau = col_deg.mean() * tau_scale;
+    const Mat _cc = col_deg.unaryExpr([&tau](const Scalar &x) -> Scalar {
+        const Scalar _one = 1.0;
+        return _one / std::max(_one, std::sqrt(x + tau));
+    });
+
+    Mat xx_std = _rr.asDiagonal() * xx * _cc.asDiagonal();
+    Mat ret = standardize(xx_std);
+
+    return ret;
+}
+
 /**
    @param mtx_file
    @param idx_file
@@ -187,7 +230,7 @@ make_normalized_laplacian(const Eigen::SparseMatrixBase<Derived> &_X0,
 template <typename OPTIONS>
 std::tuple<SpMat, IntVec>
 nystrom_sample_columns(const std::string mtx_file,
-                       std::vector<idx_pair_t> &idx_tab,
+                       std::vector<mmutil::index::idx_pair_t> &idx_tab,
                        const OPTIONS &options)
 {
     TLOG("Collecting stats from the matrix file " << mtx_file);
@@ -242,7 +285,8 @@ nystrom_sample_columns(const std::string mtx_file,
     if (options.verbose)
         TLOG("Sampled " << nn << " columns");
 
-    SpMat X = read_eigen_sparse_subset_col(mtx_file, idx_tab, subcol);
+    SpMat X =
+        mmutil::index::read_eigen_sparse_subset_col(mtx_file, idx_tab, subcol);
 
     if (options.verbose)
         TLOG("Constructed sparse matrix: " << X.rows() << " x " << X.cols());
@@ -273,12 +317,12 @@ take_svd_online(const std::string mtx_file,
     const Scalar tau = options.tau;
     const Scalar norm = options.col_norm;
     const Index lu_iter = options.lu_iter;
-    const Index batch_size = options.nystrom_batch;
+    const Index batch_size = options.batch_size;
     const bool take_ln = options.log_scale;
 
-    CHECK(build_mmutil_index(mtx_file, idx_file));
-    std::vector<idx_pair_t> idx_tab;
-    CHECK(read_mmutil_index(idx_file, idx_tab));
+    CHECK(mmutil::index::build_mmutil_index(mtx_file, idx_file));
+    std::vector<mmutil::index::idx_pair_t> idx_tab;
+    CHECK(mmutil::index::read_mmutil_index(idx_file, idx_tab));
 
     //////////////////////////
     // step1 -- subsampling //
@@ -328,7 +372,9 @@ take_svd_online(const std::string mtx_file,
 
         TLOG("Re-calibrating batch [" << lb << ", " << ub << ")");
 
-        SpMat b = read_eigen_sparse_subset_col(mtx_file, idx_tab, sub_b);
+        SpMat b = mmutil::index::read_eigen_sparse_subset_col(mtx_file,
+                                                              idx_tab,
+                                                              sub_b);
         Mat B = make_normalized_laplacian(b, ww, tau, norm, take_ln);
 
         for (Index i = 0; i < (ub - lb); ++i) {
@@ -358,16 +404,16 @@ take_svd_online_em(const std::string mtx_file,
     const Scalar tau = options.tau;
     const Scalar norm = options.col_norm;
     const Index lu_iter = options.lu_iter;
-    const Index batch_size = options.nystrom_batch;
+    const Index batch_size = options.batch_size;
     const bool take_ln = options.log_scale;
 
-    CHECK(convert_bgzip(mtx_file));
-    CHECK(build_mmutil_index(mtx_file, idx_file));
-    std::vector<idx_pair_t> idx_tab;
-    CHECK(read_mmutil_index(idx_file, idx_tab));
+    CHECK(mmutil::bgzf::convert_bgzip(mtx_file));
+    CHECK(mmutil::index::build_mmutil_index(mtx_file, idx_file));
+    std::vector<mmutil::index::idx_pair_t> idx_tab;
+    CHECK(mmutil::index::read_mmutil_index(idx_file, idx_tab));
 
     mm_info_reader_t info;
-    CHECK(peek_bgzf_header(mtx_file, info));
+    CHECK(mmutil::bgzf::peek_bgzf_header(mtx_file, info));
     const Index numFeat = info.max_row;
     const Index N = info.max_col;
 
@@ -389,6 +435,7 @@ take_svd_online_em(const std::string mtx_file,
     Vt.setZero();
 
     auto take_batch_data = [&](Index lb, Index ub) -> Mat {
+        using namespace mmutil::index;
         std::vector<Index> sub_b(ub - lb);
         std::iota(sub_b.begin(), sub_b.end(), lb);
         SpMat x = read_eigen_sparse_subset_col(mtx_file, idx_tab, sub_b);
@@ -396,12 +443,18 @@ take_svd_online_em(const std::string mtx_file,
         return make_normalized_laplacian(x, ww, tau, norm, take_ln);
     };
 
+#ifdef DEBUG
+    TLOG("Initializing a dictionary matrix (U)");
+#endif
     // Step 0. Initialize U matrix
     {
         const Index ub = std::min(N, batch_size);
         if (options.verbose)
             TLOG("Take initial batch [" << 0 << ", " << ub << ")");
         Mat xx = take_batch_data(0, ub);
+#ifdef DEBUG
+	TLOG("Training SVD");
+#endif
         RandomizedSVD<Mat> svd(rank, lu_iter);
         if (options.verbose)
             svd.set_verbose();
@@ -494,6 +547,12 @@ take_svd_online_em(const std::string mtx_file,
     std::cout << U.topRows(10) << std::endl;
 #endif
 
+    if (!options.em_recalibrate) {
+        U = svd_u.matrixU(); //
+        Sig = svd_u.singularValues();
+        return svd_out_t{ U, Sig, Vt };
+    }
+
     Mat xx = standardize(XV);
     svd_u.compute(xx);   // To ensure the orthogonality between columns
     U = svd_u.matrixU(); //
@@ -513,6 +572,22 @@ take_svd_online_em(const std::string mtx_file,
 
     Vt.transposeInPlace();
     return svd_out_t{ U, Sig, Vt };
+}
+
+/**
+   @param mtx_file
+   @param idx_file
+   @param weights
+   @param options
+ */
+template <typename Derived, typename options_t>
+inline svd_out_t
+take_svd_online_em(const std::string mtx_file,
+                   const Eigen::MatrixBase<Derived> &_weights,
+                   const options_t &options)
+{
+    const std::string idx_file = mtx_file + ".index";
+    return take_svd_online_em(mtx_file, idx_file, _weights, options);
 }
 
 /**
@@ -546,17 +621,17 @@ take_proj_online(const std::string mtx_file,
                  const options_t &options)
 {
 
-    CHECK(build_mmutil_index(mtx_file, idx_file));
-    std::vector<idx_pair_t> idx_tab;
-    CHECK(read_mmutil_index(idx_file, idx_tab));
+    CHECK(mmutil::index::build_mmutil_index(mtx_file, idx_file));
+    std::vector<mmutil::index::idx_pair_t> idx_tab;
+    CHECK(mmutil::index::read_mmutil_index(idx_file, idx_tab));
 
     mm_info_reader_t info;
 
-    CHECK(peek_bgzf_header(mtx_file, info));
+    CHECK(mmutil::bgzf::peek_bgzf_header(mtx_file, info));
 
     const Scalar tau = options.tau;
     const Scalar norm = options.col_norm;
-    const Index batch_size = options.nystrom_batch;
+    const Index batch_size = options.batch_size;
     const bool take_ln = options.log_scale;
 
     const Index D = info.max_row;
@@ -583,7 +658,9 @@ take_proj_online(const std::string mtx_file,
         std::vector<Index> sub_b(ub - lb);
         std::iota(sub_b.begin(), sub_b.end(), lb);
 
-        SpMat b = read_eigen_sparse_subset_col(mtx_file, idx_tab, sub_b);
+        SpMat b = mmutil::index::read_eigen_sparse_subset_col(mtx_file,
+                                                              idx_tab,
+                                                              sub_b);
         Mat B = make_normalized_laplacian(b, ww, tau, norm, take_ln);
         B.transposeInPlace();
 
@@ -632,7 +709,7 @@ parse_spectral_options(const int argc,     //
         "--col_norm (-C)        : Column normalization (default: 10000)\n"
         "--rand_seed (-s)       : Random seed (default: 1)\n"
         "--initial_sample (-S)  : Nystrom sample size (default: 10000)\n"
-        "--nystrom_batch (-B)   : Nystrom batch size (default: 10000)\n"
+        "--batch_size (-B)   : Nystrom batch size (default: 10000)\n"
         "--sampling_method (-M) : Nystrom sampling method: CV (default), "
         "UNIFORM, MEAN\n"
         "--log_scale (-L)       : Data in a log-scale (default: true)\n"
@@ -664,7 +741,7 @@ parse_spectral_options(const int argc,     //
           { "raw_scale", no_argument, nullptr, 'R' },             //
           { "rand_seed", required_argument, nullptr, 's' },       //
           { "initial_sample", required_argument, nullptr, 'S' },  //
-          { "nystrom_batch", required_argument, nullptr, 'B' },   //
+          { "batch_size", required_argument, nullptr, 'B' },      //
           { "sampling_method", required_argument, nullptr, 'M' }, //
           { "help", no_argument, nullptr, 'h' },                  //
           { "verbose", no_argument, nullptr, 'v' },               //
@@ -711,7 +788,7 @@ parse_spectral_options(const int argc,     //
             options.rand_seed = std::stoi(optarg);
             break;
         case 'B':
-            options.nystrom_batch = std::stoi(optarg);
+            options.batch_size = std::stoi(optarg);
             break;
         case 'i':
             options.em_iter = std::stoi(optarg);

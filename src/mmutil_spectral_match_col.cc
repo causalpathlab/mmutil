@@ -12,10 +12,10 @@ main(const int argc, const char *argv[])
     ERR_RET(!file_exists(options.src_mtx), "No source data file");
     ERR_RET(!file_exists(options.tgt_mtx), "No target data file");
 
-    CHECK(convert_bgzip(options.src_mtx));
-    CHECK(convert_bgzip(options.tgt_mtx));
-    CHECK(build_mmutil_index(options.src_mtx));
-    CHECK(build_mmutil_index(options.tgt_mtx));
+    CHECK(mmutil::bgzf::convert_bgzip(options.src_mtx));
+    CHECK(mmutil::bgzf::convert_bgzip(options.tgt_mtx));
+    CHECK(mmutil::index::build_mmutil_index(options.src_mtx));
+    CHECK(mmutil::index::build_mmutil_index(options.tgt_mtx));
 
     /////////////////////////////
     // fliter out zero columns //
