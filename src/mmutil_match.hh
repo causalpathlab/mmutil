@@ -316,7 +316,7 @@ search_knn(const SrcSparseRowsT _SrcRows, //
             std::size_t j;
             while (!pq.empty()) {
                 std::tie(d, j) = pq.top();
-                out.push_back(std::make_tuple(i, j, d));
+                out.emplace_back(i,j,d);
                 pq.pop();
             }
         }
@@ -372,7 +372,7 @@ search_knn(const SrcDataT _SrcData, //
 
         progress_bar_t<Index> prog(vecsize, 1e2);
 
-#pragma omp parallel for
+	// #pragma omp parallel for
         for (Index i = 0; i < vecsize; ++i) {
             alg.addPoint((void *)(mass + vecdim * i),
                          static_cast<std::size_t>(i));
@@ -398,7 +398,7 @@ search_knn(const SrcDataT _SrcData, //
             std::size_t j;
             while (!pq.empty()) {
                 std::tie(d, j) = pq.top();
-                out.push_back(std::make_tuple(i, j, d));
+                out.emplace_back(i,j,d);
                 pq.pop();
             }
             prog.update();

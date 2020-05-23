@@ -491,7 +491,7 @@ void
 setConstant(Eigen::MatrixBase<Derived> &mat, const typename Derived::Scalar val)
 {
     Derived &Mat = mat.derived();
-    Mat = Mat.setConstant(val);
+    Mat.setConstant(val);
 }
 
 template <typename T>
@@ -524,7 +524,7 @@ struct running_stat_t {
     {
         Cum += X;
         SqCum += X.cwiseProduct(X);
-        ++n;
+        n += 1.0;
     }
 
     template <typename Derived>
@@ -532,7 +532,7 @@ struct running_stat_t {
     {
         Cum += X;
         SqCum += X.cwiseProduct(X);
-        ++n;
+        n += 1.0;
     }
 
     const T &mean()
@@ -545,15 +545,25 @@ struct running_stat_t {
 
     const T &var()
     {
-        if (n > 0) {
+        if (n > 1.) {
             Mean = Cum / n;
-            Var = SqCum / n - Mean.cwiseProduct(Mean);
+            Var = SqCum / (n - 1.) - Mean.cwiseProduct(Mean) * n / (n - 1.);
+            Var = Var.unaryExpr(clamp_zero_op);
+        } else {
+            Var.setZero();
         }
         return Var;
     }
 
     const Index d1;
     const Index d2;
+
+    struct clamp_zero_op_t {
+        const Scalar operator()(const Scalar &x) const
+        {
+            return x < .0 ? 0. : x;
+        }
+    } clamp_zero_op;
 
     T Cum;
     T SqCum;

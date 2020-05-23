@@ -148,10 +148,10 @@ update_latent_random(lc_model_t &lc, const Index kmin, const Index kmax)
     const Index K = std::min(lc.K, kmax);
     const Index m = lc.m;
     lc.Z.setZero();
-
+#ifdef DEBUG
     ASSERT(kmax > 0, "link_community: Kmax must be a positive integer");
     ASSERT(kmin >= 0, "link_community: Kmin must be non-negative");
-
+#endif
     if (kmin >= K) {
         for (Index e = 0; e < m; ++e) {
             lc.Z(kmin, e) = 1.;
@@ -176,6 +176,11 @@ update_param_fixed(lc_model_t &lc)
     const Index n = lc.n;
     lc.Deg = lc.Z * lc.Y;
     lc.Tot = lc.Deg * Mat::Ones(n, 1);
+
+#ifdef DEBUG
+    ASSERT(lc.Deg.minCoeff() > -1e-4, "link_community: update_param_fixed: found negative deg");
+#endif
+
     // Ball, Karrer & Newman (2011)
     auto _prop = [](const Scalar &dd, const Scalar &tt) -> Scalar {
         return dd / (std::sqrt(tt) + 1e-8);
@@ -204,6 +209,10 @@ update_param_vb(lc_model_t &lc, const Index nlocal, const Set &clamp)
 
     lc.Deg = lc.Z * lc.Y;
     lc.Tot = lc.Prop * Mat::Ones(n, 1);
+
+#ifdef DEBUG
+    ASSERT(lc.Deg.minCoeff() > -1e-4, "link_community: update_param_vb: found negative deg");
+#endif
 
     const Scalar a0 = lc.a0, b0 = lc.b0;
 
@@ -242,6 +251,10 @@ update_param_vb(lc_model_t &lc, const Index nlocal, const Set &clamp)
             const Index i = it.col();
             const Scalar y = it.value();
             lc.Deg.col(i) -= lc.Z.col(e) * y; // ~ O(K)
+#ifdef DEBUG
+	    ASSERT(lc.Deg.col(i).minCoeff() > -1e-4,
+		   "delta-update gibbs, deg");
+#endif
         }
 
         lc.Z.col(e).setZero();
@@ -281,6 +294,9 @@ update_param_gibbs(lc_model_t &lc, const Index nlocal, const Set &clamp)
 
     lc.Deg = lc.Z * lc.Y;
     lc.Tot = lc.Prop * Mat::Ones(n, 1);
+#ifdef DEBUG
+    ASSERT(lc.Deg.minCoeff() > -1e-4, "link_community: update_param_gibbs: found negative deg");
+#endif
 
     std::random_device rd;
     std::mt19937 gen(rd());
@@ -329,6 +345,11 @@ update_param_gibbs(lc_model_t &lc, const Index nlocal, const Set &clamp)
             const Index i = it.col();
             const Scalar y = it.value();
             lc.Deg.col(i) -= lc.Z.col(e) * y; // ~ O(K)
+#ifdef DEBUG
+	    ASSERT(lc.Deg.col(i).minCoeff() > -1e-4,
+		   "delta-update gibbs, deg");
+#endif
+
         }
 
         lc.Z.col(e).setZero();
@@ -359,17 +380,21 @@ update_param_gibbs(lc_model_t &lc, const Index nlocal, const Set &clamp)
    @param nburnin
    @param nlocal
  */
-template <typename Set>
-std::tuple<Mat, Mat>
+template <typename Set, typename FUN>
+void
 run_gibbs_sampling(lc_model_t &lc,
                    const Set &clamp,
+                   FUN &stat_fun,
                    const ngibbs_t ngibbs,
                    const nburnin_t nburnin,
                    const nlocal_t nlocal)
 {
     TLOG("Initialize parameters");
     update_param_fixed(lc);
-    running_stat_t<Mat> stat(lc.K, lc.n);
+
+    // std::cout << std::endl << lc.Deg.transpose() << std::endl;
+    // std::cout << std::endl;
+
     TLOG("Start Gibbs sampling...");
     for (Index iter = 0; iter < ngibbs.val + nburnin.val; ++iter) {
         const Scalar score = update_param_gibbs(lc, nlocal.val, clamp);
@@ -379,16 +404,11 @@ run_gibbs_sampling(lc_model_t &lc,
                   << (score / static_cast<Scalar>(lc.n)) << "]";
 
         if (iter >= nburnin.val) {
-            stat(lc.Prop);
+            stat_fun(lc);
         }
     }
     std::cerr << std::endl;
     TLOG("Done Gibbs sampling");
-
-    Mat mu = stat.mean();
-    Mat sd = stat.var().cwiseSqrt();
-
-    return std::make_tuple(mu, sd);
 }
 
 /**
@@ -398,15 +418,17 @@ run_gibbs_sampling(lc_model_t &lc,
    @param nburnin
    @param nlocal
  */
-std::tuple<Mat, Mat>
+template <typename FUN>
+void
 run_gibbs_sampling(lc_model_t &lc,
+                   FUN &stat_fun,
                    const ngibbs_t ngibbs,
                    const nburnin_t nburnin,
                    const nlocal_t nlocal)
 {
     std::unordered_set<Index> empty;
     empty.clear();
-    return run_gibbs_sampling(lc, empty, ngibbs, nburnin, nlocal);
+    run_gibbs_sampling(lc, empty, stat_fun, ngibbs, nburnin, nlocal);
 }
 
 /**
@@ -416,7 +438,7 @@ run_gibbs_sampling(lc_model_t &lc,
    @param nlocal
  */
 template <typename Set>
-std::tuple<Mat, Mat>
+void
 run_vb_optimization(lc_model_t &lc,
                     const Set &clamp,
                     const nvb_t nvb,
@@ -453,16 +475,6 @@ run_vb_optimization(lc_model_t &lc,
     auto _sd = [&](const Scalar &dd, const Scalar &tt) {
         return std::sqrt(dd + a0) / (b0 + tt);
     };
-
-    Mat mu(lc.K, lc.n);
-    Mat sd(lc.K, lc.n);
-
-    for (Index j = 0; j < lc.n; ++j) { // O(nK)
-        mu.col(j) = lc.Deg.col(j).binaryExpr(lc.Tot, _mean);
-        sd.col(j) = lc.Deg.col(j).binaryExpr(lc.Tot, _sd);
-    }
-
-    return std::make_tuple(mu, sd);
 }
 
 /**
@@ -470,11 +482,11 @@ run_vb_optimization(lc_model_t &lc,
    @param nvb
    @param nlocal
  */
-std::tuple<Mat, Mat>
+void
 run_vb_optimization(lc_model_t &lc, const nvb_t nvb, const nlocal_t nlocal)
 {
     std::unordered_set<Index> empty;
     empty.clear();
-    return run_vb_optimization(lc, empty, nvb, nlocal);
+    run_vb_optimization(lc, empty, nvb, nlocal);
 }
 #endif

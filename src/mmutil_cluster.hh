@@ -628,13 +628,12 @@ parse_cluster_options(const int argc,     //
         // "\n"
         "[Options for Gaussian mixture models]\n"
         "\n"
-        "--trunc (-K)            : maximum truncation-level of clustering\n"
-        "--burnin (-I)           : burn-in (Gibbs) iterations (default: 10)\n"
-        "--min_vbiter (-v)       : minimum VB iterations (default: 5)\n"
-        "--max_vbiter (-V)       : maximum VB iterations (default: 100)\n"
-        "--convergence (-T)      : epsilon value for checking convergence "
-        "(default                : eps = 1e-8)\n"
-        "--kmeanspp (-i)         : Kmeans++ initialization (default: false)\n"
+        "--trunc (-K)       : maximum truncation-level of clustering\n"
+        "--burnin (-I)      : burn-in (Gibbs) iterations (default: 10)\n"
+        "--min_vbiter (-v)  : minimum VB iterations (default: 5)\n"
+        "--max_vbiter (-V)  : maximum VB iterations (default: 100)\n"
+        "--convergence (-T) : epsilon value for checking convergence (default: 1e-8)\n"
+        "--kmeanspp (-i)    : Kmeans++ initialization (default: false)\n"
         "\n"
         "[Details]\n"
         "Qin and Rohe (2013), Regularized Spectral Clustering under "
@@ -698,7 +697,7 @@ parse_cluster_options(const int argc,     //
           { "log_scale", no_argument, nullptr, 'L' },             //
           { "raw_scale", no_argument, nullptr, 'R' },             //
           { "initial_sample", required_argument, nullptr, 'S' },  //
-          { "batch_size", required_argument, nullptr, 'B' },   //
+          { "batch_size", required_argument, nullptr, 'B' },      //
           { "sampling_method", required_argument, nullptr, 'N' }, //
           { "kmeanspp", no_argument, nullptr, 'i' },              //
           { "help", no_argument, nullptr, 'h' },                  //
