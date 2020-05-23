@@ -401,10 +401,14 @@ struct collector_t {
         }
     };
 
-    explicit collector_t(const NS ns, const ND nd, const KK kk)
+    explicit collector_t(const NS ns,
+                         const ND nd,
+                         const KK kk,
+                         const std::string _name)
         : n_singlet(ns.val)
         , n_doublet(nd.val)
         , K(kk.val)
+        , type_name(_name)
         , DegS(K, 1)
         , DegD(K, 1)
         , TotS(K, 1)
@@ -500,7 +504,8 @@ struct collector_t {
         ASSERT(_names.size() >= n_singlet,
                "mmutil_doublet_qc: Insufficient names");
 
-        using _tup = std::tuple<Index, std::string, Scalar, Scalar, Scalar>;
+        using _tup =
+            std::tuple<std::string, std::string, Scalar, Scalar, Scalar>;
         std::vector<_tup> ret;
         ret.reserve(n_singlet);
 
@@ -515,7 +520,7 @@ struct collector_t {
         for (Index i = 0; i < n_singlet; ++i) {
             const Scalar denom = sd0 * sd0 + deg_sd(i) * deg_sd(i);
             const Scalar z = (deg_mu(i) - mu0) / std::sqrt(denom + reg);
-            ret.emplace_back(i, _names[i], deg_mu(i), deg_sd(i), z);
+            ret.emplace_back(_names[i], type_name, deg_mu(i), deg_sd(i), z);
         }
 
         write_tuple_file(file_name, ret);
@@ -524,6 +529,7 @@ struct collector_t {
     const Index n_singlet;
     const Index n_doublet;
     const Index K;
+    const std::string type_name;
 
     running_stat_t<Vec> DegS;
     running_stat_t<Vec> DegD;
@@ -748,16 +754,18 @@ run_doublet_qc(doublet_qc_options_t &options)
         std::mt19937 rg(rd());
 
         std::vector<Index> &_col_k = *index_sets[k].get();
-
         std::vector<Index> col_k(_col_k.size());
         std::copy(_col_k.begin(), _col_k.end(), col_k.begin());
-        std::shuffle(col_k.begin(), col_k.end(), rg);
+
+        const Index Nk = col_k.size();
+        const Index Nmax = 1 + (Nk / K * 3);
 
         for (Index l = 0; l < K; ++l) {
             if (l == k)
                 continue;
             std::vector<Index> &col_l = *index_sets[l].get();
-            const Index nkl = std::min(col_k.size(), col_l.size());
+            Index nkl = std::min(col_k.size(), col_l.size());
+            nkl = std::min(nkl, Nmax);
             if (nkl < 1)
                 continue;
 
@@ -775,11 +783,13 @@ run_doublet_qc(doublet_qc_options_t &options)
                 continue;
 
             std::vector<Index> &_col_l = *index_sets[l].get();
+            Index nkl = std::min(col_k.size(), _col_l.size());
+            nkl = std::min(nkl, Nmax);
 
-            const Index nkl = std::min(col_k.size(), _col_l.size());
             if (nkl < 1)
                 continue;
 
+            std::shuffle(col_k.begin(), col_k.end(), rg);
             std::vector<Index> col_l(_col_l.size());
             std::copy(_col_l.begin(), _col_l.end(), col_l.begin());
             std::shuffle(col_l.begin(), col_l.end(), rg);
@@ -844,7 +854,7 @@ run_doublet_qc(doublet_qc_options_t &options)
     for (Index k = 0; k < K; ++k) {
 
         std::vector<Index> &col_k = *index_sets[k].get();
-        if (col_k.size() < 10)
+        if (col_k.size() < knn)
             continue;
 
         std::string lab_k = labels[k];
@@ -859,70 +869,8 @@ run_doublet_qc(doublet_qc_options_t &options)
 
         TLOG(n_singlet << " singlets vs. " << n_doublet << " doublets");
 
-        // std::vector<std::tuple<Index, Index, Scalar>> knn_index;
-        // const Index nquery = (n_singlet) > knn ? knn : (n_singlet - 1);
-
-        // // singlet-singlet edges
-        // {
-        //     index_triplet_vec _index;
-        //     CHECK(search_knn(SrcDataT(ss.data(), rank, n_singlet),
-        //                      TgtDataT(ss.data(), rank, n_singlet),
-        //                      KNN(nquery),
-        //                      BILINK(param_bilink),
-        //                      NNLIST(param_nnlist),
-        //                      _index));
-
-        //     Index i, j;
-        //     Scalar d;
-        //     for (auto tt : _index) {
-        //         std::tie(i, j, d) = tt;
-        //         if (i == j)
-        //             continue;
-        //         knn_index.emplace_back(i, j, 1. - d);
-        //     }
-        // }
-
-        // // singlet-doublet edges
-        // {
-        //     index_triplet_vec _index;
-        //     CHECK(search_knn(SrcDataT(ss.data(), rank, n_singlet),
-        //                      TgtDataT(dd.data(), rank, n_doublet),
-        //                      KNN(nquery),
-        //                      BILINK(param_bilink),
-        //                      NNLIST(param_nnlist),
-        //                      _index));
-        //     Index i, _j;
-        //     Scalar d;
-        //     for (auto tt : _index) {
-        //         std::tie(i, _j, d) = tt;
-        //         const Index j = _j + n_singlet;
-        //         knn_index.emplace_back(i, j, 1. - d);
-        //     }
-        // }
-
-        // // doublet-doublet edges
-        // {
-        //     index_triplet_vec _index;
-        //     CHECK(search_knn(SrcDataT(dd.data(), rank, n_doublet),
-        //                      TgtDataT(dd.data(), rank, n_doublet),
-        //                      KNN(nquery),
-        //                      BILINK(param_bilink),
-        //                      NNLIST(param_nnlist),
-        //                      _index));
-        //     Index _i, _j;
-        //     Scalar d;
-        //     for (auto tt : _index) {
-        //         std::tie(_i, _j, d) = tt;
-        //         const Index i = _i + n_singlet;
-        //         const Index j = _j + n_singlet;
-        //         if (i == j)
-        //             continue;
-        //         knn_index.emplace_back(i, j, 1. - d);
-        //     }
-        // }
-
         std::vector<std::tuple<Index, Index, Scalar>> knn_index;
-        const Index nquery = (n_singlet) > knn ? knn : (n_singlet - 1);
+        const Index nquery = (n_tot) > knn ? knn : (n_tot - 1);
 
         hnswlib::InnerProductSpace VS(rank);
         KnnAlg alg(&VS, n_tot, param_bilink, param_nnlist);
@@ -951,9 +899,9 @@ run_doublet_qc(doublet_qc_options_t &options)
         }
         TLOG("Added " << n_tot << " points");
 
-        std::vector<Scalar> dist(K);
-        std::vector<Scalar> weights(K);
-        std::vector<Index> neigh(K);
+        std::vector<Scalar> dist(nquery);
+        std::vector<Scalar> weights(nquery);
+        std::vector<Index> neigh(nquery);
         {
             float *mass = ss.data();
             for (Index ii = 0; ii < n_singlet; ++ii) {
@@ -1044,7 +992,8 @@ run_doublet_qc(doublet_qc_options_t &options)
 
         collector_t stat_fun{ collector_t::NS(n_singlet),
                               collector_t::ND(n_doublet),
-                              collector_t::KK(K) };
+                              collector_t::KK(K),
+                              lab_k };
 
         run_gibbs_sampling(lc,
                            clamp,
