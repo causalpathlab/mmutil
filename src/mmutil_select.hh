@@ -1,17 +1,21 @@
 #include "mmutil.hh"
 #include "mmutil_stat.hh"
+#include "mmutil_bgzf_util.hh"
+#include "mmutil_util.hh"
+#include "mmutil_index.hh"
+#include "ext/tabix/bgzf.h"
 
 #ifndef MMUTIL_SELECT_HH_
 #define MMUTIL_SELECT_HH_
 
-void
+int
 copy_selected_columns(const std::string mtx_file,             //
                       const std::string full_column_file,     //
                       const std::string selected_column_file, //
                       const std::string output)
 {
     using Str = std::string;
-    using copier_t = triplet_copier_remapped_cols_t<Index, Scalar>;
+    using copier_t = triplet_copier_remapped_cols_t<obgzf_stream, Index, Scalar>;
 
     std::vector<Str> _selected(0);
     CHECK(read_vector_file(selected_column_file, _selected));
@@ -24,6 +28,7 @@ copy_selected_columns(const std::string mtx_file,             //
     visit_matrix_market_file(mtx_file, collector);
     const IntVec &nnz_col = collector.Col_N;
     const Index max_row = collector.max_row, max_col = collector.max_col;
+
     ASSERT(full_column_names.size() >= max_col,
            "Insufficient number of columns");
 
@@ -64,6 +69,18 @@ copy_selected_columns(const std::string mtx_file,             //
 
     copier_t copier(output_mtx_file, remap, NNZ);
     visit_matrix_market_file(mtx_file, copier);
+
+    TLOG("Finished copying submatrix data");
+
+    // CHK_ERR_RET(mmutil::bgzf::convert_bgzip(output_mtx_file),
+    //             "Failed to bgzip " << output_mtx_file);
+
+    std::string idx_file = output_mtx_file + ".index";
+    CHK_ERR_RET(mmutil::index::build_mmutil_index(output_mtx_file, idx_file),
+                "Failed to construct an index file: " << idx_file);
+
+    TLOG("Done");
+    return EXIT_SUCCESS;
 }
 
 #endif
