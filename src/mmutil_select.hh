@@ -58,11 +58,11 @@ copy_selected_rows(const std::string mtx_file,
     index_map_t remap;
     Index i = 0;
     Index NNZ = 0;
-    std::vector<Str> output_features;
+    std::vector<Str> out_features;
     for (Index old_index : valid_rows) {
         remap[old_index] = i;
         Index j = valid_rows[i];
-        output_features.emplace_back(features[j]);
+        out_features.emplace_back(features[j]);
         NNZ += Nvec[old_index];
         ++i;
     }
