@@ -3,6 +3,7 @@ bin_PROGRAMS = mmutil_merge_col \
     mmutil_split_col \
     mmutil_filter_row \
     mmutil_filter_col \
+    mmutil_select_row \
     mmutil_select_col \
     mmutil_aggregate_col \
     mmutil_normalize_col \
@@ -124,8 +125,8 @@ mmutil_filter_row_SOURCES = mmutil_filter_row.cc \
 mmutil_filter_col_SOURCES = mmutil_filter_col.cc \
     mmutil_filter_col.hh $(common)
 
-# mmutil_select_row_SOURCES = mmutil_select_row.cc \
-#     mmutil_select.hh $(common)
+mmutil_select_row_SOURCES = mmutil_select_row.cc \
+     mmutil_select.hh $(common)
 
 mmutil_select_col_SOURCES = mmutil_select_col.cc \
     mmutil_select.hh $(common)

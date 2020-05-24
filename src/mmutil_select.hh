@@ -8,21 +8,102 @@
 #ifndef MMUTIL_SELECT_HH_
 #define MMUTIL_SELECT_HH_
 
+/**
+   @param mtx_file
+   @param full_row_file
+   @param selected_row_file
+   @param output
+ */
 int
-copy_selected_columns(const std::string mtx_file,             //
-                      const std::string full_column_file,     //
-                      const std::string selected_column_file, //
+copy_selected_rows(const std::string mtx_file,
+                   const std::string full_row_file,
+                   const std::string selected_row_file,
+                   const std::string output)
+{
+
+    using Str = std::string;
+    using copier_t =
+        triplet_copier_remapped_rows_t<obgzf_stream, Index, Scalar>;
+    using index_map_t = copier_t::index_map_t;
+
+    std::vector<Str> features(0);
+    CHK_ERR_RET(read_vector_file(full_row_file, features),
+                "Failed to read features");
+
+    std::vector<Str> _selected(0);
+    CHK_ERR_RET(read_vector_file(selected_row_file, _selected),
+                "Failed to read selected feature names");
+    std::unordered_set<Str> selected(_selected.begin(), _selected.end());
+
+    row_stat_collector_t collector;
+    visit_matrix_market_file(mtx_file, collector);
+
+    std::vector<Index> Nvec;
+    std_vector(collector.Row_N, Nvec);
+
+    const Index max_row = collector.max_row;
+    const Index max_col = collector.max_col;
+
+    std::vector<Index> rows(max_row);
+    std::iota(std::begin(rows), std::end(rows), 0);
+    std::vector<Index> valid_rows;
+    auto _found = [&](const Index j) {
+        return selected.count(features[j]) > 0;
+    };
+    std::copy_if(rows.begin(),
+                 rows.end(),
+                 std::back_inserter(valid_rows),
+                 _found);
+
+    index_map_t remap;
+    Index i = 0;
+    Index NNZ = 0;
+    for (Index old_index : valid_rows) {
+        remap[old_index] = i;
+        NNZ += Nvec[old_index];
+        ++i;
+    }
+
+    TLOG("Created valid row names");
+
+    Str output_mtx_file = output + ".mtx.gz";
+    copier_t copier(output_mtx_file, remap, NNZ);
+    visit_matrix_market_file(mtx_file, copier);
+
+    TLOG("Finished copying submatrix data");
+
+    std::string idx_file = output_mtx_file + ".index";
+    CHK_ERR_RET(mmutil::index::build_mmutil_index(output_mtx_file, idx_file),
+                "Failed to construct an index file: " << idx_file);
+
+    TLOG("Done");
+    return EXIT_SUCCESS;
+}
+
+/**
+   @param mtx_file
+   @param full_column_file
+   @param selected_column_file
+   @param output
+ */
+int
+copy_selected_columns(const std::string mtx_file,
+                      const std::string full_column_file,
+                      const std::string selected_column_file,
                       const std::string output)
 {
     using Str = std::string;
-    using copier_t = triplet_copier_remapped_cols_t<obgzf_stream, Index, Scalar>;
+    using copier_t =
+        triplet_copier_remapped_cols_t<obgzf_stream, Index, Scalar>;
 
     std::vector<Str> _selected(0);
-    CHECK(read_vector_file(selected_column_file, _selected));
+    CHK_ERR_RET(read_vector_file(selected_column_file, _selected),
+                "Failed to read selected column names");
     std::unordered_set<Str> selected(_selected.begin(), _selected.end());
 
     std::vector<Str> full_column_names(0);
-    CHECK(read_vector_file(full_column_file, full_column_names));
+    CHK_ERR_RET(read_vector_file(full_column_file, full_column_names),
+                "Failed to read column names");
 
     col_stat_collector_t collector;
     visit_matrix_market_file(mtx_file, collector);
