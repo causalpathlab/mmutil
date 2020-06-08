@@ -11,7 +11,6 @@ bin_PROGRAMS = mmutil_merge_col \
     mmutil_match_col \
     mmutil_annotate_col \
     mmutil_doublet_qc \
-    mmutil_bbknn_pca \
     mmutil_embed_annot \
     mmutil_spectral_match_col \
     mmutil_spectral_cluster_col
@@ -23,10 +22,6 @@ math = \
 rbm = mmutil_rbm.hh \
     inference/sampler.hh \
     inference/adam.hh
-
-sgd = \
-    inference/sgd_representation_gaussian.hh \
-    inference/sgd_regression.hh
 
 common = mmutil.hh                  \
     mmutil_util.hh                  \
@@ -96,21 +91,17 @@ mmutil_doublet_qc_SOURCES = \
 	link_community.hh \
         $(common)
 
-#########
-# BBKNN #
-#########
+####################
+# latent embedding #
+####################
 
-mmutil_bbknn_pca_SOURCES = \
-	mmutil_normalize.hh \
-	mmutil_match.hh \
-	mmutil_spectral.hh \
-	mmutil_bbknn_pca.hh \
-	mmutil_bbknn_pca.cc \
-	mmutil_merge_col.hh \
-        inference/sampler.hh \
-	link_community.hh \
-	$(math) \
-        $(common)
+mmutil_spectral_col_SOURCES = \
+    mmutil_spectral_col.cc \
+    mmutil_normalize.hh \
+    mmutil_spectral.hh \
+    $(common) \
+    $(math)
+
 
 ##############
 # Annotation #
@@ -152,12 +143,6 @@ mmutil_aggregate_col_SOURCES = mmutil_aggregate_col.cc \
     mmutil_aggregate_col.hh \
     $(common)
 
-mmutil_spectral_col_SOURCES = mmutil_spectral_col.cc \
-    mmutil_normalize.hh \
-    mmutil_spectral.hh \
-    $(common) \
-    $(math)
-
 mmutil_rand_col_SOURCES = mmutil_rand_col.cc \
     mmutil_rand_col.hh $(common)
 
@@ -167,11 +152,20 @@ mmutil_rand_conv_col_SOURCES = mmutil_rand_conv_col.cc \
 mmutil_normalize_col_SOURCES = mmutil_normalize_col.cc \
     mmutil_normalize.hh $(common)
 
+#########
+# match #
+#########
+
 mmutil_match_col_SOURCES = mmutil_match_col.cc \
     mmutil_match.hh $(common) $(hnslib)
 
 mmutil_spectral_match_col_SOURCES = mmutil_spectral_match_col.cc \
     mmutil_match.hh $(common) $(hnslib) $(math)
+
+
+##############
+# clustering #
+##############
 
 mmutil_spectral_cluster_col_SOURCES = \
     mmutil_spectral_cluster_col.hh \
