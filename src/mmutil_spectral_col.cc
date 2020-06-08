@@ -8,7 +8,6 @@
 int
 main(const int argc, const char *argv[])
 {
-
     spectral_options_t options;
 
     CHECK(parse_spectral_options(argc, argv, options));
@@ -46,7 +45,6 @@ main(const int argc, const char *argv[])
         write_data_file(output_D_file, svd.D);
         TLOG("Output results");
     };
-
     if (options.em_iter > 0) {
         svd_out_t svd = take_svd_online_em(mtx, idx, ww, options);
         write_results(svd);
@@ -54,7 +52,6 @@ main(const int argc, const char *argv[])
         svd_out_t svd = take_svd_online(mtx, idx, ww, options);
         write_results(svd);
     }
-
     TLOG("Done");
 
     return EXIT_SUCCESS;

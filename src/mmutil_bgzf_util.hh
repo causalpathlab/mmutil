@@ -12,6 +12,9 @@
 
 namespace mmutil { namespace bgzf {
 
+static constexpr Index MISSING_POS = 0;
+static constexpr Index LAST_POS = 0;
+
 /// @param bgz_file : bgzipped file name
 /// @param fun      : a functor with
 ///                   (1) set_file(FP*)
@@ -95,7 +98,8 @@ visit_bgzf_block(const std::string bgz_file,
     while ((bgzf_getline(fp, '\n', str)) >= 0) {
 
         if (str->l < 1 || str->s[0] == '%') {
-            WLOG("mmutil_bgzf_util.hh: Found comment line in the middle:\n" << str->s);
+            WLOG("mmutil_bgzf_util.hh: Found comment line in the middle:\n"
+                 << str->s);
             state = S_EOW;
             continue; // skip comment
         }
@@ -128,7 +132,7 @@ visit_bgzf_block(const std::string bgz_file,
         fun.eval(row - 1, col - 1, weight);
 
         // The end position may not be set
-        if (end_pos != 0 && bgzf_tell(fp) == end_pos)
+        if (end_pos != LAST_POS && bgzf_tell(fp) >= end_pos)
             break;
     }
 
@@ -375,8 +379,9 @@ visit_bgzf(const std::string bgz_file, FUN &fun)
     while (bgzf_getline(fp, '\n', str) >= 0) {
 
         if (str->l < 1 || str->s[0] == '%') {
-            WLOG("mmutil_bgzf_util.hh: Found comment line in the middle [" << num_nz << "]\n"
-                                                      << str->s);
+            WLOG("mmutil_bgzf_util.hh: Found comment line in the middle ["
+                 << num_nz << "]\n"
+                 << str->s);
             state = S_EOW;
             continue; // skip comment
         }
@@ -400,7 +405,9 @@ visit_bgzf(const std::string bgz_file, FUN &fun)
         }
 
         if (num_cols < 3) {
-            WLOG("mmutil_bgzf_util.hh: mmutil_bgzf_util.hh: Found this incomplete line [" << num_nz << "]");
+            WLOG(
+                "mmutil_bgzf_util.hh: mmutil_bgzf_util.hh: Found this incomplete line ["
+                << num_nz << "]");
             state = S_EOW;
             continue;
         }

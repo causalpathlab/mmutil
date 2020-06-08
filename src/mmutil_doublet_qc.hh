@@ -7,7 +7,6 @@
 #include <string>
 
 #include "eigen_util.hh"
-#include "inference/sampler.hh"
 #include "io.hh"
 #include "mmutil.hh"
 #include "mmutil_index.hh"
@@ -47,11 +46,11 @@ struct doublet_qc_options_t {
         raw_scale = true;
         log_scale = false;
 
-        knn = 10;
+        knn = 50;
         bilink = 5; // 2 ~ 100 (bi-directional link per element)
         nlist = 51; // knn ~ N (nearest neighbour)
 
-        batch_size = 100000;
+        block_size = 100000;
         verbose = false;
 
         em_iter = 10;
@@ -85,7 +84,7 @@ struct doublet_qc_options_t {
     bool raw_scale;
     bool log_scale;
 
-    Index batch_size;
+    Index block_size;
     bool verbose;
 
     Index em_iter;
@@ -118,7 +117,7 @@ parse_doublet_qc_options(const int argc,     //
         // "\n"
         // "--dbl (-d)             : doublet t-stat cutoff (default: 2)\n"
         "\n"
-        "--knn (-k)             : k nearest neighbors (default: 50)\n"
+        "--knn (-k)             : k nearest neighbours (default: 50)\n"
         "--bilink (-b)          : # of bidirectional links (default: 5)\n"
         "--nlist (-n)           : # nearest neighbor lists (default: 51)\n"
         "--out (-o)             : Output file header\n"
@@ -185,7 +184,7 @@ parse_doublet_qc_options(const int argc,     //
           { "out", required_argument, nullptr, 'o' },        //
           { "log_scale", no_argument, nullptr, 'L' },        //
           { "raw_scale", no_argument, nullptr, 'R' },        //
-          { "batch_size", required_argument, nullptr, 'B' }, //
+          { "block_size", required_argument, nullptr, 'B' }, //
           { "em_iter", required_argument, nullptr, 'i' },    //
           { "em_tol", required_argument, nullptr, 't' },     //
           { "gibbs", required_argument, nullptr, 'G' },      //
@@ -270,7 +269,7 @@ parse_doublet_qc_options(const int argc,     //
             break;
 
         case 'B':
-            options.batch_size = std::stoi(optarg);
+            options.block_size = std::stoi(optarg);
             break;
 
         case 'G':
@@ -313,66 +312,6 @@ parse_doublet_qc_options(const int argc,     //
     ERR_RET(options.rank < 2, "Too small rank");
 
     return EXIT_SUCCESS;
-}
-
-/**
- * @param deg_i number of elements
- * @param dist deg_i-vector for distance
- * @param weights deg_i-vector for weights
-
- Since the inner-product distance is d(x,y) = (1 - x'y),
- d = 0.5 * (x - y)'(x - y) = 0.5 * (x'x + y'y) - x'y,
- we have Gaussian weight w(x,y) = exp(-lambda * d(x,y))
-
- */
-inline void
-normalize_weights(const Index deg_i,
-                  std::vector<Scalar> &dist,
-                  std::vector<Scalar> &weights)
-{
-    ASSERT(deg_i > 0, "mmutil_doublet_qc: deg_i > 0");
-    ASSERT(dist.size() >= deg_i, "mmutil_doublet_qc: At least deg_i");
-    ASSERT(dist.size() == weights.size(),
-           "mmutil_doublet_qc: check distance and weights");
-
-    const Scalar _log2 = fasterlog(2.);
-    const Scalar _di = static_cast<Scalar>(deg_i);
-    const Scalar log2K = fasterlog(_di) / _log2;
-
-    Scalar lambda = 1.0;
-
-    const Scalar dmin = *std::min_element(dist.begin(), dist.begin() + deg_i);
-
-    auto f = [&](const Scalar lam) -> Scalar {
-        Scalar rhs = 0.;
-        for (Index j = 0; j < deg_i; ++j) {
-            Scalar w = fasterexp(-(dist[j] - dmin) * lam);
-            rhs += w;
-        }
-        Scalar lhs = log2K * lam;
-        return (lhs - rhs);
-    };
-
-    Scalar fval = f(lambda);
-
-    while (true) {
-        Scalar _lam = lambda;
-        if (fval < 0.) {
-            _lam = lambda * 1.1;
-        } else {
-            _lam = lambda * 0.9;
-        }
-        Scalar _fval = f(_lam);
-        if (std::abs(_fval) > std::abs(fval)) {
-            break;
-        }
-        lambda = _lam;
-        fval = _fval;
-    }
-
-    for (Index j = 0; j < deg_i; ++j) {
-        weights[j] = fasterexp(-(dist[j] - dmin) * lambda);
-    }
 }
 
 /**
@@ -560,9 +499,9 @@ run_doublet_qc(doublet_qc_options_t &options)
                 "Failed to obtain a bgzipped file: " << mtx_file);
 
     CHK_ERR_RET(mmutil::index::build_mmutil_index(mtx_file, idx_file),
-                "Failed to construct an index file: " << idx_file);
+                "Failed to create an indexing file: " << idx_file);
 
-    std::vector<mmutil::index::idx_pair_t> idx_tab;
+    std::vector<Index> idx_tab;
     CHECK(mmutil::index::read_mmutil_index(idx_file, idx_tab));
 
     mm_info_reader_t info;
@@ -643,19 +582,13 @@ run_doublet_qc(doublet_qc_options_t &options)
         ww = weights;
     }
 
-    auto take_batch_data_subcol = [&](std::vector<Index> &subcol) -> Mat {
+    auto take_data_block_subcol = [&](std::vector<Index> &subcol) -> Mat {
         using namespace mmutil::index;
         SpMat x = read_eigen_sparse_subset_col(mtx_file, idx_tab, subcol);
         return Mat(x);
     };
 
-    auto take_batch_data = [&](Index lb, Index ub) -> Mat {
-        std::vector<Index> subcol(ub - lb);
-        std::iota(subcol.begin(), subcol.end(), lb);
-        return take_batch_data_subcol(subcol);
-    };
-
-    const Index batch_size = options.batch_size;
+    const Index block_size = options.block_size;
 
     ////////////////////////////////
     // Learn latent embedding ... //
@@ -705,8 +638,8 @@ run_doublet_qc(doublet_qc_options_t &options)
         ret.setZero();
 
         Index r = 0;
-        for (Index lb = 0; lb < Nk; lb += batch_size) {
-            const Index ub = std::min(Nk, batch_size + lb);
+        for (Index lb = 0; lb < Nk; lb += block_size) {
+            const Index ub = std::min(Nk, block_size + lb);
 
             std::vector<Index> subcol_k(ub - lb);
 #ifdef DEBUG
@@ -714,7 +647,7 @@ run_doublet_qc(doublet_qc_options_t &options)
 #endif
             std::copy(col_k.begin() + lb, col_k.begin() + ub, subcol_k.begin());
 
-            Mat x0 = take_batch_data_subcol(subcol_k);
+            Mat x0 = take_data_block_subcol(subcol_k);
 
 #ifdef DEBUG
             ASSERT(x0.cols() == subcol_k.size(), "singlet: size doesn't match");
@@ -729,7 +662,7 @@ run_doublet_qc(doublet_qc_options_t &options)
 #ifdef DEBUG
             TLOG("X: " << xx.rows() << " x " << xx.cols());
 #endif
-            Mat vv = proj.transpose() * xx; // rank x batch_size
+            Mat vv = proj.transpose() * xx; // rank x block_size
             normalize_columns(vv);
 #ifdef DEBUG
             TLOG("V: " << vv.rows() << " x " << vv.cols());
@@ -797,8 +730,8 @@ run_doublet_qc(doublet_qc_options_t &options)
             TLOG("Shuffled doublet indexes: Mixing clusters "
                  << k << " with " << l << " -> " << nkl << " elements");
 #endif
-            for (Index lb = 0; lb < nkl; lb += batch_size) {
-                const Index ub = std::min(nkl, batch_size + lb);
+            for (Index lb = 0; lb < nkl; lb += block_size) {
+                const Index ub = std::min(nkl, block_size + lb);
 #ifdef DEBUG
                 TLOG("[" << lb << ", " << ub << ")");
 #endif
@@ -813,12 +746,12 @@ run_doublet_qc(doublet_qc_options_t &options)
                           col_l.begin() + ub,
                           subcol_l.begin());
 
-                Mat xx = take_batch_data_subcol(subcol_k);
+                Mat xx = take_data_block_subcol(subcol_k);
 #ifdef DEBUG
                 ASSERT(xx.cols() == subcol_k.size(),
                        "doublet k: size doesn't match");
 #endif
-                Mat yy = take_batch_data_subcol(subcol_l);
+                Mat yy = take_data_block_subcol(subcol_l);
 #ifdef DEBUG
                 ASSERT(yy.cols() == subcol_l.size(),
                        "doublet l: size doesn't match");
@@ -831,7 +764,7 @@ run_doublet_qc(doublet_qc_options_t &options)
                                                    options.col_norm,
                                                    options.log_scale);
 
-                Mat vv = proj.transpose() * xy; // rank x batch_size
+                Mat vv = proj.transpose() * xy; // rank x block_size
                 normalize_columns(vv);
                 for (Index j = 0; j < vv.cols(); ++j) {
                     ret.col(r) = vv.col(j);
@@ -868,6 +801,11 @@ run_doublet_qc(doublet_qc_options_t &options)
         const Index n_tot = n_singlet + n_doublet;
 
         TLOG(n_singlet << " singlets vs. " << n_doublet << " doublets");
+
+
+	// TODO: stratified sampling just like BBKNN does
+
+
 
         std::vector<std::tuple<Index, Index, Scalar>> knn_index;
         const Index nquery = (n_tot) > knn ? knn : (n_tot - 1);
@@ -965,7 +903,7 @@ run_doublet_qc(doublet_qc_options_t &options)
 
         TLOG("Constructed KNN graph");
 
-        auto lc_ptr = build_lc_model(knn_index, K);
+        auto lc_ptr = build_lc_model(knn_index, n_tot, K);
         auto &lc = *lc_ptr.get();
 
         update_latent_random(lc, 1, K); // randomly assign membership

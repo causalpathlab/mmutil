@@ -11,6 +11,7 @@ bin_PROGRAMS = mmutil_merge_col \
     mmutil_match_col \
     mmutil_annotate_col \
     mmutil_doublet_qc \
+    mmutil_bbknn_pca \
     mmutil_embed_annot \
     mmutil_spectral_match_col \
     mmutil_spectral_cluster_col
@@ -93,6 +94,22 @@ mmutil_doublet_qc_SOURCES = \
 	mmutil_doublet_qc.cc \
         inference/sampler.hh \
 	link_community.hh \
+        $(common)
+
+#########
+# BBKNN #
+#########
+
+mmutil_bbknn_pca_SOURCES = \
+	mmutil_normalize.hh \
+	mmutil_match.hh \
+	mmutil_spectral.hh \
+	mmutil_bbknn_pca.hh \
+	mmutil_bbknn_pca.cc \
+	mmutil_merge_col.hh \
+        inference/sampler.hh \
+	link_community.hh \
+	$(math) \
         $(common)
 
 ##############

@@ -17,8 +17,6 @@ namespace mmutil { namespace index {
 
 using namespace mmutil::bgzf;
 
-using idx_pair_t = std::tuple<Index, Index>;
-
 /**
    @param bgz_file : bgzipped mtx file
    @param idx_file : index file for the bgz file
@@ -27,9 +25,9 @@ int build_mmutil_index(std::string bgz_file, std::string idx_file);
 
 /**
    @param idx_file : index file for the bgz file
-   @param idx      : index map (a vector of idx_pair_t)
+   @param idx      : index map (a vector of memory locations)
 */
-int read_mmutil_index(std::string idx_file, std::vector<idx_pair_t> &idx);
+int read_mmutil_index(std::string idx_file, std::vector<Index> &idx);
 
 /**
    @param mtx_file : bgzipped mtx file
@@ -50,7 +48,7 @@ SpMat read_eigen_sparse_subset_col(std::string mtx_file,
 */
 template <typename VEC>
 SpMat read_eigen_sparse_subset_col(std::string mtx_file,
-                                   std::vector<idx_pair_t> &index_tab,
+                                   std::vector<Index> &index_tab,
                                    const VEC &subcol);
 
 /**
@@ -62,7 +60,7 @@ SpMat read_eigen_sparse_subset_col(std::string mtx_file,
 */
 template <typename VEC>
 SpMat read_eigen_sparse_subset_row_col(std::string mtx_file,
-                                       std::vector<idx_pair_t> &index_tab,
+                                       std::vector<Index> &index_tab,
                                        const VEC &subrow,
                                        const VEC &subcol);
 
@@ -83,7 +81,7 @@ SpMat read_eigen_sparse_subset_row_col(std::string mtx_file,
    @param mtx_file matrix market file
    @param index_tab a vector of index pairs
 */
-int check_index_tab(std::string mtx_file, std::vector<idx_pair_t> &index_tab);
+int check_index_tab(std::string mtx_file, std::vector<Index> &index_tab);
 
 ////////////////////////////////////////////////////////////////
 
@@ -123,7 +121,7 @@ struct mm_column_indexer_t {
             col2file.emplace_back(std::make_tuple(col, first_off));
         }
 
-        if (col != last_col) { // the previous one was a change point
+        if (col != last_col) { // the last one was a change point
 
             ASSERT(col > last_col, "MTX must be sorted by columns");
 
@@ -215,23 +213,38 @@ int build_mmutil_index(std::string mtx_file,        // bgzip file
 }
 
 int
-read_mmutil_index(std::string index_file, std::vector<idx_pair_t> &_index)
+read_mmutil_index(std::string index_file, std::vector<Index> &_index)
 {
     _index.clear();
+    std::vector<std::tuple<Index, Index>> temp;
     igzstream ifs(index_file.c_str(), std::ios::in);
-    int ret = read_pair_stream(ifs, _index);
+    int ret = read_pair_stream(ifs, temp);
     ifs.close();
 
-    auto less_op = [](idx_pair_t &lhs, idx_pair_t &rhs) {
-        return std::get<0>(lhs) < std::get<0>(rhs);
-    };
-
-    std::sort(_index.begin(), _index.end(), less_op);
-
-    const Index N = _index.size();
+    const Index N = temp.size();
 
     if (N < 1)
         return EXIT_FAILURE;
+
+    Index MaxIdx = 0;
+    for (auto pp : temp) {
+        MaxIdx = std::max(std::get<0>(pp), MaxIdx);
+    }
+
+    // Fill in missing locations
+    _index.resize(MaxIdx + 1);
+    std::fill(std::begin(_index), std::end(_index), MISSING_POS);
+
+    for (auto pp : temp) {
+        _index[std::get<0>(pp)] = std::get<1>(pp);
+    }
+
+    // Update missing spots with the next one
+    for (Index j = 0; j < (MaxIdx - 1); ++j) {
+        if (_index[j] == MISSING_POS)
+            _index[j] = _index[j + 1];
+    }
+
     return ret;
 }
 
@@ -243,83 +256,62 @@ struct memory_block_t {
 };
 
 std::vector<memory_block_t>
-find_consecutive_blocks(const std::vector<idx_pair_t> &index,
-                        const std::vector<Index> &subcol)
+find_consecutive_blocks(const std::vector<Index> &index_tab,
+                        const std::vector<Index> &subcol,
+                        const Index gap = 10)
 {
 
-    const Index N = index.size();
+    const Index N = index_tab.size();
     ASSERT(N > 1, "Empty index map");
 
-    std::unordered_set<Index> _subset;
-    _subset.clear();
-    _subset.reserve(subcol.size());
-    std::copy(subcol.begin(),
-              subcol.end(),
-              std::inserter(_subset, _subset.end()));
+    std::vector<Index> sorted(subcol.size());
+    std::copy(subcol.begin(), subcol.end(), sorted.begin());
+    std::sort(sorted.begin(), sorted.end());
 
-#ifdef DEBUG
-    TLOG("Built a subset of " << _subset.size() << " columns");
-#endif
+    std::vector<std::tuple<Index, Index>> intervals;
+    {
+        Index beg = sorted[0];
+        Index end = beg;
 
-    ASSERT(_subset.size() == subcol.size(),
-           "mmutil_index: duplicate items in subcol");
-
-    std::vector<idx_pair_t> blocks;
-    bool in_block = false;
-    Index beg = 0, end = 0;
-    Index Nmax = 0;
-    for (Index j = 0; j < N; ++j) {
-        const Index i = std::get<0>(index[j]);
-
-        if (_subset.count(i) > 0) {
-            if (!in_block) {     // beginning of the block
-                in_block = true; //
-                beg = j;         // from this j
+        for (Index jj = 1; jj < sorted.size(); ++jj) {
+            const Index ii = sorted[jj];
+            if (ii >= (end + gap)) {                  //
+                intervals.emplace_back(beg, end + 1); //
+                beg = ii;                             // start a new interval
+                end = ii;                             //
+            } else {                                  // extend this interval
+                end = ii;                             //
             }
-            // still in the block
-        } else if (in_block) {
-            end = j; // finish the block here
-            in_block = false;
-            blocks.emplace_back(beg, end);
         }
-        Nmax = std::max(Nmax, i);
-    }
 
-    if (in_block) {
-        blocks.emplace_back(beg, N);
-#ifdef DEBUG
-        TLOG("Including the last");
-#endif
+        if (beg <= sorted[sorted.size() - 1]) {
+            intervals.emplace_back(beg, end + 1);
+        }
     }
-
-#ifdef DEBUG
-    TLOG("Identified " << blocks.size() << " block(s)");
-    Index nDebug = 0;
-#endif
 
     std::vector<memory_block_t> ret;
-    for (auto b : blocks) {
-        Index lb, lb_mem, ub = (Nmax + 1), ub_mem = 0;
-        std::tie(lb, lb_mem) = index[std::get<0>(b)];
 
-        if (std::get<1>(b) < N) { // ub location
-            std::tie(ub, ub_mem) = index[std::get<1>(b)];
-        } else {
-            ASSERT(std::get<1>(b) == N, "mmutil_index: cannot exceed N");
-            ub = Nmax + 1;
-            ub_mem = 0;
+    for (auto intv : intervals) {
+
+        Index lb, lb_mem, ub, ub_mem = 0;
+        std::tie(lb, ub) = intv;
+
+        if (lb >= N)
+            continue;
+
+        lb_mem = index_tab[lb];
+
+        // if (ub == lb) {
+        //     ub = ub + 1;
+        // }
+
+        if (ub < N) {
+            ub_mem = index_tab[ub];
         }
 
-#ifdef DEBUG
-        nDebug += (ub - lb);
-#endif
+        // TLOG(lb << ", " << ub << " " << lb_mem << " " << ub_mem);
         ret.emplace_back(memory_block_t{ lb, lb_mem, ub, ub_mem });
     }
-
-#ifdef DEBUG
-    ASSERT(nDebug == subcol.size(),
-           "mmutil_index: " << nDebug << " vs. " << (subcol.size()));
-#endif
 
     return ret;
 }
@@ -330,7 +322,7 @@ read_eigen_sparse_subset_col(std::string mtx_file,
                              std::string index_file,
                              const VEC &subcol)
 {
-    std::vector<idx_pair_t> index_tab;
+    std::vector<Index> index_tab;
     CHECK(read_mmutil_index(index_file, index_tab));
     CHECK(check_index_tab(mtx_file, index_tab));
     return read_eigen_sparse_subset_col(mtx_file, index_tab, subcol);
@@ -341,14 +333,15 @@ read_eigen_sparse_subset_col(std::string mtx_file,
    @param index_tab a vector of index pairs
 */
 int
-check_index_tab(std::string mtx_file, std::vector<idx_pair_t> &index_tab)
+check_index_tab(std::string mtx_file, std::vector<Index> &index_tab)
 {
 
     mm_info_reader_t info;
     CHECK(peek_bgzf_header(mtx_file, info));
 
     const Index sz = index_tab.size();
-    const Index last_col = sz > 0 ? std::get<0>(index_tab[sz - 1]) : 0;
+    const Index last_col = sz - 1;
+
     if (last_col == (info.max_col - 1))
         return EXIT_SUCCESS;
 
@@ -360,7 +353,7 @@ check_index_tab(std::string mtx_file, std::vector<idx_pair_t> &index_tab)
 template <typename VEC>
 SpMat
 read_eigen_sparse_subset_col(std::string mtx_file,
-                             std::vector<idx_pair_t> &index_tab,
+                             std::vector<Index> &index_tab,
                              const VEC &subcol)
 {
 
@@ -412,7 +405,7 @@ read_eigen_sparse_subset_row_col(std::string mtx_file,
                                  const VEC &subcol)
 {
 
-    std::vector<idx_pair_t> index_tab;
+    std::vector<Index> index_tab;
     CHECK(read_mmutil_index(index_file, index_tab));
     return read_eigen_sparse_subset_row_col(mtx_file,
                                             index_tab,
@@ -423,7 +416,7 @@ read_eigen_sparse_subset_row_col(std::string mtx_file,
 template <typename VEC>
 SpMat
 read_eigen_sparse_subset_row_col(std::string mtx_file,
-                                 std::vector<idx_pair_t> &index_tab,
+                                 std::vector<Index> &index_tab,
                                  const VEC &subrow,
                                  const VEC &subcol)
 {

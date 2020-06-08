@@ -31,4 +31,16 @@ using IntMat = typename Eigen::
     Matrix<std::ptrdiff_t, Eigen::Dynamic, Eigen::Dynamic, Eigen::ColMajor>;
 using IntVec = typename Eigen::Matrix<std::ptrdiff_t, Eigen::Dynamic, 1>;
 
+inline std::tuple<Index, Index, Scalar>
+parse_triplet(const std::tuple<Index, Index, Scalar> &tt)
+{
+    return tt;
+}
+
+inline std::tuple<Index, Index, Scalar>
+parse_triplet(const Eigen::Triplet<Scalar> &tt)
+{
+    return std::make_tuple(tt.row(), tt.col(), tt.value());
+}
+
 #endif

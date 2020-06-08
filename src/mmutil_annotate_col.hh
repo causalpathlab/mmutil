@@ -669,7 +669,7 @@ run_annotation(const annotation_options_t &options)
 
     auto log2_op = [](const Scalar &x) -> Scalar { return std::log2(1.0 + x); };
 
-    std::vector<mmutil::index::idx_pair_t> idx_tab;
+    std::vector<Index> idx_tab;
     CHECK(mmutil::index::read_mmutil_index(idx_file, idx_tab));
 
     auto take_batch_data_subcol = [&](std::vector<Index> &subcol,

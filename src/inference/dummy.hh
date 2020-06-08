@@ -1,11 +1,5 @@
-#include <RcppCommon.h>
-
 #ifndef DUMMY_EFFECT_HH_
 #define DUMMY_EFFECT_HH_
-
-struct dummy_mat_t {
-    operator SEXP() const { return Rcpp::NumericVector(); }
-};
 
 struct dummy_eta_t {
     inline const dummy_mat_t &repr_mean() const { return dummy_mat; }

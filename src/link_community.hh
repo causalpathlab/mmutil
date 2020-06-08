@@ -95,7 +95,7 @@ struct lc_model_t {
 
 template <typename TVEC>
 std::shared_ptr<lc_model_t>
-build_lc_model(const TVEC &knn_index, const Index K)
+build_lc_model(const TVEC &knn_index, const Index N, const Index K)
 {
 
     Index n = 0;
@@ -108,7 +108,7 @@ build_lc_model(const TVEC &knn_index, const Index K)
     auto _fun = [&](const auto &tt) {
         Index i, j;
         Scalar w;
-        std::tie(i, j, w) = tt;
+        std::tie(i, j, w) = parse_triplet(tt);
 
         if (i >= n)
             n = i + 1;
@@ -120,6 +120,11 @@ build_lc_model(const TVEC &knn_index, const Index K)
     };
 
     std::for_each(knn_index.begin(), knn_index.end(), _fun);
+
+    if (n < N) {
+        WLOG("Found vertices with out an edge");
+        n = N;
+    }
 
     std::shared_ptr<lc_model_t> ret =
         std::make_shared<lc_model_t>(nvertex_t(n), nedge_t(m), ncolour_t(K));
@@ -178,7 +183,8 @@ update_param_fixed(lc_model_t &lc)
     lc.Tot = lc.Deg * Mat::Ones(n, 1);
 
 #ifdef DEBUG
-    ASSERT(lc.Deg.minCoeff() > -1e-4, "link_community: update_param_fixed: found negative deg");
+    ASSERT(lc.Deg.minCoeff() > -1e-4,
+           "link_community: update_param_fixed: found negative deg");
 #endif
 
     // Ball, Karrer & Newman (2011)
@@ -211,7 +217,8 @@ update_param_vb(lc_model_t &lc, const Index nlocal, const Set &clamp)
     lc.Tot = lc.Prop * Mat::Ones(n, 1);
 
 #ifdef DEBUG
-    ASSERT(lc.Deg.minCoeff() > -1e-4, "link_community: update_param_vb: found negative deg");
+    ASSERT(lc.Deg.minCoeff() > -1e-4,
+           "link_community: update_param_vb: found negative deg");
 #endif
 
     const Scalar a0 = lc.a0, b0 = lc.b0;
@@ -252,8 +259,7 @@ update_param_vb(lc_model_t &lc, const Index nlocal, const Set &clamp)
             const Scalar y = it.value();
             lc.Deg.col(i) -= lc.Z.col(e) * y; // ~ O(K)
 #ifdef DEBUG
-	    ASSERT(lc.Deg.col(i).minCoeff() > -1e-4,
-		   "delta-update gibbs, deg");
+            ASSERT(lc.Deg.col(i).minCoeff() > -1e-4, "delta-update gibbs, deg");
 #endif
         }
 
@@ -295,7 +301,8 @@ update_param_gibbs(lc_model_t &lc, const Index nlocal, const Set &clamp)
     lc.Deg = lc.Z * lc.Y;
     lc.Tot = lc.Prop * Mat::Ones(n, 1);
 #ifdef DEBUG
-    ASSERT(lc.Deg.minCoeff() > -1e-4, "link_community: update_param_gibbs: found negative deg");
+    ASSERT(lc.Deg.minCoeff() > -1e-4,
+           "link_community: update_param_gibbs: found negative deg");
 #endif
 
     std::random_device rd;
@@ -346,10 +353,8 @@ update_param_gibbs(lc_model_t &lc, const Index nlocal, const Set &clamp)
             const Scalar y = it.value();
             lc.Deg.col(i) -= lc.Z.col(e) * y; // ~ O(K)
 #ifdef DEBUG
-	    ASSERT(lc.Deg.col(i).minCoeff() > -1e-4,
-		   "delta-update gibbs, deg");
+            ASSERT(lc.Deg.col(i).minCoeff() > -1e-4, "delta-update gibbs, deg");
 #endif
-
         }
 
         lc.Z.col(e).setZero();

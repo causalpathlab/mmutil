@@ -572,4 +572,181 @@ struct running_stat_t {
     Scalar n;
 };
 
+template <typename T>
+struct is_obs_op {
+    using Scalar = typename T::Scalar;
+    const Scalar operator()(const Scalar &x) const
+    {
+        return std::isfinite(x) ? one_val : zero_val;
+    }
+    static constexpr Scalar one_val = 1.0;
+    static constexpr Scalar zero_val = 0.0;
+};
+
+template <typename T>
+struct add_pseudo_op {
+    using Scalar = typename T::Scalar;
+    explicit add_pseudo_op(const Scalar pseudo_val)
+        : val(pseudo_val)
+    {
+    }
+    const Scalar operator()(const Scalar &x) const { return x + val; }
+    const Scalar val;
+};
+
+template <typename T1, typename T2, typename Ret>
+void
+XY_nobs(const Eigen::MatrixBase<T1> &X,
+        const Eigen::MatrixBase<T2> &Y,
+        Eigen::MatrixBase<Ret> &ret,
+        const typename Ret::Scalar pseudo = 1.0)
+{
+    is_obs_op<T1> op1;
+    is_obs_op<T2> op2;
+    ret.derived() = (X.unaryExpr(op1) * Y.unaryExpr(op2)).array() + pseudo;
+}
+
+template <typename T1, typename T2, typename Ret>
+void
+XY_nobs(const Eigen::MatrixBase<T1> &X,
+        const Eigen::MatrixBase<T2> &Y,
+        Eigen::SparseMatrixBase<Ret> &ret,
+        const typename Ret::Scalar pseudo = 1.0)
+{
+    is_obs_op<T1> op1;
+    is_obs_op<T2> op2;
+    add_pseudo_op<Ret> op_add(pseudo);
+
+    times_set(X.unaryExpr(op1), Y.unaryExpr(op2), ret);
+    ret.derived() = ret.unaryExpr(op_add);
+}
+
+template <typename T1, typename T2, typename T3, typename Ret>
+void
+XYZ_nobs(const Eigen::MatrixBase<T1> &X,
+         const Eigen::MatrixBase<T2> &Y,
+         const Eigen::MatrixBase<T3> &Z,
+         Eigen::MatrixBase<Ret> &ret,
+         const typename Ret::Scalar pseudo = 1.0)
+{
+    is_obs_op<T1> op1;
+    is_obs_op<T2> op2;
+    is_obs_op<T3> op3;
+
+    ret.derived() =
+        (X.unaryExpr(op1) * Y.unaryExpr(op2) * Z.unaryExpr(op3)).array() +
+        pseudo;
+}
+
+template <typename T1, typename T2, typename T3, typename Ret>
+void
+XYZ_nobs(const Eigen::MatrixBase<T1> &X,
+         const Eigen::MatrixBase<T2> &Y,
+         const Eigen::MatrixBase<T3> &Z,
+         Eigen::SparseMatrixBase<Ret> &ret,
+         const typename Ret::Scalar pseudo = 1.0)
+{
+    is_obs_op<T1> op1;
+    is_obs_op<T2> op2;
+    is_obs_op<T3> op3;
+    add_pseudo_op<Ret> op_add(pseudo);
+
+    auto YZ = (Y.unaryExpr(op2) * Z.unaryExpr(op3)).eval();
+    times_set(X.unaryExpr(op1), YZ, ret);
+    ret.derived() = ret.unaryExpr(op_add);
+}
+
+template <typename T1, typename T2, typename T3, typename Ret>
+void
+XYZ_nobs(const Eigen::MatrixBase<T1> &X,
+         const Eigen::MatrixBase<T2> &Y,
+         const Eigen::SparseMatrixBase<T3> &Z,
+         Eigen::MatrixBase<Ret> &ret,
+         const typename Ret::Scalar pseudo = 1.0)
+{
+    is_obs_op<T1> op1;
+    is_obs_op<T2> op2;
+    is_obs_op<T3> op3;
+    add_pseudo_op<Ret> op_add(pseudo);
+
+    auto YZ = (Y.unaryExpr(op2) * Z.unaryExpr(op3)).eval();
+    times_set(X.unaryExpr(op1), YZ, ret);
+    ret.derived() = ret.unaryExpr(op_add);
+}
+
+template <typename T1, typename T2, typename T3, typename Ret>
+void
+XYZ_nobs(const Eigen::MatrixBase<T1> &X,
+         const Eigen::MatrixBase<T2> &Y,
+         const Eigen::SparseMatrixBase<T3> &Z,
+         Eigen::SparseMatrixBase<Ret> &ret,
+         const typename Ret::Scalar pseudo = 1.0)
+{
+    is_obs_op<T1> op1;
+    is_obs_op<T2> op2;
+    is_obs_op<T3> op3;
+    add_pseudo_op<Ret> op_add(pseudo);
+
+    auto YZ = (Y.unaryExpr(op2) * Z.unaryExpr(op3)).eval();
+    times_set(X.unaryExpr(op1), YZ, ret);
+    ret.derived() = ret.unaryExpr(op_add);
+}
+
+template <typename T1, typename T2, typename T3, typename Ret>
+void
+XYZ_nobs(const Eigen::SparseMatrixBase<T1> &X,
+         const Eigen::SparseMatrixBase<T2> &Y,
+         const Eigen::MatrixBase<T3> &Z,
+         Eigen::SparseMatrixBase<Ret> &ret,
+         const typename Ret::Scalar pseudo = 1.0)
+{
+    is_obs_op<T1> op1;
+    is_obs_op<T2> op2;
+    is_obs_op<T3> op3;
+    add_pseudo_op<Ret> op_add(pseudo);
+
+    auto YZ = (Y.unaryExpr(op2) * Z.unaryExpr(op3)).eval();
+    times_set(X.unaryExpr(op1), YZ, ret);
+    ret.derived() = ret.unaryExpr(op_add);
+}
+
+template <typename T1, typename T2, typename T3, typename Ret>
+void
+XYZ_nobs(const Eigen::MatrixBase<T1> &X,
+         const Eigen::SparseMatrixBase<T2> &Y,
+         const Eigen::MatrixBase<T3> &Z,
+         Eigen::SparseMatrixBase<Ret> &ret,
+         const typename Ret::Scalar pseudo = 1.0)
+{
+    is_obs_op<T1> op1;
+    is_obs_op<T2> op2;
+    is_obs_op<T3> op3;
+    add_pseudo_op<Ret> op_add(pseudo);
+
+    auto YZ = (Y.unaryExpr(op2) * Z.unaryExpr(op3)).eval();
+    times_set(X.unaryExpr(op1), YZ, ret);
+    ret.derived() = ret.unaryExpr(op_add);
+}
+
+////////////////////////////////////////////////////////////////
+template <typename T1, typename T2, typename Ret>
+void
+XtY_nobs(const Eigen::MatrixBase<T1> &X,
+         const Eigen::MatrixBase<T2> &Y,
+         Eigen::MatrixBase<Ret> &ret,
+         const typename Ret::Scalar pseudo = 1.0)
+{
+    XY_nobs(X.transpose(), Y, ret, pseudo);
+}
+
+template <typename T1, typename T2, typename Ret>
+void
+XtY_nobs(const Eigen::MatrixBase<T1> &X,
+         const Eigen::MatrixBase<T2> &Y,
+         Eigen::SparseMatrixBase<Ret> &ret,
+         const typename Ret::Scalar pseudo = 1.0)
+{
+    XY_nobs(X.transpose(), Y, ret, pseudo);
+}
+
 #endif

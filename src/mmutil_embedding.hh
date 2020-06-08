@@ -254,13 +254,16 @@ train_embedding_by_cluster(const Eigen::MatrixBase<Derived> &_x,
     // smooth probability with target perplexity //
     ///////////////////////////////////////////////
 
-    Vec nsize = Pr.colwise().sum().transpose();                       // K x 1
+    Vec nsize = Pr.colwise().sum().transpose(); // K x 1
+
+    // Avoid division by zero
+    nsize = nsize.unaryExpr(
+        [](const Scalar &x) -> Scalar { return x < 1e-4 ? 1e-4 : x; });
+
     Mat C = (X.transpose() * Pr) * nsize.cwiseInverse().asDiagonal(); // D x K
     Vec pr_size = nsize / nsize.sum();
     Mat p_phi = build_smooth_adjacency(C, pr_size);
     Mat phi = train_tsne(p_phi, d, options);
-
-    // TLOG("phi:\n" << phi);
 
     Eigen::BDCSVD<Mat> svd;
     svd.compute(C, Eigen::ComputeThinU | Eigen::ComputeThinV);
@@ -272,9 +275,10 @@ train_embedding_by_cluster(const Eigen::MatrixBase<Derived> &_x,
         return 1.0 / (x + tau);
     };
 
-    TLOG("Projecting data into " << d << " dimensions");
+    TLOG("Projecting data into " << d << " dimensions, tau = " << tau);
 
     Vec denom = svd.singularValues().unaryExpr(safe_inverse);
+
     Mat proj = svd.matrixV() * denom.asDiagonal() * svd.matrixU().transpose();
     Mat ww = phi * proj;
 

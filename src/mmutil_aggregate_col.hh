@@ -213,7 +213,7 @@ aggregate_col(const std::string mtx_file,
 
     // Indexing if needed
     CHECK(mmutil::index::build_mmutil_index(mtx_file, idx_file));
-    std::vector<mmutil::index::idx_pair_t> idx_tab;
+    std::vector<Index> idx_tab;
     CHECK(mmutil::index::read_mmutil_index(idx_file, idx_tab));
 
     auto nz = [&eps](const Scalar &x) -> Scalar { return x < eps ? 0. : 1.0; };

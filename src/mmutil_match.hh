@@ -42,7 +42,7 @@ struct match_options_t {
         row_weight_file = "";
 
         initial_sample = 10000;
-        batch_size = 10000;
+        block_size = 10000;
 
         sampling_method = UNIFORM;
 
@@ -70,7 +70,7 @@ struct match_options_t {
     std::string row_weight_file;
 
     Index initial_sample;
-    Index batch_size;
+    Index block_size;
 
     sampling_method_t sampling_method;
 
@@ -197,6 +197,20 @@ int search_knn(const SrcDataT _SrcData, //
                const NNLIST _nnlist,    //
                index_triplet_vec &out);
 
+/**
+ * @param deg_i number of elements
+ * @param dist deg_i-vector for distance
+ * @param weights deg_i-vector for weights
+
+ Since the inner-product distance is d(x,y) = (1 - x'y),
+ d = 0.5 * (x - y)'(x - y) = 0.5 * (x'x + y'y) - x'y,
+ we have Gaussian weight w(x,y) = exp(-lambda * d(x,y))
+
+ */
+inline void normalize_weights(const Index deg_i,
+                              std::vector<Scalar> &dist,
+                              std::vector<Scalar> &weights);
+
 ////////////////////////////////////////////////////////////////
 
 int
@@ -316,7 +330,7 @@ search_knn(const SrcSparseRowsT _SrcRows, //
             std::size_t j;
             while (!pq.empty()) {
                 std::tie(d, j) = pq.top();
-                out.emplace_back(i,j,d);
+                out.emplace_back(i, j, d);
                 pq.pop();
             }
         }
@@ -372,7 +386,7 @@ search_knn(const SrcDataT _SrcData, //
 
         progress_bar_t<Index> prog(vecsize, 1e2);
 
-	// #pragma omp parallel for
+        // #pragma omp parallel for
         for (Index i = 0; i < vecsize; ++i) {
             alg.addPoint((void *)(mass + vecdim * i),
                          static_cast<std::size_t>(i));
@@ -398,7 +412,7 @@ search_knn(const SrcDataT _SrcData, //
             std::size_t j;
             while (!pq.empty()) {
                 std::tie(d, j) = pq.top();
-                out.emplace_back(i,j,d);
+                out.emplace_back(i, j, d);
                 pq.pop();
             }
             prog.update();
@@ -409,9 +423,60 @@ search_knn(const SrcDataT _SrcData, //
     return EXIT_SUCCESS;
 }
 
-template <typename TVEC>
-inline TVEC
-keep_reciprocal_knn(const TVEC &knn_index, bool undirected = false)
+inline void
+normalize_weights(const Index deg_i,
+                  std::vector<Scalar> &dist,
+                  std::vector<Scalar> &weights)
+{
+    ASSERT(deg_i > 0, "mmutil_doublet_qc: deg_i > 0");
+    ASSERT(dist.size() >= deg_i, "mmutil_doublet_qc: At least deg_i");
+    ASSERT(dist.size() == weights.size(),
+           "mmutil_doublet_qc: check distance and weights");
+
+    const Scalar _log2 = fasterlog(2.);
+    const Scalar _di = static_cast<Scalar>(deg_i);
+    const Scalar log2K = fasterlog(_di) / _log2;
+
+    Scalar lambda = 10.0;
+
+    const Scalar dmin = *std::min_element(dist.begin(), dist.begin() + deg_i);
+
+    // Find lambda values by a simple line-search
+    auto f = [&](const Scalar lam) -> Scalar {
+        Scalar rhs = 0.;
+        for (Index j = 0; j < deg_i; ++j) {
+            Scalar w = fasterexp(-(dist[j] - dmin) * lam);
+            rhs += w;
+        }
+        Scalar lhs = log2K;
+        return (lhs - rhs);
+    };
+
+    Scalar fval = f(lambda);
+
+    while (true) {
+        Scalar _lam = lambda;
+        if (fval < 0.) {
+            _lam = lambda * 1.1;
+        } else {
+            _lam = lambda * 0.9;
+        }
+        Scalar _fval = f(_lam);
+        if (std::abs(_fval) > std::abs(fval)) {
+            break;
+        }
+        lambda = _lam;
+        fval = _fval;
+    }
+
+    for (Index j = 0; j < deg_i; ++j) {
+        weights[j] = fasterexp(-(dist[j] - dmin) * lambda);
+    }
+}
+
+template <typename T>
+inline std::vector<T>
+keep_reciprocal_knn(const std::vector<T> &knn_index, bool undirected = false)
 {
     // Make sure that we could only consider reciprocal kNN pairs
     std::unordered_map<std::tuple<Index, Index>,
@@ -421,7 +486,7 @@ keep_reciprocal_knn(const TVEC &knn_index, bool undirected = false)
 
     auto _count = [&edge_count](const auto &tt) {
         Index i, j, temp;
-        std::tie(i, j, std::ignore) = tt;
+        std::tie(i, j, std::ignore) = parse_triplet(tt);
         if (i == j)
             return;
 
@@ -442,7 +507,7 @@ keep_reciprocal_knn(const TVEC &knn_index, bool undirected = false)
 
     auto is_mutual = [&edge_count, &undirected](const auto &tt) {
         Index i, j, temp;
-        std::tie(i, j, std::ignore) = tt;
+        std::tie(i, j, std::ignore) = parse_triplet(tt);
         if (i == j)
             return false;
         if (i > j) {
@@ -455,7 +520,7 @@ keep_reciprocal_knn(const TVEC &knn_index, bool undirected = false)
         return (edge_count[{ i, j }] > 1);
     };
 
-    std::vector<std::tuple<Index, Index, Scalar>> reciprocal_knn_index;
+    std::vector<T> reciprocal_knn_index;
     reciprocal_knn_index.reserve(knn_index.size());
     std::copy_if(knn_index.begin(),
                  knn_index.end(),
@@ -583,7 +648,7 @@ parse_match_options(const int argc,     //
         "--rank (-r)           : The maximal rank of SVD (default: rank = 50)\n"
         "--lu_iter (-i)           : # of LU iterations (default: lu_iter = 5)\n"
         "--initial_sample (-S) : Nystrom sample size (default: 10000)\n"
-        "--batch_size (-B)  : Nystrom batch size (default: 10000)\n"
+        "--block_size (-B)  : Nystrom batch size (default: 10000)\n"
         "--sampling_method (-M) : Nystrom sampling method: UNIFORM (default), "
         "CV, MEAN\n"
         "\n"
@@ -637,7 +702,7 @@ parse_match_options(const int argc,     //
           { "log_scale", no_argument, nullptr, 'L' },             //
           { "raw_scale", no_argument, nullptr, 'R' },             //
           { "initial_sample", required_argument, nullptr, 'S' },  //
-          { "batch_size", required_argument, nullptr, 'B' },      //
+          { "block_size", required_argument, nullptr, 'B' },      //
           { "sampling_method", required_argument, nullptr, 'M' }, //
           { "help", no_argument, nullptr, 'h' },                  //
           { nullptr, no_argument, nullptr, 0 } };
@@ -699,7 +764,7 @@ parse_match_options(const int argc,     //
             options.initial_sample = std::stoi(optarg);
             break;
         case 'B':
-            options.batch_size = std::stoi(optarg);
+            options.block_size = std::stoi(optarg);
             break;
         case 'L':
             options.log_scale = true;

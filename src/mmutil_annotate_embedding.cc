@@ -14,12 +14,12 @@ main(const int argc, const char *argv[])
     CHECK(read_data_file(options.data_file, X));
 
     // Q/C Pr matrix
-    // for(Index i=0; i < Pr.rows(); ++i) {
-    //   const Scalar pr_sum = Pr.row(i).sum();
-    //   if(pr_sum > 1.0) {
-    // 	Pr.row(i) /= pr_sum;
-    //   }
-    // }
+    for (Index i = 0; i < Pr.rows(); ++i) {
+        const Scalar pr_sum = Pr.row(i).sum();
+        if (pr_sum > 1.0) {
+            Pr.row(i) /= pr_sum;
+        }
+    }
 
     Mat xx = standardize(X);
 
