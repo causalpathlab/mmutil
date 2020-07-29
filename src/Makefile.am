@@ -1,6 +1,5 @@
 bin_PROGRAMS = mmutil_merge_col \
     mmutil_index_col \
-    mmutil_split_col \
     mmutil_filter_row \
     mmutil_filter_col \
     mmutil_select_row \
@@ -66,16 +65,12 @@ mmutil_index_col_SOURCES = \
     mmutil_index_col.cc    \
     $(common)
 
-#################
-# merge / split #
-#################
+#########
+# merge #
+#########
 
 mmutil_merge_col_SOURCES = mmutil_run_merge_col.cc \
     mmutil_merge_col.hh $(common)
-
-mmutil_split_col_SOURCES = mmutil_split_col.cc \
-    mmutil_split_col.hh \
-    $(common)
 
 ###########
 # Doublet #
@@ -108,6 +103,7 @@ mmutil_spectral_col_SOURCES = \
 ##############
 
 mmutil_annotate_col_SOURCES = \
+	mmutil_annotate.hh    \
         mmutil_annotate_col.hh \
         inference/sampler.hh \
 	mmutil_normalize.hh \
@@ -140,7 +136,11 @@ mmutil_select_col_SOURCES = mmutil_select_col.cc \
     mmutil_select.hh $(common)
 
 mmutil_aggregate_col_SOURCES = mmutil_aggregate_col.cc \
+    mmutil_aggregator.hh \
     mmutil_aggregate_col.hh \
+    mmutil_spectral.hh \
+    mmutil_match.hh \
+    inference/sampler.hh \
     $(common)
 
 mmutil_rand_col_SOURCES = mmutil_rand_col.cc \

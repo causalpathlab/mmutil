@@ -387,6 +387,9 @@ using eigen_triplet_reader_t = _triplet_reader_t<Eigen::Triplet<float>>;
 using std_triplet_reader_remapped_cols_t =
     _triplet_reader_remapped_cols_t<std_triplet_t>;
 
+using std_triplet_reader_remapped_rows_cols_t =
+    _triplet_reader_remapped_rows_cols_t<std_triplet_t>;
+
 using eigen_triplet_reader_remapped_cols_t =
     _triplet_reader_remapped_cols_t<Eigen::Triplet<float>>;
 
@@ -472,7 +475,7 @@ Eigen::SparseMatrix<eigen_triplet_reader_t::scalar_t, //
                     Eigen::RowMajor,                  //
                     std::ptrdiff_t>
 read_eigen_sparse_subset_cols(const std::string mtx_file, //
-                             const VEC &subcol)
+                              const VEC &subcol)
 {
 
     using _reader_t = eigen_triplet_reader_remapped_cols_t;
@@ -529,7 +532,6 @@ read_eigen_sparse_subset_rows_cols(const std::string mtx_file,
 
     return build_eigen_sparse(Tvec, max_row, max_col);
 }
-
 
 /////////////////////////////////////////
 // read and write triplets selectively //

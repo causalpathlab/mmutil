@@ -1,16 +1,17 @@
 from distutils.core import setup, Extension
 import numpy as np
-import scipy as sp
 
 _inc_dirs = [
     '.',
     'src/',
+    'src/ext/hnswlib/',
+    'src/ext/tabix/',
     np.get_include()
 ]
 
 _compile_args = [
     '--std=c++14',
-    '-O3',
+    '-O0', # TODO
     '-DNDEBUG',
     '-DNPY_NO_DEPRECATED_API',
     '-Wno-sign-compare',
@@ -22,7 +23,10 @@ mmutil_module = Extension(
     'mmutil',
     include_dirs=_inc_dirs,
     sources=['src/mmutil_python.cc',
-             'src/utils/gzstream.cc'],
+             'src/utils/gzstream.cc',
+             'src/utils/bgzstream.cc',
+             'src/ext/tabix/bgzf.c',
+             'src/ext/tabix/kstring.c'],
     language='c++',
     extra_compile_args=_compile_args,
 )
@@ -33,9 +37,9 @@ with open("README.md", "r") as fh:
 
 setup(
     name="mmutil",
-    version="0.2.0",
+    version="0.2.1",
     author="Yongjin Park",
-    author_email="yongjin.park@ubc.ca",
+    author_email="ypp@stat.ubc.ca",
     description='matrix market utility',
     long_description=_description,
     long_description_content_type="text/markdown",

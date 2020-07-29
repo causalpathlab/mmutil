@@ -11,13 +11,13 @@
 /**
    @param mtx_file
    @param full_row_file
-   @param selected_row_file
+   @param _selected
    @param output
  */
 int
 copy_selected_rows(const std::string mtx_file,
                    const std::string full_row_file,
-                   const std::string selected_row_file,
+                   const std::vector<std::string> &_selected,
                    const std::string output)
 {
 
@@ -30,9 +30,6 @@ copy_selected_rows(const std::string mtx_file,
     CHK_ERR_RET(read_vector_file(full_row_file, features),
                 "Failed to read features");
 
-    std::vector<Str> _selected(0);
-    CHK_ERR_RET(read_vector_file(selected_row_file, _selected),
-                "Failed to read selected feature names");
     std::unordered_set<Str> selected(_selected.begin(), _selected.end());
 
     row_stat_collector_t collector;
@@ -88,6 +85,26 @@ copy_selected_rows(const std::string mtx_file,
 
 /**
    @param mtx_file
+   @param full_row_file
+   @param selected_row_file
+   @param output
+ */
+int
+copy_selected_rows(const std::string mtx_file,
+                   const std::string full_row_file,
+                   const std::string selected_row_file,
+                   const std::string output)
+{
+
+    std::vector<std::string> _selected(0);
+    CHK_ERR_RET(read_vector_file(selected_row_file, _selected),
+                "Failed to read selected feature names");
+
+    return copy_selected_rows(mtx_file, full_row_file, _selected, output);
+}
+
+/**
+   @param mtx_file
    @param full_column_file
    @param selected_column_file
    @param output
@@ -95,16 +112,13 @@ copy_selected_rows(const std::string mtx_file,
 int
 copy_selected_columns(const std::string mtx_file,
                       const std::string full_column_file,
-                      const std::string selected_column_file,
+                      const std::vector<std::string> &_selected,
                       const std::string output)
 {
     using Str = std::string;
     using copier_t =
         triplet_copier_remapped_cols_t<obgzf_stream, Index, Scalar>;
 
-    std::vector<Str> _selected(0);
-    CHK_ERR_RET(read_vector_file(selected_column_file, _selected),
-                "Failed to read selected column names");
     std::unordered_set<Str> selected(_selected.begin(), _selected.end());
 
     std::vector<Str> full_column_names(0);
@@ -168,6 +182,26 @@ copy_selected_columns(const std::string mtx_file,
 
     TLOG("Done");
     return EXIT_SUCCESS;
+}
+
+/**
+   @param mtx_file
+   @param full_column_file
+   @param selected_column_file
+   @param output
+ */
+int
+copy_selected_columns(const std::string mtx_file,
+                      const std::string full_column_file,
+                      const std::string selected_column_file,
+                      const std::string output)
+{
+
+    std::vector<std::string> _selected(0);
+    CHK_ERR_RET(read_vector_file(selected_column_file, _selected),
+                "Failed to read selected column names");
+
+    return copy_selected_columns(mtx_file, full_column_file, _selected, output);
 }
 
 #endif

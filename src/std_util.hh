@@ -1,5 +1,8 @@
 #include <algorithm>
 #include <functional>
+#include <unordered_map>
+#include <tuple>
+
 // #include <execution> c++17
 
 #ifndef STD_UTIL_HH_
@@ -16,6 +19,46 @@ std_argsort(const Vec &data)
         return data.at(lhs) > data.at(rhs);
     });
     return index;
+}
+
+template <typename S, typename I>
+std::tuple<std::vector<I>, std::vector<S>, std::unordered_map<S, I>>
+make_indexed_vector(const std::vector<S> &name_vec)
+{
+
+    std::unordered_map<S, I> name_to_id;
+    std::vector<S> id_to_name;
+    std::vector<I> id_vec;
+    id_vec.reserve(name_vec.size());
+
+    for (I i = 0; i < name_vec.size(); ++i) {
+        const S &ii = name_vec.at(i);
+        if (name_to_id.count(ii) == 0) {
+            const I j = name_to_id.size();
+            name_to_id[ii] = j;
+            id_to_name.push_back(ii);
+        }
+        id_vec.emplace_back(name_to_id.at(ii));
+    }
+
+    return std::make_tuple(id_vec, id_to_name, name_to_id);
+}
+
+template <typename I>
+std::vector<std::vector<I>>
+make_index_vec_vec(const std::vector<I> &_id)
+{
+    using vec_ivec = std::vector<std::vector<I>>;
+
+    const I nn = *std::max_element(_id.begin(), _id.end()) + 1;
+
+    vec_ivec ret(nn, std::vector<I>{});
+
+    for (I i = 0; i < _id.size(); ++i) {
+        const I k = _id.at(i);
+        ret[k].push_back(i);
+    }
+    return ret;
 }
 
 // template <typename Vec>

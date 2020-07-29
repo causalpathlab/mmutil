@@ -6,16 +6,42 @@
 #include <string>
 #include <vector>
 
-#include "io.hh"
 #include "mmutil.hh"
+#include "io.hh"
+#include "eigen_util.hh"
+#include "eigen_io.hh"
+#include "mmutil_util.hh"
+#include "mmutil_stat.hh"
+#include "mmutil_bgzf_util.hh"
+#include "mmutil_index.hh"
 #include "utils/util.hh"
+#include "utils/sse.h"
+#include "utils/cast.h"
+#include "utils/math.hh"
+#include "utils/fastexp.h"
+#include "utils/fastlog.h"
+#include "utils/fastgamma.h"
+#include "std_util.hh"
+#include "io_visitor.hh"
+#include "utils/gzstream.hh"
+#include "utils/util.hh"
+#include "utils/check.hh"
+#include "utils/tuple_util.hh"
+#include "utils/progress.hh"
+#include "utils/strbuf.hh"
+#include "utils/bgzstream.hh"
+#include "ext/tabix/bgzf.h"
+#include "ext/tabix/kstring.h"
 
 #ifndef MMUTIL_PYTHON_HH_
 #define MMUTIL_PYTHON_HH_
 
-// Already declared in mmutil.hh:
-// using Index = size_t;
-// using Scalar = float;
+#define Py_CHECK(cond)                \
+    {                                 \
+        if ((cond) != EXIT_SUCCESS) { \
+            return NULL;              \
+        }                             \
+    }
 
 using Triplet = std::tuple<Index, Index, Scalar>;
 using TripletVec = std::vector<Triplet>;
@@ -39,7 +65,7 @@ pyobj_string(PyObject *obj)
     return PyBytes_AsString(PyUnicode_AsEncodedString(obj, "UTF-8", "strict"));
 }
 
-std::vector<std::string>
+inline std::vector<std::string>
 pyobj_string_vector(PyObject *listObj)
 {
     const int _sz = PyList_Size(listObj);
@@ -48,6 +74,27 @@ pyobj_string_vector(PyObject *listObj)
         ret.push_back(pyobj_string(PyList_GetItem(listObj, i)));
     }
     return ret;
+}
+
+inline std::vector<Index>
+pyobj_index_vector(PyObject *listObj)
+{
+    const int _sz = PyList_Size(listObj);
+    std::vector<Index> ret;
+    for (int i = 0; i < _sz; ++i) {
+        ret.push_back(PyLong_AsLongLong(PyList_GetItem(listObj, i)));
+    }
+    return ret;
+}
+
+inline PyObject *
+make_np_array(Mat &_A)
+{
+    npy_intp _dims_a[2] = { _A.rows(), _A.cols() };
+    PyObject *A = PyArray_ZEROS(2, _dims_a, NPY_FLOAT, NPY_CORDER);
+    Scalar *a_data = (Scalar *)PyArray_DATA(A);
+    std::copy(_A.data(), _A.data() + _A.size(), a_data);
+    return A;
 }
 
 #endif

@@ -14,11 +14,11 @@
 #include "mmutil_stat.hh"
 #include "mmutil_spectral.hh"
 #include "mmutil_match.hh"
-#include "utils/progress.hh"
 #include "mmutil_bgzf_util.hh"
 #include "mmutil_util.hh"
 #include "ext/tabix/bgzf.h"
 
+#include "utils/progress.hh"
 #include "inference/sampler.hh"
 #include "link_community.hh"
 
@@ -595,7 +595,7 @@ run_doublet_qc(doublet_qc_options_t &options)
     ////////////////////////////////
 
     TLOG("Training SVD for spectral matching ...");
-    svd_out_t svd = take_svd_online_em(mtx_file, ww, options);
+    svd_out_t svd = take_svd_online_em(mtx_file, idx_file, ww, options);
     const Index rank = svd.U.cols();
 
     TLOG("SVD rank = " << rank);
@@ -802,10 +802,7 @@ run_doublet_qc(doublet_qc_options_t &options)
 
         TLOG(n_singlet << " singlets vs. " << n_doublet << " doublets");
 
-
-	// TODO: stratified sampling just like BBKNN does
-
-
+        // TODO: stratified sampling just like BBKNN does
 
         std::vector<std::tuple<Index, Index, Scalar>> knn_index;
         const Index nquery = (n_tot) > knn ? knn : (n_tot - 1);

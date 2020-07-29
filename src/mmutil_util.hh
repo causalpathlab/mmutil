@@ -35,7 +35,7 @@ convert_bgzip(std::string in_file)
                "Check if this file does exist: " << in_file);
 
     if (is_file_bgz(in_file)) {
-        WLOG("This file is already bgz: " << in_file);
+        // WLOG("This file is already bgz: " << in_file);
         return EXIT_SUCCESS;
     }
 

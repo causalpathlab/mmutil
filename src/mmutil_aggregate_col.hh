@@ -4,8 +4,16 @@
 #include "mmutil_stat.hh"
 #include "mmutil_index.hh"
 #include "mmutil_bgzf_util.hh"
+#include "mmutil_spectral.hh"
+#include "mmutil_match.hh"
+
 #include "eigen_util.hh"
 #include "io.hh"
+
+#include "utils/progress.hh"
+#include "inference/sampler.hh"
+
+#include "mmutil_aggregator.hh"
 
 #ifndef MMUTIL_AGGREGATE_COL_HH_
 #define MMUTIL_AGGREGATE_COL_HH_
@@ -13,38 +21,70 @@
 struct aggregate_options_t {
     using Str = std::string;
 
-    typedef enum { UNIFORM, CV, MEAN } sampling_method_t;
-    const std::vector<Str> METHOD_NAMES;
-
     aggregate_options_t()
     {
         mtx = "";
         prob = "";
         ind = "";
         lab = "";
+        trt_ind = "";
         out = "output";
-        batch_size = 10000;
         verbose = false;
+
+        tau = 1.0;
+        rank = 50;
+        lu_iter = 5;
+        knn = 1;
+        bilink = 5; // 2 ~ 100 (bi-directional link per element)
+        nlist = 5;  // knn ~ N (nearest neighbour)
 
         raw_scale = true;
         log_scale = false;
 
-        col_norm = 0;
+        col_norm = 1000;
+        block_size = 5000;
+
+        em_iter = 10;
+        em_tol = 1e-2;
+        em_recalibrate = true;
+
+        nburnin = 10;
+        ngibbs = 100;
     }
 
     Str mtx;
     Str prob;
     Str ind;
+    Str trt_ind;
     Str lab;
     Str out;
 
-    Index batch_size;
-    bool verbose;
+    // SVD and matching
+    Str row_weight_file;
 
     bool raw_scale;
     bool log_scale;
 
+    Scalar tau;
+    Index rank;
+    Index lu_iter;
     Scalar col_norm;
+
+    Index knn;
+    Index bilink;
+    Index nlist;
+
+    // SVD
+    Index block_size;
+    Index em_iter;
+    Scalar em_tol;
+    bool em_recalibrate;
+
+    bool verbose;
+
+    // aggregator
+    Index nburnin;
+    Index ngibbs;
 };
 
 template <typename OPTIONS>
@@ -56,41 +96,82 @@ parse_aggregate_options(const int argc,     //
     const char *_usage =
         "\n"
         "[Arguments]\n"
-        "--mtx (-m)               : data MTX file (M x N)\n"
-        "--data (-m)              : data MTX file (M x N)\n"
-        "--prob (-p)              : annotation/clustering probability (N x K)\n"
-        "--ind (-i)               : N x 1 sample to individual (n)\n"
-        "--lab (-l)               : K x 1 label name\n"
-        "--out (-o)               : Output file header\n"
+        "--mtx (-m)        : data MTX file (M x N)\n"
+        "--data (-m)       : data MTX file (M x N)\n"
+        "--prob (-p)       : annotation/clustering probability (N x K)\n"
+        "--ind (-i)        : N x 1 sample to individual (n)\n"
+        "--trt_ind (-t)    : N x 1 sample to case-control membership\n"
+        "--annot (-a)      : K x 1 (cell type) annotation label name\n"
+        "--lab (-a)        : K x 1 (cell type) annotation label name\n"
+        "--out (-o)        : Output file header\n"
         "\n"
-        "--log_scale (-L)         : Data in a log-scale (default: false)\n"
-        "--raw_scale (-R)         : Data in a raw-scale (default: true)\n"
-        "--batch_size (-B)        : Batch size (default: 10000)\n"
-        "--col_norm (-N)          : Column-wise normalization (default: 0, nothing)\n"
+        "[Options]\n"
+        "--gibbs (-g)      : number of gibbs sampling (default: 100)\n"
+        "--burnin (-b)     : number of burn-in sampling (default: 10)\n"
+        "\n"
+        "[Counterfactual matching options]\n"
+        "\n"
+        "--knn (-k)        : k nearest neighbours (default: 1)\n"
+        "--bilink (-b)     : # of bidirectional links (default: 5)\n"
+        "--nlist (-n)      : # nearest neighbor lists (default: 5)\n"
+        "\n"
+        "--rank (-r)       : # of SVD factors (default: rank = 50)\n"
+        "--iter (-l)       : # of LU iterations (default: iter = 5)\n"
+        "--row_weight (-w) : Feature re-weighting (default: none)\n"
+        "--col_norm (-C)   : Column normalization (default: 10000)\n"
+        "\n"
+        "--log_scale (-L)  : Data in a log-scale (default: false)\n"
+        "--raw_scale (-R)  : Data in a raw-scale (default: true)\n"
         "\n"
         "[Output]\n"
-        "${output}_${lab}.s0.gz   : (M x n) sum 1 * z[j,k]\n"
-        "${output}_${lab}.s1.gz   : (M x n) sum x[i,j] z[j,k]\n"
-        "${output}_${lab}.s2.gz   : (M x n) sum x[i,j]^2 z[j,k]\n"
-        "${output}_${lab}.cols.gz : (n x 1) name of the columns\n"
+        "${out}.mean.gz    : (M x n) Mean matrix\n"
+        "${out}.sd.gz      : (M x n) SD matrix\n"
+        "${out}.cols.gz    : (n x 1) Column names\n"
+        "\n"
+        "[Details for kNN graph]\n"
+        "\n"
+        "The number of bi-directional links created for every new element  \n"
+        "during construction. Reasonable range for M is 2-100. Higher M work \n"
+        "better on datasets with intrinsic dimensionality and/or high recall, \n"
+        "while low M works better for datasets intrinsic dimensionality and/or\n"
+        "low recalls. \n"
+        "\n"
+        "The size of the dynamic list for the nearest neighbors (used during \n"
+        "the search). A higher more accurate but slower search. This cannot be\n"
+        "set lower than the number nearest neighbors k. The value ef of can be \n"
+        "anything between of the dataset. [Reference] Malkov, Yu, and Yashunin. "
+        "\n"
+        "`Efficient and robust approximate nearest neighbor search using \n"
+        "Hierarchical Navigable Small World graphs.` \n"
+        "\n"
+        "preprint: "
+        "https://arxiv.org/abs/1603.09320 \n"
+        "See also: https://github.com/nmslib/hnswlib"
         "\n";
 
-    const char *const short_opts = "m:p:i:l:o:B:LRN:hv";
+    const char *const short_opts = "m:p:i:a:t:o:LRB:r:l:w:g:u:C:k:b:n:hv";
 
     const option long_opts[] =
         { { "mtx", required_argument, nullptr, 'm' },        //
           { "data", required_argument, nullptr, 'm' },       //
           { "prob", required_argument, nullptr, 'p' },       //
           { "ind", required_argument, nullptr, 'i' },        //
-          { "lab", required_argument, nullptr, 'l' },        //
-          { "label", required_argument, nullptr, 'l' },      //
+          { "lab", required_argument, nullptr, 'a' },        //
+          { "label", required_argument, nullptr, 'a' },      //
           { "out", required_argument, nullptr, 'o' },        //
-          { "batch_size", required_argument, nullptr, 'B' }, //
-          { "batchsize", required_argument, nullptr, 'B' },  //
-          { "verbose", no_argument, nullptr, 'v' },          //
           { "log_scale", no_argument, nullptr, 'L' },        //
           { "raw_scale", no_argument, nullptr, 'R' },        //
-          { "col_norm", required_argument, nullptr, 'N' },   //
+          { "block_size", required_argument, nullptr, 'B' }, //
+          { "rank", required_argument, nullptr, 'r' },       //
+          { "lu_iter", required_argument, nullptr, 'l' },    //
+          { "row_weight", required_argument, nullptr, 'w' }, //
+          { "gibbs", required_argument, nullptr, 'g' },      //
+          { "burnin", required_argument, nullptr, 'u' },     //
+          { "verbose", no_argument, nullptr, 'v' },          //
+          { "col_norm", required_argument, nullptr, 'C' },   //
+          { "knn", required_argument, nullptr, 'k' },        //
+          { "bilink", required_argument, nullptr, 'b' },     //
+          { "nlist", required_argument, nullptr, 'n' },      //
           { nullptr, no_argument, nullptr, 0 } };
 
     while (true) {
@@ -113,26 +194,46 @@ parse_aggregate_options(const int argc,     //
         case 'i':
             options.ind = std::string(optarg);
             break;
-        case 'l':
-            options.lab = std::string(optarg);
+        case 't':
+            options.trt_ind = std::string(optarg);
             break;
-        case 'N':
-            options.col_norm = std::stof(optarg);
+        case 'a':
+            options.lab = std::string(optarg);
             break;
         case 'o':
             options.out = std::string(optarg);
             break;
+        case 'u':
+            options.nburnin = std::stoi(optarg);
+            break;
+        case 'g':
+            options.ngibbs = std::stoi(optarg);
+            break;
+        case 'r':
+            options.rank = std::stoi(optarg);
+            break;
+        case 'l':
+            options.lu_iter = std::stoi(optarg);
+            break;
+        case 'w':
+            options.row_weight_file = std::string(optarg);
+            break;
+
+        case 'k':
+            options.knn = std::stoi(optarg);
+            break;
+
         case 'B':
-            options.batch_size = std::stoi(optarg);
+            options.block_size = std::stoi(optarg);
             break;
-        case 'L':
-            options.log_scale = true;
-            options.raw_scale = false;
+
+        case 'b':
+            options.bilink = std::stoi(optarg);
             break;
-        case 'R':
-            options.log_scale = false;
-            options.raw_scale = true;
+        case 'n':
+            options.nlist = std::stoi(optarg);
             break;
+
         case 'v': // -v or --verbose
             options.verbose = true;
             break;
@@ -150,151 +251,494 @@ parse_aggregate_options(const int argc,     //
     ERR_RET(!file_exists(options.ind), "No IND data file");
     ERR_RET(!file_exists(options.lab), "No LAB data file");
 
+    ERR_RET(options.rank < 2, "Too small rank");
+
     return EXIT_SUCCESS;
 }
 
+struct cf_index_sampler_t {
+
+    using DS = discrete_sampler_t<Scalar, Index>;
+
+    explicit cf_index_sampler_t(const Index ntrt)
+        : Ntrt(ntrt)
+        , obs_idx(0)
+        , cf_idx(Ntrt - 1)
+        , sampler(Ntrt - 1)
+        , prior_mass(Ntrt - 1)
+    {
+        prior_mass.setZero();
+        std::iota(cf_idx.begin(), cf_idx.end(), 1);
+    }
+
+    Index operator()(const Index obs)
+    {
+        _resolve_cf_idx(obs);
+        return cf_idx.at(sampler(prior_mass));
+    }
+
+    const Index Ntrt;
+
+private:
+    Index obs_idx;
+    std::vector<Index> cf_idx;
+    DS sampler;
+    Vec prior_mass;
+
+    void _resolve_cf_idx(const Index new_obs_idx)
+    {
+        if (new_obs_idx != obs_idx) {
+            ASSERT(new_obs_idx >= 0 && new_obs_idx < Ntrt,
+                   "new index must be in [0, " << Ntrt << ")");
+            Index ri = 0;
+            for (Index r = 0; r < Ntrt; ++r) {
+                if (r != new_obs_idx)
+                    cf_idx[ri++] = r;
+            }
+            obs_idx = new_obs_idx;
+            // for (auto x : cf_idx) {
+            //     std::cout << x << " ";
+            // }
+            // std::cout << std::endl;
+        }
+    }
+};
+
+template <typename OPTIONS>
 int
-aggregate_col(const std::string mtx_file,
-              const std::string idx_file,
-              const std::string prob_file,
-              const std::string ind_file,
-              const std::string lab_file,
-              const std::string output,
-              const Index batch_size = 30000,
-              const bool log_scale = false,
-              const Scalar col_norm = 0)
+aggregate_col(const OPTIONS &options)
 {
+
+    const std::string mtx_file = options.mtx;
+    const std::string idx_file = options.mtx + ".index";
+    const std::string prob_file = options.prob;
+    const std::string ind_file = options.ind;
+    const std::string lab_file = options.lab;
+    const Index ngibbs = options.ngibbs;
+    const Index nburnin = options.nburnin;
+    const std::string row_weight_file = options.row_weight_file;
+    const std::string output = options.out;
 
     Mat Z;
     CHECK(read_data_file(prob_file, Z));
     TLOG("Latent membership matrix: " << Z.rows() << " x " << Z.cols());
 
-    std::vector<std::string> ind;
-    ind.reserve(Z.rows());
-    CHECK(read_vector_file(ind_file, ind));
+    const Index K = Z.cols();
 
-    ASSERT(ind.size() == Z.rows(),
+    ///////////////////////////
+    // individual membership //
+    ///////////////////////////
+
+    std::vector<std::string> indv_membership;
+    indv_membership.reserve(Z.rows());
+    CHECK(read_vector_file(ind_file, indv_membership));
+
+    ASSERT(indv_membership.size() == Z.rows(),
            "Individual membership file mismatches with Z");
 
-    std::unordered_map<std::string, Index> group_idx;
-    std::vector<std::string> group_name;
-    std::vector<Index> group;
-    group.reserve(ind.size());
+    std::vector<std::string> indv_id_name;
+    std::vector<Index> indv; // map: col -> indv index
 
-    for (Index i = 0; i < ind.size(); ++i) {
-        const std::string &ii = ind.at(i);
-        if (group_idx.count(ii) == 0) {
-            const Index j = group_idx.size();
-            group_idx[ii] = j;
-            group_name.push_back(ii);
-        }
-        group.emplace_back(group_idx.at(ii));
-    }
+    std::tie(indv, indv_id_name, std::ignore) =
+        make_indexed_vector<std::string, Index>(indv_membership);
 
-    const Index Nsample = ind.size();
-    const Index Nind = group_idx.size();
-    const Index K = Z.cols();
+    auto indv_index_set = make_index_vec_vec(indv);
+
+    const Index Nsample = indv.size();
+    const Index Nind = indv_id_name.size();
 
     TLOG("Identified " << Nind << " individuals");
 
-    std::vector<std::string> lab;
-    lab.reserve(K);
-    CHECK(read_vector_file(lab_file, lab));
+    /////////////////
+    // label names //
+    /////////////////
 
-    ASSERT(lab.size() == K,
+    std::vector<std::string> lab_name;
+    lab_name.reserve(K);
+    CHECK(read_vector_file(lab_file, lab_name));
+
+    ASSERT(lab_name.size() == K,
            "Need the same number of label names for the columns of Z");
 
     TLOG("Identified " << K << " labels");
 
-    // Read an expression matrix block by block
-
     ASSERT(Z.rows() == Nsample, "rows(Z) != Nsample");
-    const Scalar eps = 1e-8;
 
-    // Indexing if needed
-    CHECK(mmutil::index::build_mmutil_index(mtx_file, idx_file));
-    std::vector<Index> idx_tab;
-    CHECK(mmutil::index::read_mmutil_index(idx_file, idx_tab));
+    ///////////////////////////////////////
+    // case-control treatment membership //
+    ///////////////////////////////////////
 
-    auto nz = [&eps](const Scalar &x) -> Scalar { return x < eps ? 0. : 1.0; };
+    std::vector<std::string> trt_membership;
+    trt_membership.reserve(Nsample);
 
-    auto log2_op = [](const Scalar &x) -> Scalar { return std::log2(1.0 + x); };
+    std::vector<std::string> trt_id_name;
+    std::vector<Index> trt; // map: col -> trt index
 
-    for (Index k = 0; k < K; ++k) {
+    if (file_exists(options.trt_ind)) {
 
-        TLOG("Aggregating on " << lab.at(k) << "...");
+        ////////////////////////
+        // read from the file //
+        ////////////////////////
 
-        std::vector<Eigen::Triplet<Scalar>> triples;
-        triples.reserve(Nsample);
+        CHECK(read_vector_file(options.trt_ind, trt_membership));
+        ASSERT(trt_membership.size() == Nsample,
+               "Treatment membership file mismatches with Z");
 
-        for (Index j = 0; j < Nsample; ++j) {
-            const Scalar pr_jk = Z(j, k);
-            if (pr_jk < eps)
-                continue;
-            triples.emplace_back(Eigen::Triplet<Scalar>(j, group.at(j), pr_jk));
-        }
-
-        SpMat Zk(Nsample, Nind);
-        Zk.setFromTriplets(triples.begin(), triples.end());
-
-        //////////////////////////////////////
-        // collect statistics from the data //
-        //////////////////////////////////////
-
-        Mat S0, S1, S2;
-
-        for (Index lb = 0; lb < Nsample; lb += batch_size) {
-            const Index ub = std::min(Nsample, batch_size + lb);
-            std::vector<Index> subcols_b(ub - lb);
-
-            std::iota(subcols_b.begin(), subcols_b.end(), lb);
-            TLOG("Reading data on the batch [" << lb << ", " << ub << ")");
-            SpMat X_b = mmutil::index::read_eigen_sparse_subset_col(mtx_file,
-                                                                    idx_tab,
-                                                                    subcols_b);
-
-            if (log_scale) {
-                X_b = X_b.unaryExpr(log2_op);
-            }
-
-            if (col_norm >= 1.0) {
-                normalize_columns(X_b);
-                X_b *= col_norm;
-            }
-
-            SpMat Zk_b = row_sub(Zk, subcols_b);
-
-            SpMat S0_b = X_b.unaryExpr(nz) * Zk_b;     //
-            SpMat S1_b = X_b * Zk_b;                   // feature x Nind
-            SpMat S2_b = X_b.cwiseProduct(X_b) * Zk_b; // feature x Nind
-
-            if (lb == 0) {
-                S0.resize(S0_b.rows(), Nind);
-                S0.setZero();
-                S1.resize(S1_b.rows(), Nind);
-                S1.setZero();
-                S2.resize(S2_b.rows(), Nind);
-                S2.setZero();
-            }
-
-            S0 += S0_b;
-            S1 += S1_b;
-            S2 += S2_b;
-
-            TLOG("S1 " << S1.rows() << " x " << S1.cols());
-        }
-
-        const std::string clust_name = lab.at(k);
-
-        const std::string out_hdr = output + "_" + clust_name;
-
-        write_vector_file(out_hdr + ".cols.gz", group_name);
-        write_data_file(out_hdr + ".s0.gz", S0);
-        write_data_file(out_hdr + ".s1.gz", S1);
-        write_data_file(out_hdr + ".s2.gz", S2);
-
-        TLOG("Wrote files for " << lab.at(k));
+        std::tie(trt, trt_id_name, std::ignore) =
+            make_indexed_vector<std::string, Index>(trt_membership);
+    } else {
+        trt.resize(Nsample);
+        std::fill(trt.begin(), trt.end(), 0);
     }
+
+    auto trt_index_set = make_index_vec_vec(trt);
+    const Index Ntrt = trt_index_set.size();
+    cf_index_sampler_t cf_index_sampler(Ntrt);
+
+    TLOG("Identified " << Ntrt << " treatment conditions");
+
+    //////////////////////////////
+    // Indexing all the columns //
+    //////////////////////////////
+
+    std::vector<Index> mtx_idx_tab;
+
+    if (!file_exists(idx_file)) // if needed
+        CHECK(mmutil::index::build_mmutil_index(mtx_file, idx_file));
+    CHECK(mmutil::index::read_mmutil_index(idx_file, mtx_idx_tab));
+
+    mm_info_reader_t info;
+    CHECK(mmutil::bgzf::peek_bgzf_header(mtx_file, info));
+    const Index D = info.max_row;
+
+    ///////////////////////////////////
+    // weights for the rows/features //
+    ///////////////////////////////////
+
+    Vec weights;
+    if (file_exists(row_weight_file)) {
+        std::vector<Scalar> ww;
+        CHECK(read_vector_file(row_weight_file, ww));
+        weights = eigen_vector(ww);
+    }
+
+    Vec ww(D, 1);
+    ww.setOnes();
+
+    if (weights.size() > 0) {
+        ASSERT(weights.rows() == D, "Found invalid weight vector");
+        ww = weights;
+    }
+
+    Mat proj;
+
+    if (Ntrt > 1) {
+
+        ////////////////////////////////
+        // Learn latent embedding ... //
+        ////////////////////////////////
+
+        TLOG("Training SVD for spectral matching ...");
+        svd_out_t svd = take_svd_online_em(mtx_file, idx_file, ww, options);
+        proj.resize(svd.U.rows(), svd.U.cols());
+        proj = svd.U * svd.D.cwiseInverse().asDiagonal(); // feature x rank
+        TLOG("Found projection: " << proj.rows() << " x " << proj.cols());
+    }
+
+    /** Take a block of Y matrix
+     * @param subcol
+     */
+    auto read_y_block = [&](std::vector<Index> &subcol) -> Mat {
+        using namespace mmutil::index;
+        SpMat x = read_eigen_sparse_subset_col(mtx_file, mtx_idx_tab, subcol);
+        return Mat(x);
+    };
+
+    /** Take spectral data for a particular treatment group "k"
+     * @param k type index
+     */
+    auto build_spectral_data = [&](const Index k) -> Mat {
+        std::vector<Index> &col_k = trt_index_set[k];
+        const Index Nk = col_k.size();
+        const Index block_size = options.block_size;
+        const Index rank = proj.cols();
+
+        Mat ret(rank, Nk);
+        ret.setZero();
+
+        Index r = 0;
+        for (Index lb = 0; lb < Nk; lb += block_size) {
+            const Index ub = std::min(Nk, block_size + lb);
+
+            std::vector<Index> subcol_k(ub - lb);
+#ifdef DEBUG
+            TLOG("[" << lb << ", " << ub << ")");
+#endif
+            std::copy(col_k.begin() + lb, col_k.begin() + ub, subcol_k.begin());
+
+            Mat x0 = read_y_block(subcol_k);
+
+#ifdef DEBUG
+            ASSERT(x0.cols() == subcol_k.size(), "singlet: size doesn't match");
+#endif
+
+            Mat xx = make_normalized_laplacian(x0,
+                                               ww,
+                                               options.tau,
+                                               options.col_norm,
+                                               options.log_scale);
+
+#ifdef DEBUG
+            TLOG("X: " << xx.rows() << " x " << xx.cols());
+#endif
+            Mat vv = proj.transpose() * xx; // rank x block_size
+            normalize_columns(vv);
+#ifdef DEBUG
+            TLOG("V: " << vv.rows() << " x " << vv.cols());
+#endif
+            for (Index j = 0; j < vv.cols(); ++j) {
+                ret.col(r) = vv.col(j);
+                ++r;
+            }
+        }
+        return ret;
+    };
+
+    ////////////////////
+    // kNN parameters //
+    ////////////////////
+
+    std::size_t knn = options.knn;
+    std::size_t param_bilink = options.bilink;
+    std::size_t param_nnlist = options.nlist;
+    const Index rank = proj.cols();
+
+    if (param_bilink >= rank) {
+        WLOG("Shrink M value: " << param_bilink << " vs. " << rank);
+        param_bilink = rank - 1;
+    }
+
+    if (param_bilink < 2) {
+        WLOG("too small M value");
+        param_bilink = 2;
+    }
+
+    if (param_nnlist <= knn) {
+        WLOG("too small N value");
+        param_nnlist = knn + 1;
+    }
+
+    ///////////////////////////////////////////////////////
+    // construct dictionary for each treatment condition //
+    ///////////////////////////////////////////////////////
+    std::vector<std::shared_ptr<hnswlib::InnerProductSpace>> vs_vec;
+    std::vector<std::shared_ptr<KnnAlg>> knn_lookup_vec;
+    Mat V(rank, Nsample);
+
+    if (Ntrt > 1) {
+
+        for (Index tt = 0; tt < Ntrt; ++tt) {
+            const Index n_tot = trt_index_set[tt].size();
+
+            using vs_type = hnswlib::InnerProductSpace;
+
+            vs_vec.push_back(std::make_shared<vs_type>(rank));
+
+            vs_type &VS = *vs_vec[vs_vec.size() - 1].get();
+            knn_lookup_vec.push_back(std::make_shared<KnnAlg>(&VS,
+                                                              n_tot,
+                                                              param_bilink,
+                                                              param_nnlist));
+        }
+
+        progress_bar_t<Index> prog(Nsample, 1e2);
+
+        for (Index tt = 0; tt < Ntrt; ++tt) {
+            const Index n_tot = trt_index_set[tt].size();
+            KnnAlg &alg = *knn_lookup_vec[tt].get();
+            Mat dat = build_spectral_data(tt);
+            float *mass = dat.data(); // adding data points
+            for (Index i = 0; i < n_tot; ++i) {
+                alg.addPoint((void *)(mass + rank * i), i);
+                const Index j = trt_index_set.at(tt).at(i);
+                V.col(j) = dat.col(i);
+                prog.update();
+                prog(std::cerr);
+            }
+        }
+    }
+
+    ///////////////////////////
+    // For each individual i //
+    ///////////////////////////
+
+    Mat out_mu;
+    Mat out_mu_sd;
+
+    Mat cf_mu;
+    Mat cf_mu_sd;
+
+    std::vector<std::string> out_col;
+
+    /**
+     * @param i individual index [0, Nind)
+     */
+    auto read_y = [&](const Index i) {
+        using namespace mmutil::index;
+        return read_eigen_sparse_subset_col(mtx_file,
+                                            mtx_idx_tab,
+                                            indv_index_set.at(i));
+    };
+
+    /**
+     * @param i individual index [0, Nind)
+     */
+    auto read_y_cf = [&](const Index i) {
+        using namespace mmutil::index;
+        std::vector<Index> cf_indv_index;
+        cf_indv_index.reserve(indv_index_set.at(i).size());
+        float *mass = V.data();
+
+        for (Index j : indv_index_set.at(i)) {
+            const Index tj = trt.at(j);
+            const Index sj = cf_index_sampler(tj);
+            KnnAlg &alg = *knn_lookup_vec[sj].get();
+
+            const Index n_sj = trt_index_set.at(sj).size();
+            const std::size_t nquery = std::min(options.knn, n_sj);
+
+            auto pq = alg.searchKnn((void *)(mass + rank * j), nquery);
+            std::size_t k;
+
+            while (!pq.empty()) {
+                std::tie(std::ignore, k) = pq.top();
+                cf_indv_index.emplace_back(trt_index_set.at(sj).at(k));
+                pq.pop();
+            }
+        }
+
+        return read_eigen_sparse_subset_col(mtx_file,
+                                            mtx_idx_tab,
+                                            cf_indv_index);
+    };
+
+
+    /**
+     * @param i individual index [0, Nind)
+     */
+    auto read_z = [&](const Index i) {
+        return row_sub(Z, indv_index_set.at(i));
+    };
+
+    auto _sqrt = [](const Scalar &x) -> Scalar {
+        return (x > 0.) ? std::sqrt(x) : 0.;
+    };
+
+    Index s_obs = 0; // cumulative for obs (be cautious; do not touch)
+    Index s_cf = 0;  // cumulative for cf (be cautious; do not touch)
+
+    for (Index i = 0; i < Nind; ++i) {
+
+        const std::string indv_name = indv_id_name.at(i);
+
+        // Y: features x columns
+        SpMat yy = read_y(i);
+        const Index D = yy.rows();
+        const Index N = yy.cols();
+
+        // Ycf: counter-factual data by matching
+        SpMat y0;
+        if (Ntrt > 1) {
+            y0 = read_y_cf(i);
+            // ASSERT(yy.rows() == y0.rows() && yy.cols() == y0.cols(),
+            //        "Y0 must have the same dimensionality");
+        }
+
+        if (i == 0) {
+            out_mu.resize(D, Nind * K);
+            out_mu_sd.resize(D, Nind * K);
+            out_mu.setZero();
+            out_mu_sd.setZero();
+
+            if (Ntrt > 1) {
+                cf_mu.resize(D, Nind * K);
+                cf_mu_sd.resize(D, Nind * K);
+                cf_mu.setZero();
+                cf_mu_sd.setZero();
+            }
+        }
+
+        TLOG("[" << std::setw(10) << (i + 1) << " / " << std::setw(10) << Nind
+                 << "] found " << D << " x " << N << " <-- " << indv_name);
+
+        Mat zz_prob = read_z(i);    // Z: type x columns
+        zz_prob.transposeInPlace(); //
+
+        Mat zz(zz_prob.rows(), zz_prob.cols()); // type x columns
+
+        WLOG("Use discretized annotation matrix Z");
+
+        zz.setZero();
+        for (Index j = 0; j < zz_prob.cols(); ++j) {
+            Index k;
+            zz_prob.col(j).maxCoeff(&k);
+            zz(k, j) += 1.0;
+        }
+
+        ///////////////////////////////////
+        // Calibrate the observed effect //
+        ///////////////////////////////////
+
+        {
+            aggregator_t agg(yy, zz);
+            agg.verbose = options.verbose;
+            agg.run_gibbs(ngibbs, nburnin);
+
+            Mat _mean = agg.mu_stat.mean().transpose();
+            Mat _sd = agg.mu_stat.var().unaryExpr(_sqrt).transpose();
+
+            for (Index k = 0; k < K; ++k) {
+                out_col.push_back(indv_name + "_" + lab_name.at(k));
+                out_mu.col(s_obs) = _mean.col(k);
+                out_mu_sd.col(s_obs) = _sd.col(k);
+                ++s_obs;
+            }
+        }
+
+        TLOG("Calibrated the observed parameters");
+
+        /////////////////////////////////////
+        // Calibrate counterfactual effect //
+        /////////////////////////////////////
+
+        if (Ntrt > 1) {
+            aggregator_t agg(y0, zz);
+            agg.verbose = options.verbose;
+            agg.run_gibbs(ngibbs, nburnin);
+
+            Mat _mean = agg.mu_stat.mean().transpose();
+            Mat _sd = agg.mu_stat.var().unaryExpr(_sqrt).transpose();
+
+            for (Index k = 0; k < K; ++k) {
+                cf_mu.col(s_cf) = _mean.col(k);
+                cf_mu_sd.col(s_cf) = _sd.col(k);
+                ++s_cf;
+            }
+            TLOG("Calibrated the counterfactual parameters");
+        }
+    }
+
+    TLOG("Writing down the estimated effects");
+
+    write_vector_file(output + ".cols.gz", out_col);
+    write_data_file(output + ".mean.gz", out_mu);
+    write_data_file(output + ".sd.gz", out_mu_sd);
+
+    if (Ntrt > 1) {
+        write_data_file(output + ".cf_mean.gz", cf_mu);
+        write_data_file(output + ".cf_sd.gz", cf_mu_sd);
+    }
+
     return EXIT_SUCCESS;
 }
 

@@ -1,6 +1,5 @@
-#include "io.hh"
-#include "mmutil_merge_col.hh"
 #include "mmutil_python.hh"
+#include "mmutil_merge_col.hh"
 
 #ifndef MMUTIL_PYTHON_MERGE_HH_
 #define MMUTIL_PYTHON_MERGE_HH_
