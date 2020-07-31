@@ -569,6 +569,13 @@ run_annotation(const annotation_options_t &options)
         for (Index iter = 0; iter < max_em_iter; ++iter) {
             score = 0;
 
+#ifdef CPYTHON
+            if (PyErr_CheckSignals() != 0) {
+                ELOG("Interrupted at Iter = " << (iter + 1));
+                break;
+            }
+#endif
+
             for (Index lb = 0; lb < N; lb += batch_size) {     // batch
                 const Index ub = std::min(N, batch_size + lb); //
 

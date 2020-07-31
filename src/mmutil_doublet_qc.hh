@@ -111,6 +111,7 @@ parse_doublet_qc_options(const int argc,     //
         "--data (-m)            : data MTX file\n"
         "--feature (-f)         : data row file (features)\n"
         "--row (-f)             : data row file (features)\n"
+        "--col (-c)             : data col file (samples)\n"
         "--assign (-x)          : membership assignment\n"
         "--argmax (-x)          : membership assignment\n"
         "--label (-q)           : label name file\n"

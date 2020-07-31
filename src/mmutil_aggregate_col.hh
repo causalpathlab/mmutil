@@ -24,7 +24,7 @@ struct aggregate_options_t {
     aggregate_options_t()
     {
         mtx = "";
-        prob = "";
+        annot_prob = "";
         ind = "";
         lab = "";
         trt_ind = "";
@@ -46,14 +46,15 @@ struct aggregate_options_t {
 
         em_iter = 10;
         em_tol = 1e-2;
-        em_recalibrate = true;
 
         nburnin = 10;
         ngibbs = 100;
+
+        discretize = true;
     }
 
     Str mtx;
-    Str prob;
+    Str annot_prob;
     Str ind;
     Str trt_ind;
     Str lab;
@@ -78,13 +79,14 @@ struct aggregate_options_t {
     Index block_size;
     Index em_iter;
     Scalar em_tol;
-    bool em_recalibrate;
 
     bool verbose;
 
     // aggregator
     Index nburnin;
     Index ngibbs;
+
+    bool discretize;
 };
 
 template <typename OPTIONS>
@@ -98,16 +100,18 @@ parse_aggregate_options(const int argc,     //
         "[Arguments]\n"
         "--mtx (-m)        : data MTX file (M x N)\n"
         "--data (-m)       : data MTX file (M x N)\n"
-        "--prob (-p)       : annotation/clustering probability (N x K)\n"
+        "--annot_prob (-a) : annotation/clustering probability (N x K)\n"
         "--ind (-i)        : N x 1 sample to individual (n)\n"
         "--trt_ind (-t)    : N x 1 sample to case-control membership\n"
-        "--annot (-a)      : K x 1 (cell type) annotation label name\n"
-        "--lab (-a)        : K x 1 (cell type) annotation label name\n"
+        "--annot (-l)      : K x 1 annotation label name (e.g., cell type) \n"
+        "--lab (-l)        : K x 1 annotation label name (e.g., cell type) \n"
         "--out (-o)        : Output file header\n"
         "\n"
         "[Options]\n"
         "--gibbs (-g)      : number of gibbs sampling (default: 100)\n"
-        "--burnin (-b)     : number of burn-in sampling (default: 10)\n"
+        "--burnin (-G)     : number of burn-in sampling (default: 10)\n"
+        "--discretize (-D) : Use discretized annotation matrix (default: true)\n"
+        "--probabilistic (-P) : Use expected annotation matrix (default: false)\n"
         "\n"
         "[Counterfactual matching options]\n"
         "\n"
@@ -116,7 +120,7 @@ parse_aggregate_options(const int argc,     //
         "--nlist (-n)      : # nearest neighbor lists (default: 5)\n"
         "\n"
         "--rank (-r)       : # of SVD factors (default: rank = 50)\n"
-        "--iter (-l)       : # of LU iterations (default: iter = 5)\n"
+        "--lu_iter (-u)    : # of LU iterations (default: iter = 5)\n"
         "--row_weight (-w) : Feature re-weighting (default: none)\n"
         "--col_norm (-C)   : Column normalization (default: 10000)\n"
         "\n"
@@ -149,29 +153,33 @@ parse_aggregate_options(const int argc,     //
         "See also: https://github.com/nmslib/hnswlib"
         "\n";
 
-    const char *const short_opts = "m:p:i:a:t:o:LRB:r:l:w:g:u:C:k:b:n:hv";
+    const char *const short_opts = "m:a:i:l:t:o:LRB:r:u:w:g:G:DPC:k:b:n:hv";
 
     const option long_opts[] =
         { { "mtx", required_argument, nullptr, 'm' },        //
           { "data", required_argument, nullptr, 'm' },       //
-          { "prob", required_argument, nullptr, 'p' },       //
+          { "annot_prob", required_argument, nullptr, 'a' }, //
           { "ind", required_argument, nullptr, 'i' },        //
-          { "lab", required_argument, nullptr, 'a' },        //
-          { "label", required_argument, nullptr, 'a' },      //
+          { "trt", required_argument, nullptr, 't' },        //
+          { "trt_ind", required_argument, nullptr, 't' },    //
+          { "lab", required_argument, nullptr, 'l' },        //
+          { "label", required_argument, nullptr, 'l' },      //
           { "out", required_argument, nullptr, 'o' },        //
           { "log_scale", no_argument, nullptr, 'L' },        //
           { "raw_scale", no_argument, nullptr, 'R' },        //
           { "block_size", required_argument, nullptr, 'B' }, //
           { "rank", required_argument, nullptr, 'r' },       //
-          { "lu_iter", required_argument, nullptr, 'l' },    //
+          { "lu_iter", required_argument, nullptr, 'u' },    //
           { "row_weight", required_argument, nullptr, 'w' }, //
           { "gibbs", required_argument, nullptr, 'g' },      //
-          { "burnin", required_argument, nullptr, 'u' },     //
-          { "verbose", no_argument, nullptr, 'v' },          //
+          { "burnin", required_argument, nullptr, 'G' },     //
+          { "discretize", no_argument, nullptr, 'D' },       //
+          { "probabilistic", no_argument, nullptr, 'P' },    //
           { "col_norm", required_argument, nullptr, 'C' },   //
           { "knn", required_argument, nullptr, 'k' },        //
           { "bilink", required_argument, nullptr, 'b' },     //
           { "nlist", required_argument, nullptr, 'n' },      //
+          { "verbose", no_argument, nullptr, 'v' },          //
           { nullptr, no_argument, nullptr, 0 } };
 
     while (true) {
@@ -188,8 +196,8 @@ parse_aggregate_options(const int argc,     //
         case 'm':
             options.mtx = std::string(optarg);
             break;
-        case 'p':
-            options.prob = std::string(optarg);
+        case 'a':
+            options.annot_prob = std::string(optarg);
             break;
         case 'i':
             options.ind = std::string(optarg);
@@ -197,30 +205,51 @@ parse_aggregate_options(const int argc,     //
         case 't':
             options.trt_ind = std::string(optarg);
             break;
-        case 'a':
+        case 'l':
             options.lab = std::string(optarg);
             break;
         case 'o':
             options.out = std::string(optarg);
             break;
-        case 'u':
-            options.nburnin = std::stoi(optarg);
-            break;
         case 'g':
             options.ngibbs = std::stoi(optarg);
             break;
+        case 'G':
+            options.nburnin = std::stoi(optarg);
+            break;
+
         case 'r':
             options.rank = std::stoi(optarg);
             break;
-        case 'l':
+
+        case 'u':
             options.lu_iter = std::stoi(optarg);
             break;
+
         case 'w':
             options.row_weight_file = std::string(optarg);
             break;
 
         case 'k':
             options.knn = std::stoi(optarg);
+            break;
+
+        case 'L':
+            options.log_scale = true;
+            options.raw_scale = false;
+            break;
+
+        case 'R':
+            options.log_scale = false;
+            options.raw_scale = true;
+            break;
+
+        case 'P':
+            options.discretize = false;
+            break;
+
+        case 'D':
+            options.discretize = true;
             break;
 
         case 'B':
@@ -230,6 +259,7 @@ parse_aggregate_options(const int argc,     //
         case 'b':
             options.bilink = std::stoi(optarg);
             break;
+
         case 'n':
             options.nlist = std::stoi(optarg);
             break;
@@ -247,7 +277,7 @@ parse_aggregate_options(const int argc,     //
     }
 
     ERR_RET(!file_exists(options.mtx), "No MTX data file");
-    ERR_RET(!file_exists(options.prob), "No PROB data file");
+    ERR_RET(!file_exists(options.annot_prob), "No ANNOT_PROB data file");
     ERR_RET(!file_exists(options.ind), "No IND data file");
     ERR_RET(!file_exists(options.lab), "No LAB data file");
 
@@ -311,7 +341,7 @@ aggregate_col(const OPTIONS &options)
 
     const std::string mtx_file = options.mtx;
     const std::string idx_file = options.mtx + ".index";
-    const std::string prob_file = options.prob;
+    const std::string annot_prob_file = options.annot_prob;
     const std::string ind_file = options.ind;
     const std::string lab_file = options.lab;
     const Index ngibbs = options.ngibbs;
@@ -320,7 +350,7 @@ aggregate_col(const OPTIONS &options)
     const std::string output = options.out;
 
     Mat Z;
-    CHECK(read_data_file(prob_file, Z));
+    CHECK(read_data_file(annot_prob_file, Z));
     TLOG("Latent membership matrix: " << Z.rows() << " x " << Z.cols());
 
     const Index K = Z.cols();
@@ -479,7 +509,7 @@ aggregate_col(const OPTIONS &options)
             Mat x0 = read_y_block(subcol_k);
 
 #ifdef DEBUG
-            ASSERT(x0.cols() == subcol_k.size(), "singlet: size doesn't match");
+            ASSERT(x0.cols() == subcol_k.size(), "size doesn't match");
 #endif
 
             Mat xx = make_normalized_laplacian(x0,
@@ -513,19 +543,22 @@ aggregate_col(const OPTIONS &options)
     std::size_t param_nnlist = options.nlist;
     const Index rank = proj.cols();
 
-    if (param_bilink >= rank) {
-        WLOG("Shrink M value: " << param_bilink << " vs. " << rank);
-        param_bilink = rank - 1;
-    }
+    if (Ntrt > 1) {
 
-    if (param_bilink < 2) {
-        WLOG("too small M value");
-        param_bilink = 2;
-    }
+        if (param_bilink >= rank) {
+            WLOG("Shrink M value: " << param_bilink << " vs. " << rank);
+            param_bilink = rank - 1;
+        }
 
-    if (param_nnlist <= knn) {
-        WLOG("too small N value");
-        param_nnlist = knn + 1;
+        if (param_bilink < 2) {
+            WLOG("too small M value");
+            param_bilink = 2;
+        }
+
+        if (param_nnlist <= knn) {
+            WLOG("too small N value");
+            param_nnlist = knn + 1;
+        }
     }
 
     ///////////////////////////////////////////////////////
@@ -533,9 +566,11 @@ aggregate_col(const OPTIONS &options)
     ///////////////////////////////////////////////////////
     std::vector<std::shared_ptr<hnswlib::InnerProductSpace>> vs_vec;
     std::vector<std::shared_ptr<KnnAlg>> knn_lookup_vec;
-    Mat V(rank, Nsample);
+    Mat V;
 
     if (Ntrt > 1) {
+
+        V.resize(rank, Nsample);
 
         for (Index tt = 0; tt < Ntrt; ++tt) {
             const Index n_tot = trt_index_set[tt].size();
@@ -622,7 +657,6 @@ aggregate_col(const OPTIONS &options)
                                             cf_indv_index);
     };
 
-
     /**
      * @param i individual index [0, Nind)
      */
@@ -639,6 +673,13 @@ aggregate_col(const OPTIONS &options)
 
     for (Index i = 0; i < Nind; ++i) {
 
+#ifdef CPYTHON
+        if (PyErr_CheckSignals() != 0) {
+            ELOG("Interrupted at Ind = " << (i));
+            return EXIT_FAILURE;
+        }
+#endif
+
         const std::string indv_name = indv_id_name.at(i);
 
         // Y: features x columns
@@ -650,8 +691,6 @@ aggregate_col(const OPTIONS &options)
         SpMat y0;
         if (Ntrt > 1) {
             y0 = read_y_cf(i);
-            // ASSERT(yy.rows() == y0.rows() && yy.cols() == y0.cols(),
-            //        "Y0 must have the same dimensionality");
         }
 
         if (i == 0) {
@@ -676,13 +715,17 @@ aggregate_col(const OPTIONS &options)
 
         Mat zz(zz_prob.rows(), zz_prob.cols()); // type x columns
 
-        WLOG("Use discretized annotation matrix Z");
-
-        zz.setZero();
-        for (Index j = 0; j < zz_prob.cols(); ++j) {
-            Index k;
-            zz_prob.col(j).maxCoeff(&k);
-            zz(k, j) += 1.0;
+        if (options.discretize) {
+            TLOG("Using a discretized annotation matrix Z");
+            zz.setZero();
+            for (Index j = 0; j < zz_prob.cols(); ++j) {
+                Index k;
+                zz_prob.col(j).maxCoeff(&k);
+                zz(k, j) += 1.0;
+            }
+        } else {
+            TLOG("Using a probabilistic annotation matrix Z");
+            zz = zz_prob;
         }
 
         ///////////////////////////////////

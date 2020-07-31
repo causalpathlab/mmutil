@@ -61,7 +61,7 @@ mmutil_annotate(PyObject *self, PyObject *args, PyObject *keywords)
 
     annotation_options_t options;
 
-    float log_scale = options.log_scale;
+    bool log_scale = options.log_scale;
     int batch_size = options.batch_size;
     float kappa_max = options.kappa_max;
     int em_iter = options.max_em_iter;

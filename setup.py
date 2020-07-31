@@ -11,8 +11,9 @@ _inc_dirs = [
 
 _compile_args = [
     '--std=c++14',
-    '-O0', # TODO
-    '-DNDEBUG',
+    '-O0', # TODO: -O3
+    '-DDEBUG', # TODO: -DNDEBUG
+    '-DCPYTHON',
     '-DNPY_NO_DEPRECATED_API',
     '-Wno-sign-compare',
     '-Wno-maybe-uninitialized',
@@ -30,7 +31,6 @@ mmutil_module = Extension(
     language='c++',
     extra_compile_args=_compile_args,
 )
-
 
 with open("README.md", "r") as fh:
     _description = fh.read()

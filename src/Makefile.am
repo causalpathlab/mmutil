@@ -4,6 +4,7 @@ bin_PROGRAMS = mmutil_merge_col \
     mmutil_filter_col \
     mmutil_select_row \
     mmutil_select_col \
+    mmutil_bbknn \
     mmutil_aggregate_col \
     mmutil_normalize_col \
     mmutil_spectral_col \
@@ -82,6 +83,16 @@ mmutil_doublet_qc_SOURCES = \
 	mmutil_spectral.hh \
 	mmutil_doublet_qc.hh \
 	mmutil_doublet_qc.cc \
+        inference/sampler.hh \
+	link_community.hh \
+        $(common)
+
+mmutil_bbknn_SOURCES = \
+	mmutil_normalize.hh \
+	mmutil_match.hh \
+	mmutil_spectral.hh \
+	mmutil_bbknn.hh \
+	mmutil_bbknn.cc \
         inference/sampler.hh \
 	link_community.hh \
         $(common)

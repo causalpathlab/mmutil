@@ -539,6 +539,13 @@ take_svd_online_em(const std::string mtx_file,
 
     for (Index t = 0; t < options.em_iter; ++t) {
 
+#ifdef CPYTHON
+        if (PyErr_CheckSignals() != 0) {
+            ELOG("Interrupted at EM = " << (t + 1));
+            break;
+        }
+#endif
+
         Scalar err_curr = 0;
 
         const Index nb = N / block_size + (N % block_size > 0 ? 1 : 0);

@@ -1,55 +1,24 @@
+// Python API for Matrix Market Utility
+// (c) Yongjin Park
+
 #include "mmutil_python.hh"
 #include "mmutil_python_io.hh"
 #include "mmutil_python_merge.hh"
 #include "mmutil_python_annotate.hh"
 #include "mmutil_python_util.hh"
 #include "mmutil_python_index.hh"
-#include "mmutil_python_bbknn.hh"
+#include "mmutil_python_aggregate.hh"
 
 static PyObject *
-mmutil_bbknn(PyObject *self, PyObject *args, PyObject *keywords){
-
-
-
-  static const char *kwlist[] = { "mtx_file", "batch_info", "idx_file", NULL };
-
-    char *mtx_file;
-    PyObject *batchList;
-    char *_idx_file;
-
-    if (!PyArg_ParseTupleAndKeywords(args,
-                                     keywords,                    // keywords
-                                     "sO!|s",                       // format
-                                     const_cast<char **>(kwlist), //
-                                     &mtx_file,                   // .mtx.gz
-				     &PyList_Type,                // check O!
-                                     &batchList,                 // rows
-                                     &_idx_file                   // .index
-                                     )) {
-        return NULL;
-    }
-
-    if (!file_exists(mtx_file)) {
-        PyErr_SetString(PyExc_TypeError, ".mtx file does not exist");
-        return NULL;
-    }
-
-    using namespace mmutil::index;
-
-    std::string idx_file;
-    if (!_idx_file) {
-        idx_file = std::string(mtx_file) + ".index";
-    } else {
-        idx_file = std::string(_idx_file);
-    }
-
-    Py_CHECK(build_mmutil_index(mtx_file, idx_file));
+mmutil_bbknn(PyObject *self, PyObject *args, PyObject *keywords)
+{
 
 
 
     PyObject *ret = PyDict_New();
     return ret;
 }
+
 
 static PyMethodDef mmutil_methods[] = {
     { "read_triplets",
@@ -83,6 +52,11 @@ static PyMethodDef mmutil_methods[] = {
       METH_VARARGS | METH_KEYWORDS,
       _annotate_desc },
 
+    { "aggregate",
+      (PyCFunction)mmutil_aggregate,
+      METH_VARARGS | METH_KEYWORDS,
+      _aggregate_desc },
+
     { "merge",
       (PyCFunction)mmutil_merge_files,
       METH_VARARGS | METH_KEYWORDS,
@@ -102,6 +76,7 @@ const char *module_desc = "* read_triplets\n"
                           "* write_numpy\n"
                           "* merge_files\n"
                           "* annotate\n"
+                          "* aggregate\n"
                           "\n";
 
 static struct PyModuleDef mmutil_module = {

@@ -59,16 +59,24 @@ public:
                 lambda_stat(lambda);
                 mu_stat(mu);
             }
+
+#ifdef CPYTHON
+            if (PyErr_CheckSignals() != 0) {
+                ELOG("Interrupted at Iter = " << (iter + 1));
+                break;
+            }
+#endif
             if (verbose) {
                 if (iter >= burnin)
-                    std::cerr << "\rGibbs   ";
+                    std::cerr << "Gibbs   ";
                 else
-                    std::cerr << "\rBurn-in ";
+                    std::cerr << "Burn-in ";
 
                 std::cerr << "Iter = " << (iter + 1);
                 std::cerr << "\r" << std::flush;
             }
         }
+        std::cerr << "\r" << std::flush;
     }
 
 private:
