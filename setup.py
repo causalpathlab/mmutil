@@ -11,8 +11,8 @@ _inc_dirs = [
 
 _compile_args = [
     '--std=c++14',
-    '-O0', # TODO: -O3
-    '-DDEBUG', # TODO: -DNDEBUG
+    '-O3',
+    '-DNDEBUG',
     '-DCPYTHON',
     '-DNPY_NO_DEPRECATED_API',
     '-Wno-sign-compare',

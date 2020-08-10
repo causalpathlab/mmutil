@@ -221,17 +221,12 @@ mmutil_read_numpy(PyObject *self, PyObject *args, PyObject *keywords)
 }
 
 static PyObject *
-mmutil_read_triplets(PyObject *self, PyObject *args)
+_mmutil_read_triplets(const std::string mtx_file)
 {
-    char *_filename;
-
-    if (!PyArg_ParseTuple(args, "s", &_filename)) {
-        return NULL;
-    }
 
     TripletVec Tvec;
     Index max_row, max_col;
-    const std::string mtx_file(_filename);
+
     TLOG("Reading " << mtx_file);
     std::tie(Tvec, max_row, max_col) = read_matrix_market_file(mtx_file);
     const Index num_elements = Tvec.size();
@@ -300,6 +295,18 @@ mmutil_read_triplets(PyObject *self, PyObject *args)
     PyDict_SetItem(ret, _dim_key, _shape);
 
     return ret;
+}
+
+static PyObject *
+mmutil_read_triplets(PyObject *self, PyObject *args)
+{
+    char *_filename;
+
+    if (!PyArg_ParseTuple(args, "s", &_filename)) {
+        return NULL;
+    }
+
+    return _mmutil_read_triplets(_filename);
 }
 
 template <typename OFS, typename T>

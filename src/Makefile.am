@@ -93,8 +93,6 @@ mmutil_bbknn_SOURCES = \
 	mmutil_spectral.hh \
 	mmutil_bbknn.hh \
 	mmutil_bbknn.cc \
-        inference/sampler.hh \
-	link_community.hh \
         $(common)
 
 ####################

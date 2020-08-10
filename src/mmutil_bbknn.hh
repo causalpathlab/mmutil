@@ -20,8 +20,6 @@
 
 #include "std_util.hh"
 #include "utils/progress.hh"
-#include "inference/sampler.hh"
-#include "link_community.hh"
 
 #ifndef MMUTIL_BBKNN_HH_
 #define MMUTIL_BBKNN_HH_
@@ -80,6 +78,11 @@ struct bbknn_options_t {
     Index em_iter;
     Scalar em_tol;
 
+    // link community
+    Index lc_ngibbs;
+    Index lc_nlocal;
+    Index lc_nburnin;
+
     bool verbose;
 };
 
@@ -93,11 +96,11 @@ parse_bbknn_options(const int argc, const char *argv[], OPTIONS &options)
         "[Arguments]\n"
         "--mtx (-m)        : data MTX file (M x N)\n"
         "--data (-m)       : data MTX file (M x N)\n"
-        "--col (-c)             : data col file (samples)\n"
+        "--col (-c)        : data col file (samples)\n"
         "--batch (-t)      : N x 1 batch assignment file (e.g., individuals) \n"
         "--out (-o)        : Output file header\n"
         "\n"
-        "[Counterfactual matching options]\n"
+        "[Matching options]\n"
         "\n"
         "--knn (-k)        : k nearest neighbours (default: 1)\n"
         "--bilink (-b)     : # of bidirectional links (default: 5)\n"
@@ -135,7 +138,7 @@ parse_bbknn_options(const int argc, const char *argv[], OPTIONS &options)
         "See also: https://github.com/nmslib/hnswlib"
         "\n";
 
-    const char *const short_opts = "m:c:t:o:LRB:r:u:w:C:k:b:n:hv";
+    const char *const short_opts = "m:c:t:o:LRB:r:u:w:C:k:b:n:G:A:U:hv";
 
     const option long_opts[] =
         { { "mtx", required_argument, nullptr, 'm' },        //
@@ -153,6 +156,12 @@ parse_bbknn_options(const int argc, const char *argv[], OPTIONS &options)
           { "knn", required_argument, nullptr, 'k' },        //
           { "bilink", required_argument, nullptr, 'b' },     //
           { "nlist", required_argument, nullptr, 'n' },      //
+          { "gibbs", required_argument, nullptr, 'G' },      //
+          { "ngibbs", required_argument, nullptr, 'G' },     //
+          { "local", required_argument, nullptr, 'A' },      //
+          { "nlocal", required_argument, nullptr, 'A' },     //
+          { "burnin", required_argument, nullptr, 'U' },     //
+          { "nburnin", required_argument, nullptr, 'U' },    //
           { "verbose", no_argument, nullptr, 'v' },          //
           { nullptr, no_argument, nullptr, 0 } };
 
@@ -218,6 +227,18 @@ parse_bbknn_options(const int argc, const char *argv[], OPTIONS &options)
 
         case 'n':
             options.nlist = std::stoi(optarg);
+            break;
+
+        case 'G':
+            options.lc_ngibbs = std::stoi(optarg);
+            break;
+
+        case 'A':
+            options.lc_nlocal = std::stoi(optarg);
+            break;
+
+        case 'U':
+            options.lc_nburnin = std::stoi(optarg);
             break;
 
         case 'v': // -v or --verbose

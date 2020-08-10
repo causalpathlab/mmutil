@@ -8,17 +8,7 @@
 #include "mmutil_python_util.hh"
 #include "mmutil_python_index.hh"
 #include "mmutil_python_aggregate.hh"
-
-static PyObject *
-mmutil_bbknn(PyObject *self, PyObject *args, PyObject *keywords)
-{
-
-
-
-    PyObject *ret = PyDict_New();
-    return ret;
-}
-
+#include "mmutil_python_bbknn.hh"
 
 static PyMethodDef mmutil_methods[] = {
     { "read_triplets",
@@ -44,8 +34,7 @@ static PyMethodDef mmutil_methods[] = {
     { "index",
       (PyCFunction)mmutil_build_index,
       METH_VARARGS,
-      _build_index_desc       
-    },
+      _build_index_desc },
 
     { "annotate",
       (PyCFunction)mmutil_annotate,
@@ -56,6 +45,11 @@ static PyMethodDef mmutil_methods[] = {
       (PyCFunction)mmutil_aggregate,
       METH_VARARGS | METH_KEYWORDS,
       _aggregate_desc },
+
+    { "bbknn",
+      (PyCFunction)mmutil_bbknn,
+      METH_VARARGS | METH_KEYWORDS,
+      _bbknn_desc },
 
     { "merge",
       (PyCFunction)mmutil_merge_files,
@@ -77,6 +71,7 @@ const char *module_desc = "* read_triplets\n"
                           "* merge_files\n"
                           "* annotate\n"
                           "* aggregate\n"
+                          "* bbknn\n"
                           "\n";
 
 static struct PyModuleDef mmutil_module = {
