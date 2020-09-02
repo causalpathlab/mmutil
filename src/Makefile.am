@@ -2,6 +2,8 @@ bin_PROGRAMS = mmutil_merge_col \
     mmutil_index_col \
     mmutil_filter_row \
     mmutil_filter_col \
+    mmutil_row_score \
+    mmutil_col_score \
     mmutil_select_row \
     mmutil_select_col \
     mmutil_bbknn \
@@ -135,7 +137,15 @@ mmutil_embed_annot_SOURCES = \
 mmutil_filter_row_SOURCES = mmutil_filter_row.cc \
     mmutil_filter_row.hh $(common)
 
+mmutil_row_score_SOURCES = mmutil_row_score.cc \
+    mmutil_score.hh                  \
+    mmutil_filter_row.hh $(common)
+
 mmutil_filter_col_SOURCES = mmutil_filter_col.cc \
+    mmutil_filter_col.hh $(common)
+
+mmutil_col_score_SOURCES = mmutil_col_score.cc \
+    mmutil_score.hh                            \
     mmutil_filter_col.hh $(common)
 
 mmutil_select_row_SOURCES = mmutil_select_row.cc \

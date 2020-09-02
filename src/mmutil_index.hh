@@ -198,6 +198,7 @@ int build_mmutil_index(std::string mtx_file,        // bgzip file
     if (last_col != (info.max_col - 1)) {
         ELOG("Failed to index all the columns: " << last_col << " < "
                                                  << (info.max_col - 1));
+	ELOG("Filter out empty columns using `mmutil_filter_col`");
         return EXIT_FAILURE;
     }
 

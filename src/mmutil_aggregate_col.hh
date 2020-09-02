@@ -23,11 +23,12 @@ struct aggregate_options_t {
 
     aggregate_options_t()
     {
-        mtx = "";
-        annot_prob = "";
-        ind = "";
-        lab = "";
-        trt_ind = "";
+        mtx_file = "";
+        annot_prob_file = "";
+        annot_file = "";
+        ind_file = "";
+        lab_file = "";
+        trt_ind_file = "";
         out = "output";
         verbose = false;
 
@@ -51,13 +52,16 @@ struct aggregate_options_t {
         ngibbs = 100;
 
         discretize = true;
+        normalize = false;
     }
 
-    Str mtx;
-    Str annot_prob;
-    Str ind;
-    Str trt_ind;
-    Str lab;
+    Str mtx_file;
+    Str annot_prob_file;
+    Str annot_file;
+    Str col_file;
+    Str ind_file;
+    Str trt_ind_file;
+    Str lab_file;
     Str out;
 
     // SVD and matching
@@ -87,6 +91,7 @@ struct aggregate_options_t {
     Index ngibbs;
 
     bool discretize;
+    bool normalize;
 };
 
 template <typename OPTIONS>
@@ -100,10 +105,11 @@ parse_aggregate_options(const int argc,     //
         "[Arguments]\n"
         "--mtx (-m)        : data MTX file (M x N)\n"
         "--data (-m)       : data MTX file (M x N)\n"
-        "--annot_prob (-a) : annotation/clustering probability (N x K)\n"
+        "--col (-c)        : data column file (N x 1)\n"
+        "--annot (-a)      : annotation/clustering assignment (N x 2)\n"
+        "--annot_prob (-A) : annotation/clustering probability (N x K)\n"
         "--ind (-i)        : N x 1 sample to individual (n)\n"
         "--trt_ind (-t)    : N x 1 sample to case-control membership\n"
-        "--annot (-l)      : K x 1 annotation label name (e.g., cell type) \n"
         "--lab (-l)        : K x 1 annotation label name (e.g., cell type) \n"
         "--out (-o)        : Output file header\n"
         "\n"
@@ -129,36 +135,45 @@ parse_aggregate_options(const int argc,     //
         "\n"
         "[Output]\n"
         "${out}.mean.gz    : (M x n) Mean matrix\n"
-        "${out}.sd.gz      : (M x n) SD matrix\n"
+        "${out}.mu.gz      : (M x n) Scaled mean matrix\n"
+        "${out}.mu_sd.gz   : (M x n) SD for mu\n"
         "${out}.cols.gz    : (n x 1) Column names\n"
         "\n"
         "[Details for kNN graph]\n"
         "\n"
-        "The number of bi-directional links created for every new element  \n"
-        "during construction. Reasonable range for M is 2-100. Higher M work \n"
-        "better on datasets with intrinsic dimensionality and/or high recall, \n"
-        "while low M works better for datasets intrinsic dimensionality and/or\n"
-        "low recalls. \n"
+        "(bilink)\n"
+        "The number of bi-directional links created for every new element\n"
+        "during construction. Reasonable range for M is 2-100. A high M value\n"
+        "works better on datasets with high intrinsic dimensionality and/or\n"
+        "high recall, while a low M value works better for datasets with low\n"
+        "intrinsic dimensionality and/or low recalls.\n"
         "\n"
-        "The size of the dynamic list for the nearest neighbors (used during \n"
-        "the search). A higher more accurate but slower search. This cannot be\n"
-        "set lower than the number nearest neighbors k. The value ef of can be \n"
-        "anything between of the dataset. [Reference] Malkov, Yu, and Yashunin. "
+        "(nlist)\n"
+        "The size of the dynamic list for the nearest neighbors (used during\n"
+        "the search). A higher N value leads to more accurate but slower\n"
+        "search. This cannot be set lower than the number of queried nearest\n"
+        "neighbors k. The value ef of can be anything between k and the size of\n"
+        "the dataset.\n"
         "\n"
-        "`Efficient and robust approximate nearest neighbor search using \n"
-        "Hierarchical Navigable Small World graphs.` \n"
+        "[Reference]\n"
+        "Malkov, Yu, and Yashunin. `Efficient and robust approximate nearest\n"
+        "neighbor search using Hierarchical Navigable Small World graphs.`\n"
         "\n"
-        "preprint: "
-        "https://arxiv.org/abs/1603.09320 \n"
-        "See also: https://github.com/nmslib/hnswlib"
+        "preprint:"
+        "https://arxiv.org/abs/1603.09320\n"
+        "\n"
+        "See also:\n"
+        "https://github.com/nmslib/hnswlib\n"
         "\n";
 
-    const char *const short_opts = "m:a:i:l:t:o:LRB:r:u:w:g:G:DPC:k:b:n:hv";
+    const char *const short_opts = "m:c:a:A:i:l:t:o:LRB:r:u:w:g:G:DPC:k:b:n:hzv";
 
     const option long_opts[] =
         { { "mtx", required_argument, nullptr, 'm' },        //
           { "data", required_argument, nullptr, 'm' },       //
-          { "annot_prob", required_argument, nullptr, 'a' }, //
+          { "annot_prob", required_argument, nullptr, 'A' }, //
+          { "annot", required_argument, nullptr, 'a' },      //
+          { "col", required_argument, nullptr, 'c' },      //
           { "ind", required_argument, nullptr, 'i' },        //
           { "trt", required_argument, nullptr, 't' },        //
           { "trt_ind", required_argument, nullptr, 't' },    //
@@ -179,6 +194,7 @@ parse_aggregate_options(const int argc,     //
           { "knn", required_argument, nullptr, 'k' },        //
           { "bilink", required_argument, nullptr, 'b' },     //
           { "nlist", required_argument, nullptr, 'n' },      //
+          { "normalize", no_argument, nullptr, 'z' },        //
           { "verbose", no_argument, nullptr, 'v' },          //
           { nullptr, no_argument, nullptr, 0 } };
 
@@ -194,19 +210,25 @@ parse_aggregate_options(const int argc,     //
 
         switch (opt) {
         case 'm':
-            options.mtx = std::string(optarg);
+            options.mtx_file = std::string(optarg);
+            break;
+        case 'A':
+            options.annot_prob_file = std::string(optarg);
             break;
         case 'a':
-            options.annot_prob = std::string(optarg);
+            options.annot_file = std::string(optarg);
+            break;
+        case 'c':
+            options.col_file = std::string(optarg);
             break;
         case 'i':
-            options.ind = std::string(optarg);
+            options.ind_file = std::string(optarg);
             break;
         case 't':
-            options.trt_ind = std::string(optarg);
+            options.trt_ind_file = std::string(optarg);
             break;
         case 'l':
-            options.lab = std::string(optarg);
+            options.lab_file = std::string(optarg);
             break;
         case 'o':
             options.out = std::string(optarg);
@@ -264,6 +286,10 @@ parse_aggregate_options(const int argc,     //
             options.nlist = std::stoi(optarg);
             break;
 
+        case 'z':
+            options.normalize = true;
+            break;
+
         case 'v': // -v or --verbose
             options.verbose = true;
             break;
@@ -276,12 +302,14 @@ parse_aggregate_options(const int argc,     //
         }
     }
 
-    ERR_RET(!file_exists(options.mtx), "No MTX data file");
-    ERR_RET(!file_exists(options.annot_prob), "No ANNOT_PROB data file");
-    ERR_RET(!file_exists(options.ind), "No IND data file");
-    ERR_RET(!file_exists(options.lab), "No LAB data file");
+    ERR_RET(!file_exists(options.mtx_file), "No MTX file");
+    ERR_RET(!file_exists(options.annot_prob_file) &&
+                !file_exists(options.annot_file),
+            "No ANNOT or ANNOT_PROB file");
+    ERR_RET(!file_exists(options.ind_file), "No IND file");
+    ERR_RET(!file_exists(options.lab_file), "No LAB file");
 
-    ERR_RET(options.rank < 2, "Too small rank");
+    ERR_RET(options.rank < 1, "Too small rank");
 
     return EXIT_SUCCESS;
 }
@@ -326,10 +354,6 @@ private:
                     cf_idx[ri++] = r;
             }
             obs_idx = new_obs_idx;
-            // for (auto x : cf_idx) {
-            //     std::cout << x << " ";
-            // }
-            // std::cout << std::endl;
         }
     }
 };
@@ -339,21 +363,72 @@ int
 aggregate_col(const OPTIONS &options)
 {
 
-    const std::string mtx_file = options.mtx;
-    const std::string idx_file = options.mtx + ".index";
-    const std::string annot_prob_file = options.annot_prob;
-    const std::string ind_file = options.ind;
-    const std::string lab_file = options.lab;
+    const std::string mtx_file = options.mtx_file;
+    const std::string idx_file = options.mtx_file + ".index";
+    const std::string annot_prob_file = options.annot_prob_file;
+    const std::string annot_file = options.annot_file;
+    const std::string col_file = options.col_file;
+    const std::string ind_file = options.ind_file;
+    const std::string lab_file = options.lab_file;
     const Index ngibbs = options.ngibbs;
     const Index nburnin = options.nburnin;
     const std::string row_weight_file = options.row_weight_file;
     const std::string output = options.out;
 
-    Mat Z;
-    CHECK(read_data_file(annot_prob_file, Z));
-    TLOG("Latent membership matrix: " << Z.rows() << " x " << Z.cols());
+    //////////////////
+    // column names //
+    //////////////////
 
-    const Index K = Z.cols();
+    std::vector<std::string> cols;
+    CHECK(read_vector_file(col_file, cols));
+    const Index Nsample = cols.size();
+
+    /////////////////
+    // label names //
+    /////////////////
+
+    std::vector<std::string> lab_name;
+    CHECK(read_vector_file(lab_file, lab_name));
+    auto lab_position = make_position_dict<std::string, Index>(lab_name);
+    const Index K = lab_name.size();
+
+    ///////////////////////
+    // latent annotation //
+    ///////////////////////
+
+    TLOG("Reading latent annotations");
+
+    Mat Z;
+
+    if (annot_file.size() > 0) {
+        Z.resize(Nsample, K);
+        Z.setZero();
+
+        std::unordered_map<std::string, std::string> annot_dict;
+        CHECK(read_dict_file(annot_file, annot_dict));
+        for (Index j = 0; j < cols.size(); ++j) {
+            const std::string &s = cols.at(j);
+            if (annot_dict.count(s) > 0) {
+                const std::string &t = annot_dict.at(s);
+                if (lab_position.count(t) > 0) {
+                    const Index k = lab_position.at(t);
+                    Z(j, k) = 1.;
+                }
+            }
+        }
+    } else if (annot_prob_file.size() > 0) {
+        CHECK(read_data_file(annot_prob_file, Z));
+    } else {
+        return EXIT_FAILURE;
+    }
+
+    ASSERT(cols.size() == Z.rows(),
+           "column and annotation matrix should match");
+
+    ASSERT(lab_name.size() == Z.cols(),
+           "Need the same number of label names for the columns of Z");
+
+    TLOG("Latent membership matrix: " << Z.rows() << " x " << Z.cols());
 
     ///////////////////////////
     // individual membership //
@@ -374,29 +449,15 @@ aggregate_col(const OPTIONS &options)
 
     auto indv_index_set = make_index_vec_vec(indv);
 
-    const Index Nsample = indv.size();
     const Index Nind = indv_id_name.size();
 
     TLOG("Identified " << Nind << " individuals");
 
-    /////////////////
-    // label names //
-    /////////////////
+    ASSERT(Z.rows() == indv.size(), "rows(Z) != rows(indv)");
 
-    std::vector<std::string> lab_name;
-    lab_name.reserve(K);
-    CHECK(read_vector_file(lab_file, lab_name));
-
-    ASSERT(lab_name.size() == K,
-           "Need the same number of label names for the columns of Z");
-
-    TLOG("Identified " << K << " labels");
-
-    ASSERT(Z.rows() == Nsample, "rows(Z) != Nsample");
-
-    ///////////////////////////////////////
-    // case-control treatment membership //
-    ///////////////////////////////////////
+    ////////////////////////////////////////////
+    // case-control-like treatment membership //
+    ////////////////////////////////////////////
 
     std::vector<std::string> trt_membership;
     trt_membership.reserve(Nsample);
@@ -404,13 +465,10 @@ aggregate_col(const OPTIONS &options)
     std::vector<std::string> trt_id_name;
     std::vector<Index> trt; // map: col -> trt index
 
-    if (file_exists(options.trt_ind)) {
+    if (file_exists(options.trt_ind_file)) {
 
-        ////////////////////////
-        // read from the file //
-        ////////////////////////
+        CHECK(read_vector_file(options.trt_ind_file, trt_membership));
 
-        CHECK(read_vector_file(options.trt_ind, trt_membership));
         ASSERT(trt_membership.size() == Nsample,
                "Treatment membership file mismatches with Z");
 
@@ -435,11 +493,14 @@ aggregate_col(const OPTIONS &options)
 
     if (!file_exists(idx_file)) // if needed
         CHECK(mmutil::index::build_mmutil_index(mtx_file, idx_file));
+
     CHECK(mmutil::index::read_mmutil_index(idx_file, mtx_idx_tab));
 
     mm_info_reader_t info;
     CHECK(mmutil::bgzf::peek_bgzf_header(mtx_file, info));
     const Index D = info.max_row;
+
+    ASSERT(Nsample == info.max_col, "Should have matched .mtx.gz");
 
     ///////////////////////////////////
     // weights for the rows/features //
@@ -501,16 +562,17 @@ aggregate_col(const OPTIONS &options)
             const Index ub = std::min(Nk, block_size + lb);
 
             std::vector<Index> subcol_k(ub - lb);
-#ifdef DEBUG
-            TLOG("[" << lb << ", " << ub << ")");
-#endif
+            // #ifdef DEBUG
+            //             TLOG("[" << lb << ", " << ub << ")");
+            // #endif
             std::copy(col_k.begin() + lb, col_k.begin() + ub, subcol_k.begin());
 
             Mat x0 = read_y_block(subcol_k);
 
-#ifdef DEBUG
-            ASSERT(x0.cols() == subcol_k.size(), "size doesn't match");
-#endif
+            // #ifdef DEBUG
+            //             ASSERT(x0.cols() == subcol_k.size(), "size doesn't
+            //             match");
+            // #endif
 
             Mat xx = make_normalized_laplacian(x0,
                                                ww,
@@ -607,31 +669,38 @@ aggregate_col(const OPTIONS &options)
     // For each individual i //
     ///////////////////////////
 
-    Mat out_mu;
-    Mat out_mu_sd;
+    Mat obs_mu;
+    Mat obs_mu_sd;
+    Mat obs_mean;
+    Mat obs_sum;
+
+    Vec obs_lambda(Nsample);
+    Vec obs_lambda_sd(Nsample);
 
     Mat cf_mu;
     Mat cf_mu_sd;
+    Mat cf_mean;
+    Mat cf_sum;
+
+    Mat wald_stat;
+
+    Vec cf_lambda(Nsample);
+    Vec cf_lambda_sd(Nsample);
+
+    using namespace mmutil::index;
 
     std::vector<std::string> out_col;
 
     /**
      * @param i individual index [0, Nind)
      */
-    auto read_y = [&](const Index i) {
-        using namespace mmutil::index;
-        return read_eigen_sparse_subset_col(mtx_file,
-                                            mtx_idx_tab,
-                                            indv_index_set.at(i));
-    };
 
-    /**
-     * @param i individual index [0, Nind)
-     */
-    auto read_y_cf = [&](const Index i) {
-        using namespace mmutil::index;
+    auto read_cf_idx = [&](const Index i) {
         std::vector<Index> cf_indv_index;
-        cf_indv_index.reserve(indv_index_set.at(i).size());
+        std::vector<Index> obs_indv_index;
+        cf_indv_index.reserve(indv_index_set.at(i).size() * knn);
+        obs_indv_index.reserve(indv_index_set.at(i).size() * knn);
+
         float *mass = V.data();
 
         for (Index j : indv_index_set.at(i)) {
@@ -639,6 +708,7 @@ aggregate_col(const OPTIONS &options)
             const Index sj = cf_index_sampler(tj);
             KnnAlg &alg = *knn_lookup_vec[sj].get();
 
+            // counter-factual data points
             const Index n_sj = trt_index_set.at(sj).size();
             const std::size_t nquery = std::min(options.knn, n_sj);
 
@@ -650,18 +720,14 @@ aggregate_col(const OPTIONS &options)
                 cf_indv_index.emplace_back(trt_index_set.at(sj).at(k));
                 pq.pop();
             }
+
+            // matching observed data points
+            for (Index q = 0; q < nquery; ++q) {
+                obs_indv_index.emplace_back(j);
+            }
         }
 
-        return read_eigen_sparse_subset_col(mtx_file,
-                                            mtx_idx_tab,
-                                            cf_indv_index);
-    };
-
-    /**
-     * @param i individual index [0, Nind)
-     */
-    auto read_z = [&](const Index i) {
-        return row_sub(Z, indv_index_set.at(i));
+        return std::make_tuple(cf_indv_index, obs_indv_index);
     };
 
     auto _sqrt = [](const Scalar &x) -> Scalar {
@@ -670,6 +736,13 @@ aggregate_col(const OPTIONS &options)
 
     Index s_obs = 0; // cumulative for obs (be cautious; do not touch)
     Index s_cf = 0;  // cumulative for cf (be cautious; do not touch)
+
+    const Scalar eps = 1e-4;
+    const Scalar a0 = 1e-4, b0 = 1e-4;
+
+    auto _wald_stat_fun = [&eps](const Scalar &m, const Scalar &v) -> Scalar {
+        return m / std::sqrt(v + eps);
+    };
 
     for (Index i = 0; i < Nind; ++i) {
 
@@ -683,88 +756,181 @@ aggregate_col(const OPTIONS &options)
         const std::string indv_name = indv_id_name.at(i);
 
         // Y: features x columns
-        SpMat yy = read_y(i);
+        SpMat yy = read_eigen_sparse_subset_col(mtx_file,
+                                                mtx_idx_tab,
+                                                indv_index_set.at(i));
+
+        if (options.normalize) {
+            normalize_columns(yy);
+            yy *= options.col_norm;
+        }
+
         const Index D = yy.rows();
         const Index N = yy.cols();
 
-        // Ycf: counter-factual data by matching
-        SpMat y0;
-        if (Ntrt > 1) {
-            y0 = read_y_cf(i);
-        }
-
         if (i == 0) {
-            out_mu.resize(D, Nind * K);
-            out_mu_sd.resize(D, Nind * K);
-            out_mu.setZero();
-            out_mu_sd.setZero();
+            obs_mu.resize(D, Nind * K);
+            obs_mean.resize(D, Nind * K);
+            obs_sum.resize(D, Nind * K);
+            obs_mu_sd.resize(D, Nind * K);
+            obs_mu.setZero();
+            obs_mean.setZero();
+            obs_sum.setZero();
+            obs_mu_sd.setZero();
 
             if (Ntrt > 1) {
                 cf_mu.resize(D, Nind * K);
+                cf_mean.resize(D, Nind * K);
+                cf_sum.resize(D, Nind * K);
                 cf_mu_sd.resize(D, Nind * K);
                 cf_mu.setZero();
+                cf_mean.setZero();
+                cf_sum.setZero();
                 cf_mu_sd.setZero();
+
+                wald_stat.resize(D, Nind * K);
+                wald_stat.setZero();
             }
         }
 
         TLOG("[" << std::setw(10) << (i + 1) << " / " << std::setw(10) << Nind
                  << "] found " << D << " x " << N << " <-- " << indv_name);
 
-        Mat zz_prob = read_z(i);    // Z: type x columns
-        zz_prob.transposeInPlace(); //
+        Mat zz_prob = row_sub(Z, indv_index_set.at(i)); //
+        zz_prob.transposeInPlace();                     // Z: K x N
 
-        Mat zz(zz_prob.rows(), zz_prob.cols()); // type x columns
+        Mat zz(zz_prob.rows(), zz_prob.cols()); // K x N
 
         if (options.discretize) {
-            TLOG("Using a discretized annotation matrix Z");
             zz.setZero();
             for (Index j = 0; j < zz_prob.cols(); ++j) {
                 Index k;
                 zz_prob.col(j).maxCoeff(&k);
                 zz(k, j) += 1.0;
             }
+            TLOG("Using the discretized Z");
         } else {
-            TLOG("Using a probabilistic annotation matrix Z");
             zz = zz_prob;
+            TLOG("Using the probabilistic Z");
         }
 
         ///////////////////////////////////
         // Calibrate the observed effect //
         ///////////////////////////////////
+        aggregator_t obs_agg(yy, zz);
+        obs_agg.verbose = options.verbose;
+        obs_agg.run_gibbs(ngibbs, nburnin, a0, b0, options.log_scale);
+
+        Mat _mu = obs_agg.mu_stat.mean().transpose();
+        Mat _mu_sd = obs_agg.mu_stat.var().unaryExpr(_sqrt).transpose();
 
         {
-            aggregator_t agg(yy, zz);
-            agg.verbose = options.verbose;
-            agg.run_gibbs(ngibbs, nburnin);
+            Vec _lambda = obs_agg.lambda_stat.mean();
+            Vec _lambda_sd = obs_agg.lambda_stat.var().unaryExpr(_sqrt);
 
-            Mat _mean = agg.mu_stat.mean().transpose();
-            Mat _sd = agg.mu_stat.var().unaryExpr(_sqrt).transpose();
+            for (Index j = 0; j < N; ++j) {
+                const Index l = indv_index_set.at(i).at(j);
+                obs_lambda(l) = _lambda(j);
+                obs_lambda_sd(l) = _lambda_sd(j);
+            }
+
+            Mat _sum = yy * zz.transpose();            // D x K
+            Vec _denom = zz * Mat::Ones(zz.cols(), 1); // K x 1
 
             for (Index k = 0; k < K; ++k) {
                 out_col.push_back(indv_name + "_" + lab_name.at(k));
-                out_mu.col(s_obs) = _mean.col(k);
-                out_mu_sd.col(s_obs) = _sd.col(k);
+                obs_mu.col(s_obs) = _mu.col(k);
+                obs_mu_sd.col(s_obs) = _mu_sd.col(k);
+
+                const Scalar _denom_k = _denom(k) + eps;
+                obs_mean.col(s_obs) = _sum.col(k) / _denom_k;
+                obs_sum.col(s_obs) = _sum.col(k);
+
                 ++s_obs;
             }
+
+            TLOG("Calibrated the observed parameters");
         }
 
-        TLOG("Calibrated the observed parameters");
-
-        /////////////////////////////////////
-        // Calibrate counterfactual effect //
-        /////////////////////////////////////
-
         if (Ntrt > 1) {
-            aggregator_t agg(y0, zz);
-            agg.verbose = options.verbose;
-            agg.run_gibbs(ngibbs, nburnin);
 
-            Mat _mean = agg.mu_stat.mean().transpose();
-            Mat _sd = agg.mu_stat.var().unaryExpr(_sqrt).transpose();
+            /////////////////////////////////////
+            // Calibrate counterfactual effect //
+            /////////////////////////////////////
+
+            std::vector<Index> cf_index;
+            std::vector<Index> obs_index;
+
+            std::tie(cf_index, obs_index) = read_cf_idx(i);
+
+            SpMat y0 =
+                read_eigen_sparse_subset_col(mtx_file, mtx_idx_tab, cf_index);
+
+            if (options.normalize) {
+                normalize_columns(y0);
+                y0 *= options.col_norm;
+            }
+
+            Mat z0_prob = row_sub(Z, obs_index); //
+            z0_prob.transposeInPlace();          // Z: K0 x N
+
+            Mat z0(z0_prob.rows(), z0_prob.cols()); // K x N
+
+            if (options.discretize) {
+                z0.setZero();
+                for (Index j = 0; j < z0_prob.cols(); ++j) {
+                    Index k;
+                    z0_prob.col(j).maxCoeff(&k);
+                    z0(k, j) += 1.0;
+                }
+                TLOG("Using the discretized Z0");
+            } else {
+                z0 = z0_prob;
+                TLOG("Using the probabilistic Z0");
+            }
+
+            aggregator_t agg(y0, z0);
+            agg.verbose = options.verbose;
+            agg.run_gibbs(ngibbs, nburnin, a0, b0, options.log_scale);
+
+            Mat _cf_mu = agg.mu_stat.mean().transpose();
+            Mat _cf_mu_sd = agg.mu_stat.var().unaryExpr(_sqrt).transpose();
+
+            Vec _cf_lambda = agg.lambda_stat.mean();
+            Vec _cf_lambda_sd = agg.lambda_stat.var().unaryExpr(_sqrt);
+
+            for (Index j = 0; j < N; ++j) {
+                const Index l = indv_index_set.at(i).at(j);
+                cf_lambda(l) = _cf_lambda(j);
+                cf_lambda_sd(l) = _cf_lambda_sd(j);
+            }
+
+            Mat _sum = y0 * z0.transpose();            // D x K
+            Vec _denom = z0 * Mat::Ones(z0.cols(), 1); // K x 1
+
+            /////////////////////////////////
+            // Test significant divergence //
+            /////////////////////////////////
+
+            Mat _stat = (_mu - _cf_mu)
+                            .binaryExpr(_mu_sd.cwiseProduct(_mu_sd) +
+                                            _cf_mu_sd.cwiseProduct(_cf_mu_sd),
+                                        _wald_stat_fun);
+
+            /////////////////////
+            // collect results //
+            /////////////////////
 
             for (Index k = 0; k < K; ++k) {
-                cf_mu.col(s_cf) = _mean.col(k);
-                cf_mu_sd.col(s_cf) = _sd.col(k);
+                cf_mu.col(s_cf) = _cf_mu.col(k);
+                cf_mu_sd.col(s_cf) = _cf_mu_sd.col(k);
+
+                const Scalar _denom_k = _denom(k) + eps;
+                cf_sum.col(s_cf) = _sum.col(k);
+                cf_mean.col(s_cf) = _sum.col(k) / _denom_k;
+
+                wald_stat.col(s_cf) = _stat.col(k);
+
                 ++s_cf;
             }
             TLOG("Calibrated the counterfactual parameters");
@@ -774,12 +940,25 @@ aggregate_col(const OPTIONS &options)
     TLOG("Writing down the estimated effects");
 
     write_vector_file(output + ".cols.gz", out_col);
-    write_data_file(output + ".mean.gz", out_mu);
-    write_data_file(output + ".sd.gz", out_mu_sd);
+
+    write_data_file(output + ".mu.gz", obs_mu);
+    write_data_file(output + ".mean.gz", obs_mean);
+    write_data_file(output + ".sum.gz", obs_sum);
+    write_data_file(output + ".mu_sd.gz", obs_mu_sd);
+
+    write_data_file(output + ".lambda.gz", obs_lambda);
+    write_data_file(output + ".lambda_sd.gz", obs_lambda_sd);
 
     if (Ntrt > 1) {
-        write_data_file(output + ".cf_mean.gz", cf_mu);
-        write_data_file(output + ".cf_sd.gz", cf_mu_sd);
+        write_data_file(output + ".cf_mu.gz", cf_mu);
+        write_data_file(output + ".cf_mean.gz", cf_mean);
+        write_data_file(output + ".cf_sum.gz", cf_sum);
+        write_data_file(output + ".cf_mu_sd.gz", cf_mu_sd);
+
+        write_data_file(output + ".wald.gz", wald_stat);
+
+        write_data_file(output + ".cf_lambda.gz", cf_lambda);
+        write_data_file(output + ".cf_lambda_sd.gz", cf_lambda_sd);
     }
 
     return EXIT_SUCCESS;

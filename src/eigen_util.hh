@@ -34,6 +34,19 @@ eigen_vector(const std::vector<T> &std_vec)
     return ret;
 }
 
+template <typename T, typename T2>
+inline auto
+eigen_vector_(const std::vector<T> &std_vec)
+{
+    Eigen::Matrix<T2, Eigen::Dynamic, 1> ret(std_vec.size());
+
+    for (std::size_t j = 0; j < std_vec.size(); ++j) {
+        ret(j) = std_vec.at(j);
+    }
+
+    return ret;
+}
+
 template <typename EigenVec, typename StdVec>
 inline void
 std_vector(const EigenVec eigen_vec, StdVec &ret)
@@ -143,9 +156,10 @@ row_score_sd(const Eigen::SparseMatrixBase<Derived> &_xx)
 }
 
 template <typename Derived, typename ROWS>
-inline Eigen::
-    SparseMatrix<typename Derived::Scalar, Eigen::RowMajor, std::ptrdiff_t>
-    row_sub(const Eigen::SparseMatrixBase<Derived> &_mat, const ROWS &sub_rows)
+inline Eigen::SparseMatrix<typename Derived::Scalar, //
+                           Eigen::RowMajor,          //
+                           std::ptrdiff_t>
+row_sub(const Eigen::SparseMatrixBase<Derived> &_mat, const ROWS &sub_rows)
 {
     using SpMat = typename Eigen::
         SparseMatrix<typename Derived::Scalar, Eigen::RowMajor, std::ptrdiff_t>;

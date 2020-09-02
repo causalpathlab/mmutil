@@ -21,6 +21,24 @@ std_argsort(const Vec &data)
     return index;
 }
 
+/**
+ * vector -> map: name -> position index
+ */
+template <typename S, typename I>
+std::unordered_map<S, I>
+make_position_dict(const std::vector<S> &name_vec)
+{
+
+    std::unordered_map<S, I> name_to_id;
+
+    for (I i = 0; i < name_vec.size(); ++i) {
+        const S &j = name_vec.at(i);
+        name_to_id[j] = i;
+    }
+
+    return name_to_id;
+}
+
 template <typename S, typename I>
 std::tuple<std::vector<I>, std::vector<S>, std::unordered_map<S, I>>
 make_indexed_vector(const std::vector<S> &name_vec)

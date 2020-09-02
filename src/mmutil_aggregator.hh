@@ -12,7 +12,6 @@ struct aggregator_t {
         , zz(_zz)
         , D(yy.rows())
         , N(yy.cols())
-        , nn(static_cast<Scalar>(N))
         , K(zz.rows())
         , mu(K, D)
         , lambda(N, 1)
@@ -39,7 +38,6 @@ struct aggregator_t {
 
     const Index D;
     const Index N;
-    const Scalar nn;
     const Index K;
 
     bool verbose;
@@ -48,16 +46,28 @@ public:
     void run_gibbs(const Index ngibbs,
                    const Index burnin = 10,
                    const Scalar a0 = 1e-4,
-                   const Scalar b0 = 1e-4)
+                   const Scalar b0 = 1e-4,
+                   const bool log_scale = false)
     {
-        if (verbose)
-            solve_mu(a0, b0);
+        solve_mu(a0, b0);
+        solve_lambda(a0, b0);
+        solve_mu(a0, b0);
+
+        auto log_op = [](const Scalar &x) -> Scalar {
+            return fasterlog(1. + x);
+        };
+
         for (Index iter = 0; iter < (burnin + ngibbs); ++iter) {
             sample_lambda();
             sample_mu();
             if (iter >= burnin) {
-                lambda_stat(lambda);
-                mu_stat(mu);
+                if (log_scale) {
+                    lambda_stat(lambda.unaryExpr(log_op));
+                    mu_stat(mu.unaryExpr(log_op));
+                } else {
+                    lambda_stat(lambda);
+                    mu_stat(mu);
+                }
             }
 
 #ifdef CPYTHON
@@ -67,12 +77,14 @@ public:
             }
 #endif
             if (verbose) {
+                const Index tt = (iter + 1);
+
                 if (iter >= burnin)
                     std::cerr << "Gibbs   ";
                 else
                     std::cerr << "Burn-in ";
 
-                std::cerr << "Iter = " << (iter + 1);
+                std::cerr << "Iter = " << tt;
                 std::cerr << "\r" << std::flush;
             }
         }
@@ -82,20 +94,20 @@ public:
 private:
     inline void solve_mu(const Scalar a0 = 1e-4, const Scalar b0 = 1e-4)
     {
-        denomK = zz * lambda / nn;
+        denomK = zz * lambda;
 
-        auto _norm = [a0, b0](const Scalar &a, const Scalar b) {
+        auto _opt = [a0, b0](const Scalar &a, const Scalar b) {
             return (a + a0) / (b + b0);
         };
 
         for (Index g = 0; g < D; ++g) {
-            mu.col(g) = ZY.col(g).binaryExpr(denomK, _norm);
+            mu.col(g) = ZY.col(g).binaryExpr(denomK, _opt);
         }
     }
 
     inline void sample_mu(const Scalar a0 = 1e-4, const Scalar b0 = 1e-4)
     {
-        denomK = zz * lambda / nn;
+        denomK = zz * lambda;
 
         auto _sample = [this, a0, b0](const Scalar &a,
                                       const Scalar &b) -> Scalar {
@@ -109,19 +121,19 @@ private:
         }
     }
 
-    inline void solve_lambda(const Scalar a0 = 1e-4, const Scalar b0 = 1e-4)
+    inline void solve_lambda(const Scalar a0 = 1., const Scalar b0 = 1.)
     {
-        auto _norm = [a0, b0](const Scalar &a, const Scalar b) {
+        auto _opt = [a0, b0](const Scalar &a, const Scalar b) {
             return (a + a0) / (b + b0);
         };
 
-        denomN = zz.transpose() * mu * onesD / nn;
-        lambda = Ytot.binaryExpr(denomN, _norm);
+        denomN = zz.transpose() * mu * onesD;
+        lambda = Ytot.binaryExpr(denomN, _opt);
     }
 
-    inline void sample_lambda(const Scalar a0 = 1e-4, const Scalar b0 = 1e-4)
+    inline void sample_lambda(const Scalar a0 = 1., const Scalar b0 = 1.)
     {
-        denomN = zz.transpose() * mu * onesD / nn;
+        denomN = zz.transpose() * mu * onesD;
 
         auto _sample = [this, a0, b0](const Scalar &a,
                                       const Scalar &b) -> Scalar {
