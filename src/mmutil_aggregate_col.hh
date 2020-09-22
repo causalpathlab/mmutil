@@ -33,7 +33,7 @@ struct aggregate_options_t {
         verbose = false;
 
         tau = 1.0;
-        rank = 50;
+        rank = 10;
         lu_iter = 5;
         knn = 1;
         bilink = 5; // 2 ~ 100 (bi-directional link per element)
@@ -51,8 +51,13 @@ struct aggregate_options_t {
         nburnin = 10;
         ngibbs = 100;
 
+        wald_reg = 1e-2;
+        gamma_a0 = 1e-2;
+        gamma_b0 = 1e-2;
+
         discretize = true;
         normalize = false;
+        do_bayesian = false;
     }
 
     Str mtx_file;
@@ -84,6 +89,11 @@ struct aggregate_options_t {
     Index em_iter;
     Scalar em_tol;
 
+    // For Bayesian calibration and Wald stat
+    Scalar wald_reg;
+    Scalar gamma_a0;
+    Scalar gamma_b0;
+
     bool verbose;
 
     // aggregator
@@ -92,6 +102,7 @@ struct aggregate_options_t {
 
     bool discretize;
     bool normalize;
+    bool do_bayesian;
 };
 
 template <typename OPTIONS>
@@ -103,41 +114,52 @@ parse_aggregate_options(const int argc,     //
     const char *_usage =
         "\n"
         "[Arguments]\n"
-        "--mtx (-m)        : data MTX file (M x N)\n"
-        "--data (-m)       : data MTX file (M x N)\n"
-        "--col (-c)        : data column file (N x 1)\n"
-        "--annot (-a)      : annotation/clustering assignment (N x 2)\n"
-        "--annot_prob (-A) : annotation/clustering probability (N x K)\n"
-        "--ind (-i)        : N x 1 sample to individual (n)\n"
-        "--trt_ind (-t)    : N x 1 sample to case-control membership\n"
-        "--lab (-l)        : K x 1 annotation label name (e.g., cell type) \n"
-        "--out (-o)        : Output file header\n"
+        "--mtx (-m)           : data MTX file (M x N)\n"
+        "--data (-m)          : data MTX file (M x N)\n"
+        "--col (-c)           : data column file (N x 1)\n"
+        "--annot (-a)         : annotation/clustering assignment (N x 2)\n"
+        "--annot_prob (-A)    : annotation/clustering probability (N x K)\n"
+        "--ind (-i)           : N x 1 sample to individual (n)\n"
+        "--trt_ind (-t)       : N x 1 sample to case-control membership\n"
+        "--lab (-l)           : K x 1 annotation label name (e.g., cell type) \n"
+        "--out (-o)           : Output file header\n"
         "\n"
         "[Options]\n"
-        "--gibbs (-g)      : number of gibbs sampling (default: 100)\n"
-        "--burnin (-G)     : number of burn-in sampling (default: 10)\n"
-        "--discretize (-D) : Use discretized annotation matrix (default: true)\n"
+        "--bayesian (-B)      : Bayesian quantification (default: false)\n"
+        "--gibbs (-g)         : number of gibbs sampling (default: 100)\n"
+        "--burnin (-G)        : number of burn-in sampling (default: 10)\n"
+        "--discretize (-D)    : Use discretized annotation matrix (default: true)\n"
         "--probabilistic (-P) : Use expected annotation matrix (default: false)\n"
+        "\n"
+        "--wald_reg           : regularization for the wald test (default: 1e-2)"
+        "--gamma_a0           : prior for gamma distribution(a0,b0) (default: 1e-2)"
+        "--gamma_b0           : prior for gamma distribution(a0,b0) (default: 1e-2)"
         "\n"
         "[Counterfactual matching options]\n"
         "\n"
-        "--knn (-k)        : k nearest neighbours (default: 1)\n"
-        "--bilink (-b)     : # of bidirectional links (default: 5)\n"
-        "--nlist (-n)      : # nearest neighbor lists (default: 5)\n"
+        "--knn (-k)           : k nearest neighbours (default: 1)\n"
+        "--bilink (-b)        : # of bidirectional links (default: 5)\n"
+        "--nlist (-n)         : # nearest neighbor lists (default: 5)\n"
         "\n"
-        "--rank (-r)       : # of SVD factors (default: rank = 50)\n"
-        "--lu_iter (-u)    : # of LU iterations (default: iter = 5)\n"
-        "--row_weight (-w) : Feature re-weighting (default: none)\n"
-        "--col_norm (-C)   : Column normalization (default: 10000)\n"
+        "--rank (-r)          : # of SVD factors (default: rank = 50)\n"
+        "--lu_iter (-u)       : # of LU iterations (default: iter = 5)\n"
+        "--row_weight (-w)    : Feature re-weighting (default: none)\n"
+        "--col_norm (-C)      : Column normalization (default: 10000)\n"
         "\n"
-        "--log_scale (-L)  : Data in a log-scale (default: false)\n"
-        "--raw_scale (-R)  : Data in a raw-scale (default: true)\n"
+        "--log_scale (-L)     : Data in a log-scale (default: false)\n"
+        "--raw_scale (-R)     : Data in a raw-scale (default: true)\n"
         "\n"
         "[Output]\n"
-        "${out}.mean.gz    : (M x n) Mean matrix\n"
-        "${out}.mu.gz      : (M x n) Scaled mean matrix\n"
-        "${out}.mu_sd.gz   : (M x n) SD for mu\n"
-        "${out}.cols.gz    : (n x 1) Column names\n"
+        "\n"
+        "${out}.mean.gz       : (M x n) Mean matrix\n"
+        "${out}.sum.gz        : (M x n) Summation matrix\n"
+        "${out}.cols.gz       : (n x 1) Column names\n"
+        "\n"
+        "${out}.mu.gz         : (M x n) Scaled mean matrix\n"
+        "${out}.mu_sd.gz      : (M x n) SD for mu\n"
+        "${out}.lambda.gz     : (N x 1) Scaling matrix\n"
+        "${out}.lambda_sd.gz  : (N x 1) SD for lambda\n"
+        "${out}.wald.gz       : (M x n) Wald statistic matrix\n"
         "\n"
         "[Details for kNN graph]\n"
         "\n"
@@ -166,14 +188,15 @@ parse_aggregate_options(const int argc,     //
         "https://github.com/nmslib/hnswlib\n"
         "\n";
 
-    const char *const short_opts = "m:c:a:A:i:l:t:o:LRB:r:u:w:g:G:DPC:k:b:n:hzv";
+    const char *const short_opts =
+        "m:c:a:A:i:l:t:o:LRS:r:u:w:g:G:BDPC:k:b:n:hzv";
 
     const option long_opts[] =
         { { "mtx", required_argument, nullptr, 'm' },        //
           { "data", required_argument, nullptr, 'm' },       //
           { "annot_prob", required_argument, nullptr, 'A' }, //
           { "annot", required_argument, nullptr, 'a' },      //
-          { "col", required_argument, nullptr, 'c' },      //
+          { "col", required_argument, nullptr, 'c' },        //
           { "ind", required_argument, nullptr, 'i' },        //
           { "trt", required_argument, nullptr, 't' },        //
           { "trt_ind", required_argument, nullptr, 't' },    //
@@ -182,12 +205,14 @@ parse_aggregate_options(const int argc,     //
           { "out", required_argument, nullptr, 'o' },        //
           { "log_scale", no_argument, nullptr, 'L' },        //
           { "raw_scale", no_argument, nullptr, 'R' },        //
-          { "block_size", required_argument, nullptr, 'B' }, //
+          { "block_size", required_argument, nullptr, 'S' }, //
           { "rank", required_argument, nullptr, 'r' },       //
           { "lu_iter", required_argument, nullptr, 'u' },    //
           { "row_weight", required_argument, nullptr, 'w' }, //
           { "gibbs", required_argument, nullptr, 'g' },      //
           { "burnin", required_argument, nullptr, 'G' },     //
+          { "bayesian", no_argument, nullptr, 'B' },         //
+          { "Bayesian", no_argument, nullptr, 'B' },         //
           { "discretize", no_argument, nullptr, 'D' },       //
           { "probabilistic", no_argument, nullptr, 'P' },    //
           { "col_norm", required_argument, nullptr, 'C' },   //
@@ -266,6 +291,10 @@ parse_aggregate_options(const int argc,     //
             options.raw_scale = true;
             break;
 
+        case 'B':
+            options.do_bayesian = true;
+            break;
+
         case 'P':
             options.discretize = false;
             break;
@@ -274,7 +303,7 @@ parse_aggregate_options(const int argc,     //
             options.discretize = true;
             break;
 
-        case 'B':
+        case 'S':
             options.block_size = std::stoi(optarg);
             break;
 
@@ -310,6 +339,10 @@ parse_aggregate_options(const int argc,     //
     ERR_RET(!file_exists(options.lab_file), "No LAB file");
 
     ERR_RET(options.rank < 1, "Too small rank");
+
+    if (options.ngibbs < 1) {
+        options.do_bayesian = false;
+    }
 
     return EXIT_SUCCESS;
 }
@@ -467,10 +500,13 @@ aggregate_col(const OPTIONS &options)
 
     if (file_exists(options.trt_ind_file)) {
 
+        TLOG("Found treatment membership file: " << options.trt_ind_file);
+
         CHECK(read_vector_file(options.trt_ind_file, trt_membership));
 
-        ASSERT(trt_membership.size() == Nsample,
-               "Treatment membership file mismatches with Z");
+        ASSERT(trt_membership.size() == Z.rows(),
+               "size(Treatment) != row(Z) " << trt_membership.size() << " vs. "
+                                            << Z.rows());
 
         std::tie(trt, trt_id_name, std::ignore) =
             make_indexed_vector<std::string, Index>(trt_membership);
@@ -495,6 +531,8 @@ aggregate_col(const OPTIONS &options)
         CHECK(mmutil::index::build_mmutil_index(mtx_file, idx_file));
 
     CHECK(mmutil::index::read_mmutil_index(idx_file, mtx_idx_tab));
+
+    CHECK(mmutil::index::check_index_tab(mtx_file, mtx_idx_tab));
 
     mm_info_reader_t info;
     CHECK(mmutil::bgzf::peek_bgzf_header(mtx_file, info));
@@ -673,6 +711,7 @@ aggregate_col(const OPTIONS &options)
     Mat obs_mu_sd;
     Mat obs_mean;
     Mat obs_sum;
+    Mat obs_sd;
 
     Vec obs_lambda(Nsample);
     Vec obs_lambda_sd(Nsample);
@@ -681,6 +720,7 @@ aggregate_col(const OPTIONS &options)
     Mat cf_mu_sd;
     Mat cf_mean;
     Mat cf_sum;
+    Mat cf_sd;
 
     Mat wald_stat;
 
@@ -737,8 +777,8 @@ aggregate_col(const OPTIONS &options)
     Index s_obs = 0; // cumulative for obs (be cautious; do not touch)
     Index s_cf = 0;  // cumulative for cf (be cautious; do not touch)
 
-    const Scalar eps = 1e-4;
-    const Scalar a0 = 1e-4, b0 = 1e-4;
+    const Scalar eps = options.wald_reg;
+    const Scalar a0 = options.gamma_a0, b0 = options.gamma_b0;
 
     auto _wald_stat_fun = [&eps](const Scalar &m, const Scalar &v) -> Scalar {
         return m / std::sqrt(v + eps);
@@ -755,6 +795,10 @@ aggregate_col(const OPTIONS &options)
 
         const std::string indv_name = indv_id_name.at(i);
 
+        TLOG("Reading " << indv_index_set.at(i).size()
+                        << " cells for an individual " << i << " [" << indv_name
+                        << "]");
+
         // Y: features x columns
         SpMat yy = read_eigen_sparse_subset_col(mtx_file,
                                                 mtx_idx_tab,
@@ -769,32 +813,48 @@ aggregate_col(const OPTIONS &options)
         const Index N = yy.cols();
 
         if (i == 0) {
-            obs_mu.resize(D, Nind * K);
+            if (options.do_bayesian) {
+                obs_mu.resize(D, Nind * K);
+                obs_mu_sd.resize(D, Nind * K);
+                obs_mu.setZero();
+                obs_mu_sd.setZero();
+            }
             obs_mean.resize(D, Nind * K);
             obs_sum.resize(D, Nind * K);
-            obs_mu_sd.resize(D, Nind * K);
-            obs_mu.setZero();
             obs_mean.setZero();
             obs_sum.setZero();
-            obs_mu_sd.setZero();
+            obs_sd.resize(D, Nind * K);
+            obs_sd.setZero();
 
             if (Ntrt > 1) {
-                cf_mu.resize(D, Nind * K);
+                if (options.do_bayesian) {
+                    cf_mu.resize(D, Nind * K);
+                    cf_mu_sd.resize(D, Nind * K);
+                    cf_mu.setZero();
+                    cf_mu_sd.setZero();
+
+                    wald_stat.resize(D, Nind * K);
+                    wald_stat.setZero();
+                }
                 cf_mean.resize(D, Nind * K);
                 cf_sum.resize(D, Nind * K);
-                cf_mu_sd.resize(D, Nind * K);
-                cf_mu.setZero();
                 cf_mean.setZero();
                 cf_sum.setZero();
-                cf_mu_sd.setZero();
 
-                wald_stat.resize(D, Nind * K);
-                wald_stat.setZero();
+                cf_sd.resize(D, Nind * K);
+                cf_sd.setZero();
             }
         }
 
+        auto is_nz = [](const Scalar &y) -> Scalar {
+            return std::abs(y) > 1e-8 ? 1. : 0.;
+        };
+
+        const Scalar y_nnz = yy.unaryExpr(is_nz).sum();
+
         TLOG("[" << std::setw(10) << (i + 1) << " / " << std::setw(10) << Nind
-                 << "] found " << D << " x " << N << " <-- " << indv_name);
+                 << "] found " << D << " x " << N << " <-- " << indv_name
+                 << " NNZ = " << y_nnz);
 
         Mat zz_prob = row_sub(Z, indv_index_set.at(i)); //
         zz_prob.transposeInPlace();                     // Z: K x N
@@ -808,23 +868,25 @@ aggregate_col(const OPTIONS &options)
                 zz_prob.col(j).maxCoeff(&k);
                 zz(k, j) += 1.0;
             }
-            TLOG("Using the discretized Z");
+            TLOG("Using the discretized Z: " << zz.sum());
         } else {
             zz = zz_prob;
-            TLOG("Using the probabilistic Z");
+            TLOG("Using the probabilistic Z: " << zz.sum());
         }
 
         ///////////////////////////////////
         // Calibrate the observed effect //
         ///////////////////////////////////
-        aggregator_t obs_agg(yy, zz);
-        obs_agg.verbose = options.verbose;
-        obs_agg.run_gibbs(ngibbs, nburnin, a0, b0, options.log_scale);
+        Mat _mu, _mu_sd;
 
-        Mat _mu = obs_agg.mu_stat.mean().transpose();
-        Mat _mu_sd = obs_agg.mu_stat.var().unaryExpr(_sqrt).transpose();
+        if (options.do_bayesian) {
 
-        {
+            aggregator_t obs_agg(yy, zz);
+            obs_agg.verbose = options.verbose;
+            obs_agg.run_gibbs(ngibbs, nburnin, a0, b0, options.log_scale);
+            _mu = obs_agg.mu_stat.mean().transpose();
+            _mu_sd = obs_agg.mu_stat.var().unaryExpr(_sqrt).transpose();
+
             Vec _lambda = obs_agg.lambda_stat.mean();
             Vec _lambda_sd = obs_agg.lambda_stat.var().unaryExpr(_sqrt);
 
@@ -833,23 +895,38 @@ aggregate_col(const OPTIONS &options)
                 obs_lambda(l) = _lambda(j);
                 obs_lambda_sd(l) = _lambda_sd(j);
             }
+        }
 
-            Mat _sum = yy * zz.transpose();            // D x K
-            Vec _denom = zz * Mat::Ones(zz.cols(), 1); // K x 1
+        {
+            Mat _sum = yy * zz.transpose();                     // D x K
+            Mat _sum2 = (yy.cwiseProduct(yy)) * zz.transpose(); // D x K
+            Vec _denom = zz * Mat::Ones(zz.cols(), 1);          // K x 1
 
             for (Index k = 0; k < K; ++k) {
                 out_col.push_back(indv_name + "_" + lab_name.at(k));
-                obs_mu.col(s_obs) = _mu.col(k);
-                obs_mu_sd.col(s_obs) = _mu_sd.col(k);
+
+                if (options.do_bayesian) {
+                    obs_mu.col(s_obs) = _mu.col(k);
+                    obs_mu_sd.col(s_obs) = _mu_sd.col(k);
+                }
 
                 const Scalar _denom_k = _denom(k) + eps;
-                obs_mean.col(s_obs) = _sum.col(k) / _denom_k;
+                const Scalar _denom1m_k = std::max(_denom_k - 1.0, 1.0);
+
                 obs_sum.col(s_obs) = _sum.col(k);
+
+                // var = (s2 - s1 * s1 / n) / (n - 1)
+                obs_sd.col(s_obs) =
+                    ((_sum2.col(k) -
+                      _sum.col(k).cwiseProduct(_sum.col(k)) / _denom_k) /
+                     _denom1m_k)
+                        .cwiseSqrt();
+
+                obs_mean.col(s_obs) = _sum.col(k) / _denom_k;
 
                 ++s_obs;
             }
-
-            TLOG("Calibrated the observed parameters");
+            TLOG("Calibrated the observed parameters: " << s_obs);
         }
 
         if (Ntrt > 1) {
@@ -889,51 +966,67 @@ aggregate_col(const OPTIONS &options)
                 TLOG("Using the probabilistic Z0");
             }
 
-            aggregator_t agg(y0, z0);
-            agg.verbose = options.verbose;
-            agg.run_gibbs(ngibbs, nburnin, a0, b0, options.log_scale);
+            Mat _cf_mu, _cf_mu_sd, _stat;
 
-            Mat _cf_mu = agg.mu_stat.mean().transpose();
-            Mat _cf_mu_sd = agg.mu_stat.var().unaryExpr(_sqrt).transpose();
+            if (options.do_bayesian) {
 
-            Vec _cf_lambda = agg.lambda_stat.mean();
-            Vec _cf_lambda_sd = agg.lambda_stat.var().unaryExpr(_sqrt);
+                aggregator_t agg(y0, z0);
+                agg.verbose = options.verbose;
+                agg.run_gibbs(ngibbs, nburnin, a0, b0, options.log_scale);
 
-            for (Index j = 0; j < N; ++j) {
-                const Index l = indv_index_set.at(i).at(j);
-                cf_lambda(l) = _cf_lambda(j);
-                cf_lambda_sd(l) = _cf_lambda_sd(j);
-            }
+                _cf_mu = agg.mu_stat.mean().transpose();
+                _cf_mu_sd = agg.mu_stat.var().unaryExpr(_sqrt).transpose();
 
-            Mat _sum = y0 * z0.transpose();            // D x K
-            Vec _denom = z0 * Mat::Ones(z0.cols(), 1); // K x 1
+                Vec _cf_lambda = agg.lambda_stat.mean();
+                Vec _cf_lambda_sd = agg.lambda_stat.var().unaryExpr(_sqrt);
 
-            /////////////////////////////////
-            // Test significant divergence //
-            /////////////////////////////////
+                for (Index j = 0; j < N; ++j) {
+                    const Index l = indv_index_set.at(i).at(j);
+                    cf_lambda(l) = _cf_lambda(j);
+                    cf_lambda_sd(l) = _cf_lambda_sd(j);
+                }
 
-            Mat _stat = (_mu - _cf_mu)
+                /////////////////////////////////
+                // Test significant divergence //
+                /////////////////////////////////
+
+                _stat = (_mu - _cf_mu)
                             .binaryExpr(_mu_sd.cwiseProduct(_mu_sd) +
                                             _cf_mu_sd.cwiseProduct(_cf_mu_sd),
                                         _wald_stat_fun);
+            }
 
             /////////////////////
             // collect results //
             /////////////////////
 
+            Mat _sum = y0 * z0.transpose();                     // D x K
+            Mat _sum2 = (yy.cwiseProduct(yy)) * zz.transpose(); // D x K
+            Vec _denom = z0 * Mat::Ones(z0.cols(), 1);          // K x 1
+
             for (Index k = 0; k < K; ++k) {
-                cf_mu.col(s_cf) = _cf_mu.col(k);
-                cf_mu_sd.col(s_cf) = _cf_mu_sd.col(k);
+                if (options.do_bayesian) {
+                    cf_mu.col(s_cf) = _cf_mu.col(k);
+                    cf_mu_sd.col(s_cf) = _cf_mu_sd.col(k);
+                    wald_stat.col(s_cf) = _stat.col(k);
+                }
 
                 const Scalar _denom_k = _denom(k) + eps;
+                const Scalar _denom1m_k = std::max(_denom_k - 1.0, 1.0);
+
                 cf_sum.col(s_cf) = _sum.col(k);
+
                 cf_mean.col(s_cf) = _sum.col(k) / _denom_k;
 
-                wald_stat.col(s_cf) = _stat.col(k);
+                cf_sd.col(s_cf) =
+                    ((_sum2.col(k) -
+                      _sum.col(k).cwiseProduct(_sum.col(k)) / _denom_k) /
+                     _denom1m_k)
+                        .cwiseSqrt();
 
                 ++s_cf;
             }
-            TLOG("Calibrated the counterfactual parameters");
+            TLOG("Calibrated the counterfactual parameters: " << s_cf);
         }
     }
 
@@ -941,24 +1034,27 @@ aggregate_col(const OPTIONS &options)
 
     write_vector_file(output + ".cols.gz", out_col);
 
-    write_data_file(output + ".mu.gz", obs_mu);
     write_data_file(output + ".mean.gz", obs_mean);
     write_data_file(output + ".sum.gz", obs_sum);
-    write_data_file(output + ".mu_sd.gz", obs_mu_sd);
 
-    write_data_file(output + ".lambda.gz", obs_lambda);
-    write_data_file(output + ".lambda_sd.gz", obs_lambda_sd);
+    if (options.do_bayesian) {
+        write_data_file(output + ".mu.gz", obs_mu);
+        write_data_file(output + ".mu_sd.gz", obs_mu_sd);
+        write_data_file(output + ".lambda.gz", obs_lambda);
+        write_data_file(output + ".lambda_sd.gz", obs_lambda_sd);
+    }
 
     if (Ntrt > 1) {
-        write_data_file(output + ".cf_mu.gz", cf_mu);
         write_data_file(output + ".cf_mean.gz", cf_mean);
         write_data_file(output + ".cf_sum.gz", cf_sum);
-        write_data_file(output + ".cf_mu_sd.gz", cf_mu_sd);
 
-        write_data_file(output + ".wald.gz", wald_stat);
-
-        write_data_file(output + ".cf_lambda.gz", cf_lambda);
-        write_data_file(output + ".cf_lambda_sd.gz", cf_lambda_sd);
+        if (options.do_bayesian) {
+            write_data_file(output + ".cf_mu.gz", cf_mu);
+            write_data_file(output + ".cf_mu_sd.gz", cf_mu_sd);
+            write_data_file(output + ".cf_lambda.gz", cf_lambda);
+            write_data_file(output + ".cf_lambda_sd.gz", cf_lambda_sd);
+            write_data_file(output + ".wald.gz", wald_stat);
+        }
     }
 
     return EXIT_SUCCESS;
