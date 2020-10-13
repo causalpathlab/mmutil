@@ -2,7 +2,6 @@
 
 #include "mmutil.hh"
 #include "svd.hh"
-#include "eigen_util.hh"
 #include "inference/adam.hh"
 #include "utils/progress.hh"
 

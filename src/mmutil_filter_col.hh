@@ -1,4 +1,5 @@
 #include "mmutil.hh"
+#include "mmutil_io.hh"
 #include "mmutil_stat.hh"
 
 #ifndef MMUTIL_FILTER_COL_HH_
@@ -10,6 +11,7 @@ filter_col_by_nnz(const Index column_threshold,  //
                   const std::string column_file, //
                   const std::string output)
 {
+    using namespace mmutil::io;
     using Str = std::string;
     using copier_t =
         triplet_copier_remapped_cols_t<obgzf_stream, Index, Scalar>;

@@ -26,8 +26,8 @@ struct cluster_options_t {
     const std::vector<std::string> SAMPLING_METHOD_NAMES;
 
     explicit cluster_options_t()
-        : METHOD_NAMES{ "GMM" }
-        , SAMPLING_METHOD_NAMES{ "UNIFORM", "CV", "MEAN" }
+        : METHOD_NAMES { "GMM" }
+        , SAMPLING_METHOD_NAMES { "UNIFORM", "CV", "MEAN" }
     {
         K = 3;
         Alpha = 1.0;
@@ -532,9 +532,9 @@ simulate_gaussian_mixture(const Index n = 300, // sample size
                           const Scalar sd = 0.01)
 { // jitter
 
-    std::random_device rd{};
-    std::mt19937 gen{ rd() };
-    std::normal_distribution<Scalar> rnorm{ 0, 1 };
+    std::random_device rd {};
+    std::mt19937 gen { rd() };
+    std::normal_distribution<Scalar> rnorm { 0, 1 };
 
     // sample centers
     Mat centroid(p, k); // dimension x cluster
@@ -568,12 +568,12 @@ inline std::vector<Index>
 random_membership(const num_clust_t num_clust, //
                   const num_sample_t num_sample)
 {
-    std::random_device rd{};
-    std::mt19937 gen{ rd() };
+    std::random_device rd {};
+    std::mt19937 gen { rd() };
     const Index k = num_clust.val;
     const Index n = num_sample.val;
 
-    std::uniform_int_distribution<Index> runifK{ 0, k - 1 };
+    std::uniform_int_distribution<Index> runifK { 0, k - 1 };
     std::vector<Index> idx(n);
     std::iota(idx.begin(), idx.end(), 0);
     std::vector<Index> ret;
@@ -667,41 +667,42 @@ parse_cluster_options(const int argc,     //
                                    "r:l:m:f:z:t:o:w:C:n:DPOih"
                                    "S:B:N:";
 
-    const option long_opts[] =
-        { { "mtx", required_argument, nullptr, 'd' },             //
-          { "sdata", required_argument, nullptr, 's' },           //
-          { "data", required_argument, nullptr, 'd' },            //
-          { "sdata", required_argument, nullptr, 's' },           //
-          { "method", required_argument, nullptr, 'M' },          //
-          { "col", required_argument, nullptr, 'c' },             //
-          { "knn", required_argument, nullptr, 'k' },             //
-          { "epsilon", required_argument, nullptr, 'e' },         //
-          { "trunc", required_argument, nullptr, 'K' },           //
-          { "burnin", required_argument, nullptr, 'I' },          //
-          { "min_vbiter", required_argument, nullptr, 'v' },      //
-          { "max_vbiter", required_argument, nullptr, 'V' },      //
-          { "convergence", required_argument, nullptr, 'T' },     //
-          { "tau", required_argument, nullptr, 'u' },             //
-          { "rank", required_argument, nullptr, 'r' },            //
-          { "lu_iter", required_argument, nullptr, 'l' },         //
-          { "bilink", required_argument, nullptr, 'm' },          //
-          { "nlist", required_argument, nullptr, 'f' },           //
-          { "out", required_argument, nullptr, 'o' },             //
-          { "row_weight", required_argument, nullptr, 'w' },      //
-          { "col_norm", required_argument, nullptr, 'C' },        //
-          { "num_levels", required_argument, nullptr, 'n' },      //
-          { "min_size", required_argument, nullptr, 'z' },        //
-          { "out_data", no_argument, nullptr, 'D' },              //
-          { "prune_knn", no_argument, nullptr, 'P' },             //
-          { "verbose", no_argument, nullptr, 'O' },               //
-          { "log_scale", no_argument, nullptr, 'L' },             //
-          { "raw_scale", no_argument, nullptr, 'R' },             //
-          { "initial_sample", required_argument, nullptr, 'S' },  //
-          { "block_size", required_argument, nullptr, 'B' },      //
-          { "sampling_method", required_argument, nullptr, 'N' }, //
-          { "kmeanspp", no_argument, nullptr, 'i' },              //
-          { "help", no_argument, nullptr, 'h' },                  //
-          { nullptr, no_argument, nullptr, 0 } };
+    const option long_opts[] = {
+        { "mtx", required_argument, nullptr, 'd' },             //
+        { "sdata", required_argument, nullptr, 's' },           //
+        { "data", required_argument, nullptr, 'd' },            //
+        { "sdata", required_argument, nullptr, 's' },           //
+        { "method", required_argument, nullptr, 'M' },          //
+        { "col", required_argument, nullptr, 'c' },             //
+        { "knn", required_argument, nullptr, 'k' },             //
+        { "epsilon", required_argument, nullptr, 'e' },         //
+        { "trunc", required_argument, nullptr, 'K' },           //
+        { "burnin", required_argument, nullptr, 'I' },          //
+        { "min_vbiter", required_argument, nullptr, 'v' },      //
+        { "max_vbiter", required_argument, nullptr, 'V' },      //
+        { "convergence", required_argument, nullptr, 'T' },     //
+        { "tau", required_argument, nullptr, 'u' },             //
+        { "rank", required_argument, nullptr, 'r' },            //
+        { "lu_iter", required_argument, nullptr, 'l' },         //
+        { "bilink", required_argument, nullptr, 'm' },          //
+        { "nlist", required_argument, nullptr, 'f' },           //
+        { "out", required_argument, nullptr, 'o' },             //
+        { "row_weight", required_argument, nullptr, 'w' },      //
+        { "col_norm", required_argument, nullptr, 'C' },        //
+        { "num_levels", required_argument, nullptr, 'n' },      //
+        { "min_size", required_argument, nullptr, 'z' },        //
+        { "out_data", no_argument, nullptr, 'D' },              //
+        { "prune_knn", no_argument, nullptr, 'P' },             //
+        { "verbose", no_argument, nullptr, 'O' },               //
+        { "log_scale", no_argument, nullptr, 'L' },             //
+        { "raw_scale", no_argument, nullptr, 'R' },             //
+        { "initial_sample", required_argument, nullptr, 'S' },  //
+        { "block_size", required_argument, nullptr, 'B' },      //
+        { "sampling_method", required_argument, nullptr, 'N' }, //
+        { "kmeanspp", no_argument, nullptr, 'i' },              //
+        { "help", no_argument, nullptr, 'h' },                  //
+        { nullptr, no_argument, nullptr, 0 }
+    };
 
     while (true) {
         const auto opt = getopt_long(argc,                      //

@@ -82,19 +82,19 @@ Using this initial dictionary of marker genes, we can start analyzing
 * Sparse count matrix:
 
 ```{bash}
-zcat data/brain_2018-05-03/filtered_count_matrix.mtx.gz | head
+gzip -cd data/brain_2018-05-03/filtered_count_matrix.mtx.gz | head
 ```
 
 * Cell barcode list:
 
 ```{bash}
-zcat data/brain_2018-05-03/barcodes.tsv.gz | head
+gzip -cd data/brain_2018-05-03/barcodes.tsv.gz | head
 ```
 
 * Gene/feature list (**these names should exist in the marker file**):
 
 ```{bash}
-zcat data/brain_2018-05-03/features.tsv.gz | head
+gzip -cd data/brain_2018-05-03/features.tsv.gz | head
 ```
 
 ## Annotate columns of 10x count matrix.
@@ -109,14 +109,14 @@ Running this takes some time...
 
 ```{bash}
 [ -f example/annotate_brain/out.annot.gz ] || \
-mmutil_annotate_col \
- --mtx data/brain_2018-05-03/filtered_count_matrix.mtx.gz \
- --feature data/brain_2018-05-03/features.tsv.gz \
- --balance_markers \
- --col data/brain_2018-05-03/barcodes.tsv.gz \
- --ann PsychENCODE.marker \
- --batch_size 1000 \
- --out example/annotate_brain/out 2> /dev/null
+	../src/mmutil_annotate_col \
+		--mtx data/brain_2018-05-03/filtered_count_matrix.mtx.gz \
+		--feature data/brain_2018-05-03/features.tsv.gz \
+		--balance_markers \
+		--col data/brain_2018-05-03/barcodes.tsv.gz \
+		--ann PsychENCODE.marker \
+		--batch_size 1000 \
+		--out example/annotate_brain/out 2> /dev/null
 ```
 
 That is it! We have evaluated the probability of cell type assignment
@@ -158,51 +158,39 @@ The algorithm iteratively adjust marker gene contribution:
 
 ```
 
-## Parametric embedding based on these cell type annotation results
+## Embedding to show the cell type annotation result
 
 ```{bash}
 [ -f example/annotate_brain/spectral.sample_factor.gz ] || \
- mmutil_spectral_col \
- --mtx data/brain_2018-05-03/filtered_count_matrix.mtx.gz \
- --rank 10 --em_iter 10 --nystrom_batch 1000 \
- --out example/annotate_brain/spectral 2> /dev/null
-
-[ -f example/annotate_brain/latent.embedding.gz ] || \
- mmutil_embed_annot \
- --data example/annotate_brain/spectral.sample_factor.gz \
- --prob example/annotate_brain/out.annot_prob.gz \
- --embedding_dim 2 \
- --embedding_epochs 500 \
- --tol 1e-8 \
- --out example/annotate_brain/latent 2> /dev/null
+	../src/mmutil_spectral_col \
+		--mtx data/brain_2018-05-03/filtered_count_matrix.mtx.gz \
+		--rank 30 --em_iter 10 --em_tol 1e-4 --log_scale --block_size 1000 \
+		--out example/annotate_brain/spectral 2> /dev/null
 ```
 
-```{r Fig_embedding, fig.width=6, fig.height=5}
-.meta = fread("data/brain_2018-05-03/filtered_column_metadata.txt.gz",header=TRUE)
-.dt = fread("example/annotate_brain/latent.pe.gz",header=FALSE)
-colnames(.dt) = c("pe1", "pe2")
-.dt.1 = fread("example/annotate_brain/latent.embedding.gz",header=FALSE)
-colnames(.dt.1) = c("pc1", "pc2")
+
+```{r fit_umap}
+.file = "example/annotate_brain/umap.gz"
+if(!file.exists(.file)) {
+    V = fread("example/annotate_brain/spectral.sample_factor.gz") %>% as.matrix
+    uu.dt = uwot::umap(V, n_neighbors = 50,  n_threads = 16, verbose = TRUE) %>%
+        as.data.table
+    .fwrite(uu.dt, file=.file)
+} else {
+    uu.dt = fread(.file)
+}
+```
+
+
+
+```{r Fig_embedding_umap, fig.width=6, fig.height=5}
 .pred = fread("example/annotate_brain/out.annot.gz",header=FALSE)
-colnames(.pred) = c("TAG", "prediction", "prob")
-.dt = merge(cbind(.pred, .dt, .dt.1), .meta)
+colnames(.pred) = c("TAG", "prediction", "probability", "log.llik")
+uu.dt = cbind(uu.dt, .pred)
 
-.gg.plot(.dt, aes(x = pc1, y = pc2, color = prediction)) +
-  geom_point(size = .2) +
-  scale_color_brewer("prediction", type="div", palette="Paired")
-
-.gg.plot(.dt, aes(x = pe1, y = pe2, color = prediction)) +
-  geom_point(size = .2) +
-  scale_color_brewer("prediction", type="div", palette="Paired")
-
-.gg.plot(.dt, aes(x = pe1, y = pe2, color = broad.cell.type)) +
-  geom_point(size = .2) +
-  scale_color_brewer("Mathys+Davila", type="div", palette="Paired")
-
+.gg.plot(uu.dt, aes(x = V1, y = V2, color = prediction)) +
+    xlab("umap 1") + ylab("umap 2") +
+    geom_point(alpha = .5, size = .5) +
+    scale_color_brewer("prediction", type="div", palette="Paired")
 ```
 
-```{r Fig_embedding_tsne, fig.width=6, fig.height=5}
-.gg.plot(.dt, aes(x = tsne1, y = tsne2, color = prediction)) +
-  geom_point(alpha = .5, size = .5) +
-  scale_color_brewer("prediction", type="div", palette="Paired")
-```

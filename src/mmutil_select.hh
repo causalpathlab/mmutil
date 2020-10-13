@@ -3,6 +3,7 @@
 #include "mmutil_bgzf_util.hh"
 #include "mmutil_util.hh"
 #include "mmutil_index.hh"
+#include "mmutil_io.hh"
 #include "ext/tabix/bgzf.h"
 
 #ifndef MMUTIL_SELECT_HH_
@@ -21,9 +22,13 @@ copy_selected_rows(const std::string mtx_file,
                    const std::string output)
 {
 
+    using namespace mmutil::io;
+
     using Str = std::string;
+
     using copier_t =
         triplet_copier_remapped_rows_t<obgzf_stream, Index, Scalar>;
+
     using index_map_t = copier_t::index_map_t;
 
     std::vector<Str> features(0);
@@ -115,6 +120,7 @@ copy_selected_columns(const std::string mtx_file,
                       const std::vector<std::string> &_selected,
                       const std::string output)
 {
+    using namespace mmutil::io;
     using Str = std::string;
     using copier_t =
         triplet_copier_remapped_cols_t<obgzf_stream, Index, Scalar>;

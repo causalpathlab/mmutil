@@ -2,8 +2,8 @@
 
 #include <random>
 
-#include "io.hh"
 #include "mmutil.hh"
+#include "mmutil_io.hh"
 #include "mmutil_normalize.hh"
 #include "mmutil_stat.hh"
 #include "svd.hh"
@@ -22,7 +22,7 @@ struct spectral_options_t {
     const std::vector<Str> METHOD_NAMES;
 
     spectral_options_t()
-        : METHOD_NAMES{ "UNIFORM", "CV", "MEAN" }
+        : METHOD_NAMES { "UNIFORM", "CV", "MEAN" }
     {
         mtx = "";
         idx = "";
@@ -230,6 +230,7 @@ nystrom_sample_columns(const std::string mtx_file,
                        std::vector<Index> &idx_tab,
                        const OPTIONS &options)
 {
+    using namespace mmutil::io;
     TLOG("Collecting stats from the matrix file " << mtx_file);
 
     col_stat_collector_t collector;
@@ -283,7 +284,7 @@ nystrom_sample_columns(const std::string mtx_file,
         TLOG("Sampled " << nn << " columns");
 
     SpMat X =
-        mmutil::index::read_eigen_sparse_subset_col(mtx_file, idx_tab, subcol);
+        mmutil::io::read_eigen_sparse_subset_col(mtx_file, idx_tab, subcol);
 
     if (options.verbose)
         TLOG("Constructed sparse matrix: " << X.rows() << " x " << X.cols());
@@ -319,7 +320,7 @@ take_svd_online(const std::string mtx_file,
 
     CHECK(mmutil::index::build_mmutil_index(mtx_file, idx_file));
     std::vector<Index> idx_tab;
-    CHECK(mmutil::index::read_mmutil_index(idx_file, idx_tab));
+    CHECK(mmutil::io::read_mmutil_index(idx_file, idx_tab));
 
     //////////////////////////
     // step1 -- subsampling //
@@ -372,9 +373,8 @@ take_svd_online(const std::string mtx_file,
 
         TLOG("Re-calibrating batch [" << lb << ", " << ub << ")");
 
-        SpMat b = mmutil::index::read_eigen_sparse_subset_col(mtx_file,
-                                                              idx_tab,
-                                                              sub_b);
+        SpMat b =
+            mmutil::io::read_eigen_sparse_subset_col(mtx_file, idx_tab, sub_b);
 
         Mat B =
             standardize(make_normalized_laplacian(b, ww, tau, norm, take_ln));
@@ -393,7 +393,7 @@ take_svd_online(const std::string mtx_file,
     TLOG("Finished Nystrom projection: " << err);
 
     Vt.transposeInPlace();
-    return svd_out_t{ U, Sig, Vt };
+    return svd_out_t { U, Sig, Vt };
 }
 
 /**
@@ -409,6 +409,7 @@ take_svd_online_em(const std::string mtx_file,
                    const Eigen::MatrixBase<Derived> &_weights,
                    const options_t &options)
 {
+    using namespace mmutil::io;
     const Scalar tau = options.tau;
     const Scalar norm = options.col_norm;
     const Index lu_iter = options.lu_iter;
@@ -418,9 +419,9 @@ take_svd_online_em(const std::string mtx_file,
     CHECK(mmutil::bgzf::convert_bgzip(mtx_file));
     CHECK(mmutil::index::build_mmutil_index(mtx_file, idx_file));
     std::vector<Index> idx_tab;
-    CHECK(mmutil::index::read_mmutil_index(idx_file, idx_tab));
+    CHECK(mmutil::io::read_mmutil_index(idx_file, idx_tab));
 
-    mm_info_reader_t info;
+    mmutil::index::mm_info_reader_t info;
     CHECK(mmutil::bgzf::peek_bgzf_header(mtx_file, info));
     const Index numFeat = info.max_row;
     const Index N = info.max_col;
@@ -468,9 +469,8 @@ take_svd_online_em(const std::string mtx_file,
                   index_r.begin() + block_size,
                   subcol.begin());
 
-        SpMat x = mmutil::index::read_eigen_sparse_subset_col(mtx_file,
-                                                              idx_tab,
-                                                              subcol);
+        SpMat x =
+            mmutil::io::read_eigen_sparse_subset_col(mtx_file, idx_tab, subcol);
 
         Mat xx = make_normalized_laplacian(x, ww, tau, norm, take_ln);
         Mat yy = standardize(xx);
@@ -600,7 +600,7 @@ take_svd_online_em(const std::string mtx_file,
     Sig = svd_u.singularValues();
     Mat V = (svd_u.matrixV().transpose() * Vt).transpose();
 
-    return svd_out_t{ U, Sig, V };
+    return svd_out_t { U, Sig, V };
 }
 
 /**
@@ -652,9 +652,9 @@ take_proj_online(const std::string mtx_file,
 
     CHECK(mmutil::index::build_mmutil_index(mtx_file, idx_file));
     std::vector<Index> idx_tab;
-    CHECK(mmutil::index::read_mmutil_index(idx_file, idx_tab));
+    CHECK(mmutil::io::read_mmutil_index(idx_file, idx_tab));
 
-    mm_info_reader_t info;
+    mmutil::index::mm_info_reader_t info;
 
     CHECK(mmutil::bgzf::peek_bgzf_header(mtx_file, info));
 
@@ -687,9 +687,8 @@ take_proj_online(const std::string mtx_file,
         std::vector<Index> sub_b(ub - lb);
         std::iota(sub_b.begin(), sub_b.end(), lb);
 
-        SpMat b = mmutil::index::read_eigen_sparse_subset_col(mtx_file,
-                                                              idx_tab,
-                                                              sub_b);
+        SpMat b =
+            mmutil::io::read_eigen_sparse_subset_col(mtx_file, idx_tab, sub_b);
         Mat B = make_normalized_laplacian(b, ww, tau, norm, take_ln);
         B.transposeInPlace();
 
@@ -757,26 +756,27 @@ parse_spectral_options(const int argc,     //
 
     const char *const short_opts = "d:m:u:r:l:C:w:S:s:B:LRM:hvo:i:t:";
 
-    const option long_opts[] =
-        { { "mtx", required_argument, nullptr, 'd' },             //
-          { "data", required_argument, nullptr, 'd' },            //
-          { "out", required_argument, nullptr, 'o' },             //
-          { "tau", required_argument, nullptr, 'u' },             //
-          { "rank", required_argument, nullptr, 'r' },            //
-          { "lu_iter", required_argument, nullptr, 'l' },         //
-          { "row_weight", required_argument, nullptr, 'w' },      //
-          { "col_norm", required_argument, nullptr, 'C' },        //
-          { "log_scale", no_argument, nullptr, 'L' },             //
-          { "raw_scale", no_argument, nullptr, 'R' },             //
-          { "rand_seed", required_argument, nullptr, 's' },       //
-          { "initial_sample", required_argument, nullptr, 'S' },  //
-          { "block_size", required_argument, nullptr, 'B' },      //
-          { "sampling_method", required_argument, nullptr, 'M' }, //
-          { "help", no_argument, nullptr, 'h' },                  //
-          { "verbose", no_argument, nullptr, 'v' },               //
-          { "em_iter", required_argument, nullptr, 'i' },         //
-          { "em_tol", required_argument, nullptr, 't' },          //
-          { nullptr, no_argument, nullptr, 0 } };
+    const option long_opts[] = {
+        { "mtx", required_argument, nullptr, 'd' },             //
+        { "data", required_argument, nullptr, 'd' },            //
+        { "out", required_argument, nullptr, 'o' },             //
+        { "tau", required_argument, nullptr, 'u' },             //
+        { "rank", required_argument, nullptr, 'r' },            //
+        { "lu_iter", required_argument, nullptr, 'l' },         //
+        { "row_weight", required_argument, nullptr, 'w' },      //
+        { "col_norm", required_argument, nullptr, 'C' },        //
+        { "log_scale", no_argument, nullptr, 'L' },             //
+        { "raw_scale", no_argument, nullptr, 'R' },             //
+        { "rand_seed", required_argument, nullptr, 's' },       //
+        { "initial_sample", required_argument, nullptr, 'S' },  //
+        { "block_size", required_argument, nullptr, 'B' },      //
+        { "sampling_method", required_argument, nullptr, 'M' }, //
+        { "help", no_argument, nullptr, 'h' },                  //
+        { "verbose", no_argument, nullptr, 'v' },               //
+        { "em_iter", required_argument, nullptr, 'i' },         //
+        { "em_tol", required_argument, nullptr, 't' },          //
+        { nullptr, no_argument, nullptr, 0 }
+    };
 
     while (true) {
         const auto opt = getopt_long(argc,                      //

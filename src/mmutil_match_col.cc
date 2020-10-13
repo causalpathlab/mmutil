@@ -1,8 +1,14 @@
+#include "mmutil.hh"
+#include "mmutil_io.hh"
+#include "mmutil_index.hh"
 #include "mmutil_match.hh"
 
 int
 main(const int argc, const char *argv[])
 {
+    using namespace mmutil::io;
+    using namespace mmutil::index;
+
     match_options_t options;
 
     CHECK(parse_match_options(argc, argv, options));

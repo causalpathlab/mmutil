@@ -6,9 +6,8 @@
 #include <unordered_set>
 #include <string>
 
-#include "eigen_util.hh"
-#include "io.hh"
 #include "mmutil.hh"
+#include "mmutil_io.hh"
 #include "mmutil_index.hh"
 #include "mmutil_normalize.hh"
 #include "mmutil_stat.hh"
@@ -18,7 +17,6 @@
 #include "mmutil_util.hh"
 #include "ext/tabix/bgzf.h"
 
-#include "std_util.hh"
 #include "utils/progress.hh"
 
 #ifndef MMUTIL_BBKNN_HH_
@@ -146,30 +144,31 @@ parse_bbknn_options(const int argc, const char *argv[], OPTIONS &options)
 
     const char *const short_opts = "m:c:t:o:LRB:r:u:w:C:k:b:n:G:A:U:hv";
 
-    const option long_opts[] =
-        { { "mtx", required_argument, nullptr, 'm' },        //
-          { "data", required_argument, nullptr, 'm' },       //
-          { "col", required_argument, nullptr, 'c' },        //
-          { "batch", required_argument, nullptr, 't' },      //
-          { "out", required_argument, nullptr, 'o' },        //
-          { "log_scale", no_argument, nullptr, 'L' },        //
-          { "raw_scale", no_argument, nullptr, 'R' },        //
-          { "block_size", required_argument, nullptr, 'B' }, //
-          { "rank", required_argument, nullptr, 'r' },       //
-          { "lu_iter", required_argument, nullptr, 'u' },    //
-          { "row_weight", required_argument, nullptr, 'w' }, //
-          { "col_norm", required_argument, nullptr, 'C' },   //
-          { "knn", required_argument, nullptr, 'k' },        //
-          { "bilink", required_argument, nullptr, 'b' },     //
-          { "nlist", required_argument, nullptr, 'n' },      //
-          { "gibbs", required_argument, nullptr, 'G' },      //
-          { "ngibbs", required_argument, nullptr, 'G' },     //
-          { "local", required_argument, nullptr, 'A' },      //
-          { "nlocal", required_argument, nullptr, 'A' },     //
-          { "burnin", required_argument, nullptr, 'U' },     //
-          { "nburnin", required_argument, nullptr, 'U' },    //
-          { "verbose", no_argument, nullptr, 'v' },          //
-          { nullptr, no_argument, nullptr, 0 } };
+    const option long_opts[] = {
+        { "mtx", required_argument, nullptr, 'm' },        //
+        { "data", required_argument, nullptr, 'm' },       //
+        { "col", required_argument, nullptr, 'c' },        //
+        { "batch", required_argument, nullptr, 't' },      //
+        { "out", required_argument, nullptr, 'o' },        //
+        { "log_scale", no_argument, nullptr, 'L' },        //
+        { "raw_scale", no_argument, nullptr, 'R' },        //
+        { "block_size", required_argument, nullptr, 'B' }, //
+        { "rank", required_argument, nullptr, 'r' },       //
+        { "lu_iter", required_argument, nullptr, 'u' },    //
+        { "row_weight", required_argument, nullptr, 'w' }, //
+        { "col_norm", required_argument, nullptr, 'C' },   //
+        { "knn", required_argument, nullptr, 'k' },        //
+        { "bilink", required_argument, nullptr, 'b' },     //
+        { "nlist", required_argument, nullptr, 'n' },      //
+        { "gibbs", required_argument, nullptr, 'G' },      //
+        { "ngibbs", required_argument, nullptr, 'G' },     //
+        { "local", required_argument, nullptr, 'A' },      //
+        { "nlocal", required_argument, nullptr, 'A' },     //
+        { "burnin", required_argument, nullptr, 'U' },     //
+        { "nburnin", required_argument, nullptr, 'U' },    //
+        { "verbose", no_argument, nullptr, 'v' },          //
+        { nullptr, no_argument, nullptr, 0 }
+    };
 
     while (true) {
         const auto opt = getopt_long(argc,                      //
@@ -289,7 +288,7 @@ build_bbknn(const OPTIONS &options)
         CHECK(mmutil::index::build_mmutil_index(mtx_file, idx_file));
     CHECK(mmutil::index::read_mmutil_index(idx_file, mtx_idx_tab));
 
-    mm_info_reader_t info;
+    mmutil::index::mm_info_reader_t info;
     CHECK(mmutil::bgzf::peek_bgzf_header(mtx_file, info));
     const Index D = info.max_row;
     const Index Nsample = info.max_col;
@@ -358,9 +357,8 @@ build_bbknn(const OPTIONS &options)
      * @param subcol
      */
     auto read_y_block = [&](std::vector<Index> &subcol) -> Mat {
-        using namespace mmutil::index;
-        SpMat x = read_eigen_sparse_subset_col(mtx_file, mtx_idx_tab, subcol);
-        return Mat(x);
+        using namespace mmutil::io;
+        return Mat(read_eigen_sparse_subset_col(mtx_file, mtx_idx_tab, subcol));
     };
 
     /** Take spectral data for a particular treatment group "k"

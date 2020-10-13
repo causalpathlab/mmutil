@@ -3,10 +3,10 @@
 #include <unordered_map>
 #include <unordered_set>
 
-#include "eigen_util.hh"
 #include "inference/sampler.hh"
-#include "io.hh"
 #include "mmutil.hh"
+#include "mmutil_io.hh"
+#include "mmutil_index.hh"
 #include "mmutil_normalize.hh"
 #include "mmutil_index.hh"
 #include "utils/progress.hh"
@@ -225,6 +225,10 @@ std::tuple<SpMat,
            std::vector<std::string>>
 read_annotation_matched(const T &options)
 {
+
+    using namespace mmutil::io;
+    using namespace mmutil::index;
+
     using Str = std::string;
 
     std::vector<std::tuple<Str, Str>> ann_pair_vec;
@@ -346,6 +350,9 @@ read_annotation_matched(const T &options)
 int
 run_annotation(const annotation_options_t &options)
 {
+    using namespace mmutil::io;
+    using namespace mmutil::index;
+
     //////////////////////////////////////////////////////////
     // Read the annotation information to construct initial //
     // type-specific marker gene profiles                   //
@@ -367,7 +374,7 @@ run_annotation(const annotation_options_t &options)
                 "Failed to obtain a bgzipped file: " << options.mtx);
 
     std::string idx_file = options.mtx + ".index";
-    CHK_ERR_RET(mmutil::index::build_mmutil_index(options.mtx, idx_file),
+    CHK_ERR_RET(build_mmutil_index(options.mtx, idx_file),
                 "Failed to construct an index file: " << idx_file);
 
     std::string mtx_file = options.mtx;
@@ -397,14 +404,12 @@ run_annotation(const annotation_options_t &options)
     auto log2_op = [](const Scalar &x) -> Scalar { return std::log2(1.0 + x); };
 
     std::vector<Index> idx_tab;
-    CHECK(mmutil::index::read_mmutil_index(idx_file, idx_tab));
+    CHECK(read_mmutil_index(idx_file, idx_tab));
 
     auto take_batch_data_subcol = [&](std::vector<Index> &subcol,
                                       bool do_norm = true) -> Mat {
-        SpMat x = mmutil::index::read_eigen_sparse_subset_row_col(mtx_file,
-                                                                  idx_tab,
-                                                                  subrow,
-                                                                  subcol);
+        SpMat x =
+            read_eigen_sparse_subset_row_col(mtx_file, idx_tab, subrow, subcol);
 
         if (options.log_scale) {
             x = x.unaryExpr(log2_op);

@@ -4,7 +4,6 @@
 #include <unordered_map>
 #include <unordered_set>
 
-#include "eigen_util.hh"
 #include "ext/hnswlib/hnswlib.h"
 #include "mmutil.hh"
 #include "mmutil_stat.hh"
@@ -95,13 +94,13 @@ using KnnAlg = hnswlib::HierarchicalNSW<Scalar>;
 
 struct SrcSparseRowsT {
     explicit SrcSparseRowsT(const SpMat &_data)
-        : data(_data){};
+        : data(_data) {};
     const SpMat &data;
 };
 
 struct TgtSparseRowsT {
     explicit TgtSparseRowsT(const SpMat &_data)
-        : data(_data){};
+        : data(_data) {};
     const SpMat &data;
 };
 
@@ -428,10 +427,15 @@ normalize_weights(const Index deg_i,
                   std::vector<Scalar> &dist,
                   std::vector<Scalar> &weights)
 {
-    ASSERT(deg_i > 0, "mmutil_doublet_qc: deg_i > 0");
-    ASSERT(dist.size() >= deg_i, "mmutil_doublet_qc: At least deg_i");
-    ASSERT(dist.size() == weights.size(),
-           "mmutil_doublet_qc: check distance and weights");
+    if (deg_i < 2) {
+        weights[0] = 1.;
+        return;
+    }
+
+    // ASSERT(deg_i > 0, "mmutil_doublet_qc: deg_i > 0");
+    // ASSERT(dist.size() >= deg_i, "mmutil_doublet_qc: At least deg_i");
+    // ASSERT(dist.size() == weights.size(),
+    //        "mmutil_doublet_qc: check distance and weights");
 
     const Scalar _log2 = fasterlog(2.);
     const Scalar _di = static_cast<Scalar>(deg_i);
@@ -681,28 +685,29 @@ parse_match_options(const int argc,     //
 
     const char *const short_opts = "s:c:t:g:k:m:f:o:u:r:l:w:C:S:B:PLRM:h";
 
-    const option long_opts[] =
-        { { "src_mtx", required_argument, nullptr, 's' },         //
-          { "src_col", required_argument, nullptr, 'c' },         //
-          { "tgt_mtx", required_argument, nullptr, 't' },         //
-          { "tgt_col", required_argument, nullptr, 'g' },         //
-          { "knn", required_argument, nullptr, 'k' },             //
-          { "bilink", required_argument, nullptr, 'm' },          //
-          { "nlist", required_argument, nullptr, 'f' },           //
-          { "out", required_argument, nullptr, 'o' },             //
-          { "tau", required_argument, nullptr, 'u' },             //
-          { "rank", required_argument, nullptr, 'r' },            //
-          { "lu_iter", required_argument, nullptr, 'l' },         //
-          { "row_weight", required_argument, nullptr, 'w' },      //
-          { "col_norm", required_argument, nullptr, 'C' },        //
-          { "prune_knn", no_argument, nullptr, 'P' },             //
-          { "log_scale", no_argument, nullptr, 'L' },             //
-          { "raw_scale", no_argument, nullptr, 'R' },             //
-          { "initial_sample", required_argument, nullptr, 'S' },  //
-          { "block_size", required_argument, nullptr, 'B' },      //
-          { "sampling_method", required_argument, nullptr, 'M' }, //
-          { "help", no_argument, nullptr, 'h' },                  //
-          { nullptr, no_argument, nullptr, 0 } };
+    const option long_opts[] = {
+        { "src_mtx", required_argument, nullptr, 's' },         //
+        { "src_col", required_argument, nullptr, 'c' },         //
+        { "tgt_mtx", required_argument, nullptr, 't' },         //
+        { "tgt_col", required_argument, nullptr, 'g' },         //
+        { "knn", required_argument, nullptr, 'k' },             //
+        { "bilink", required_argument, nullptr, 'm' },          //
+        { "nlist", required_argument, nullptr, 'f' },           //
+        { "out", required_argument, nullptr, 'o' },             //
+        { "tau", required_argument, nullptr, 'u' },             //
+        { "rank", required_argument, nullptr, 'r' },            //
+        { "lu_iter", required_argument, nullptr, 'l' },         //
+        { "row_weight", required_argument, nullptr, 'w' },      //
+        { "col_norm", required_argument, nullptr, 'C' },        //
+        { "prune_knn", no_argument, nullptr, 'P' },             //
+        { "log_scale", no_argument, nullptr, 'L' },             //
+        { "raw_scale", no_argument, nullptr, 'R' },             //
+        { "initial_sample", required_argument, nullptr, 'S' },  //
+        { "block_size", required_argument, nullptr, 'B' },      //
+        { "sampling_method", required_argument, nullptr, 'M' }, //
+        { "help", no_argument, nullptr, 'h' },                  //
+        { nullptr, no_argument, nullptr, 0 }
+    };
 
     while (true) {
         const auto opt = getopt_long(argc,                      //

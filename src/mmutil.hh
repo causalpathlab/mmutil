@@ -9,10 +9,10 @@
 #include <numeric>
 #include <vector>
 
-#include "eigen_util.hh"
 #include "io.hh"
 #include "io_visitor.hh"
-#include "std_util.hh"
+#include "utils/eigen_util.hh"
+#include "utils/std_util.hh"
 #include "utils/math.hh"
 #include "utils/util.hh"
 #include "utils/check.hh"

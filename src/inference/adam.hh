@@ -1,8 +1,6 @@
 #include <cmath>
 #include <memory>
 
-#include "eigen_util.hh"
-
 #ifndef ADAM_HH_
 #define ADAM_HH_
 

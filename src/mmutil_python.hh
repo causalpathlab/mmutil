@@ -7,13 +7,12 @@
 #include <vector>
 
 #include "mmutil.hh"
-#include "io.hh"
-#include "eigen_util.hh"
-#include "eigen_io.hh"
+#include "mmutil_index.hh"
+#include "mmutil_io.hh"
 #include "mmutil_util.hh"
 #include "mmutil_stat.hh"
 #include "mmutil_bgzf_util.hh"
-#include "mmutil_index.hh"
+
 #include "utils/util.hh"
 #include "utils/sse.h"
 #include "utils/cast.h"
@@ -21,7 +20,8 @@
 #include "utils/fastexp.h"
 #include "utils/fastlog.h"
 #include "utils/fastgamma.h"
-#include "std_util.hh"
+#include "utils/std_util.hh"
+#include "utils/eigen_util.hh"
 #include "io_visitor.hh"
 #include "utils/gzstream.hh"
 #include "utils/util.hh"
@@ -35,6 +35,9 @@
 
 #ifndef MMUTIL_PYTHON_HH_
 #define MMUTIL_PYTHON_HH_
+
+using namespace mmutil::index;
+using namespace mmutil::io;
 
 #define Py_CHECK(cond)                \
     {                                 \
