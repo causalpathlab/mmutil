@@ -22,7 +22,7 @@ struct spectral_options_t {
     const std::vector<Str> METHOD_NAMES;
 
     spectral_options_t()
-        : METHOD_NAMES { "UNIFORM", "CV", "MEAN" }
+        : METHOD_NAMES{ "UNIFORM", "CV", "MEAN" }
     {
         mtx = "";
         idx = "";
@@ -321,6 +321,7 @@ take_svd_online(const std::string mtx_file,
     CHECK(mmutil::index::build_mmutil_index(mtx_file, idx_file));
     std::vector<Index> idx_tab;
     CHECK(mmutil::io::read_mmutil_index(idx_file, idx_tab));
+    CHECK(mmutil::index::check_index_tab(mtx_file, idx_tab));
 
     //////////////////////////
     // step1 -- subsampling //
@@ -393,7 +394,7 @@ take_svd_online(const std::string mtx_file,
     TLOG("Finished Nystrom projection: " << err);
 
     Vt.transposeInPlace();
-    return svd_out_t { U, Sig, Vt };
+    return svd_out_t{ U, Sig, Vt };
 }
 
 /**
@@ -413,13 +414,13 @@ take_svd_online_em(const std::string mtx_file,
     const Scalar tau = options.tau;
     const Scalar norm = options.col_norm;
     const Index lu_iter = options.lu_iter;
-    const Index block_size = options.block_size;
     const bool take_ln = options.log_scale;
 
     CHECK(mmutil::bgzf::convert_bgzip(mtx_file));
     CHECK(mmutil::index::build_mmutil_index(mtx_file, idx_file));
     std::vector<Index> idx_tab;
     CHECK(mmutil::io::read_mmutil_index(idx_file, idx_tab));
+    CHECK(mmutil::index::check_index_tab(mtx_file, idx_tab));
 
     mmutil::index::mm_info_reader_t info;
     CHECK(mmutil::bgzf::peek_bgzf_header(mtx_file, info));
@@ -442,6 +443,10 @@ take_svd_online_em(const std::string mtx_file,
     Mat Sig(rank, 1);
     Mat Vt(rank, N);
     Vt.setZero();
+
+    TLOG("SVD with rank = " << rank << " columns = " << N);
+
+    const Index block_size = std::min(options.block_size, N);
 
     auto take_batch_data = [&](Index lb, Index ub) -> Mat {
         using namespace mmutil::index;
@@ -600,7 +605,7 @@ take_svd_online_em(const std::string mtx_file,
     Sig = svd_u.singularValues();
     Mat V = (svd_u.matrixV().transpose() * Vt).transpose();
 
-    return svd_out_t { U, Sig, V };
+    return svd_out_t{ U, Sig, V };
 }
 
 /**
@@ -756,27 +761,26 @@ parse_spectral_options(const int argc,     //
 
     const char *const short_opts = "d:m:u:r:l:C:w:S:s:B:LRM:hvo:i:t:";
 
-    const option long_opts[] = {
-        { "mtx", required_argument, nullptr, 'd' },             //
-        { "data", required_argument, nullptr, 'd' },            //
-        { "out", required_argument, nullptr, 'o' },             //
-        { "tau", required_argument, nullptr, 'u' },             //
-        { "rank", required_argument, nullptr, 'r' },            //
-        { "lu_iter", required_argument, nullptr, 'l' },         //
-        { "row_weight", required_argument, nullptr, 'w' },      //
-        { "col_norm", required_argument, nullptr, 'C' },        //
-        { "log_scale", no_argument, nullptr, 'L' },             //
-        { "raw_scale", no_argument, nullptr, 'R' },             //
-        { "rand_seed", required_argument, nullptr, 's' },       //
-        { "initial_sample", required_argument, nullptr, 'S' },  //
-        { "block_size", required_argument, nullptr, 'B' },      //
-        { "sampling_method", required_argument, nullptr, 'M' }, //
-        { "help", no_argument, nullptr, 'h' },                  //
-        { "verbose", no_argument, nullptr, 'v' },               //
-        { "em_iter", required_argument, nullptr, 'i' },         //
-        { "em_tol", required_argument, nullptr, 't' },          //
-        { nullptr, no_argument, nullptr, 0 }
-    };
+    const option long_opts[] =
+        { { "mtx", required_argument, nullptr, 'd' },             //
+          { "data", required_argument, nullptr, 'd' },            //
+          { "out", required_argument, nullptr, 'o' },             //
+          { "tau", required_argument, nullptr, 'u' },             //
+          { "rank", required_argument, nullptr, 'r' },            //
+          { "lu_iter", required_argument, nullptr, 'l' },         //
+          { "row_weight", required_argument, nullptr, 'w' },      //
+          { "col_norm", required_argument, nullptr, 'C' },        //
+          { "log_scale", no_argument, nullptr, 'L' },             //
+          { "raw_scale", no_argument, nullptr, 'R' },             //
+          { "rand_seed", required_argument, nullptr, 's' },       //
+          { "initial_sample", required_argument, nullptr, 'S' },  //
+          { "block_size", required_argument, nullptr, 'B' },      //
+          { "sampling_method", required_argument, nullptr, 'M' }, //
+          { "help", no_argument, nullptr, 'h' },                  //
+          { "verbose", no_argument, nullptr, 'v' },               //
+          { "em_iter", required_argument, nullptr, 'i' },         //
+          { "em_tol", required_argument, nullptr, 't' },          //
+          { nullptr, no_argument, nullptr, 0 } };
 
     while (true) {
         const auto opt = getopt_long(argc,                      //

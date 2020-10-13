@@ -153,7 +153,7 @@ struct cfa_depth_finder_t {
 #endif
     }
 
-    void eval_end_of_file() { }
+    void eval_end_of_file() {}
 
     Vec estimate_depth() { return num_vec.binaryExpr(denom_vec, opt_op); }
 
@@ -440,6 +440,7 @@ cfa_col(const OPTIONS &options)
 
     TLOG("Training SVD for spectral matching ...");
     svd_out_t svd = take_svd_online_em(mtx_file, idx_file, ww, options);
+    TLOG("Done SVD");
     Mat proj = svd.U * svd.D.cwiseInverse().asDiagonal(); // feature x rank
     TLOG("Found projection: " << proj.rows() << " x " << proj.cols());
 
@@ -874,38 +875,37 @@ parse_cfa_options(const int argc,     //
     const char *const short_opts =
         "m:c:a:A:i:l:t:o:LRS:r:u:w:g:G:BDPC:k:b:n:hzv0:1:";
 
-    const option long_opts[] = {
-        { "mtx", required_argument, nullptr, 'm' },        //
-        { "data", required_argument, nullptr, 'm' },       //
-        { "annot_prob", required_argument, nullptr, 'A' }, //
-        { "annot", required_argument, nullptr, 'a' },      //
-        { "col", required_argument, nullptr, 'c' },        //
-        { "ind", required_argument, nullptr, 'i' },        //
-        { "trt", required_argument, nullptr, 't' },        //
-        { "trt_ind", required_argument, nullptr, 't' },    //
-        { "lab", required_argument, nullptr, 'l' },        //
-        { "label", required_argument, nullptr, 'l' },      //
-        { "out", required_argument, nullptr, 'o' },        //
-        { "log_scale", no_argument, nullptr, 'L' },        //
-        { "raw_scale", no_argument, nullptr, 'R' },        //
-        { "block_size", required_argument, nullptr, 'S' }, //
-        { "rank", required_argument, nullptr, 'r' },       //
-        { "lu_iter", required_argument, nullptr, 'u' },    //
-        { "row_weight", required_argument, nullptr, 'w' }, //
-        { "discretize", no_argument, nullptr, 'D' },       //
-        { "probabilistic", no_argument, nullptr, 'P' },    //
-        { "col_norm", required_argument, nullptr, 'C' },   //
-        { "knn", required_argument, nullptr, 'k' },        //
-        { "bilink", required_argument, nullptr, 'b' },     //
-        { "nlist", required_argument, nullptr, 'n' },      //
-        { "normalize", no_argument, nullptr, 'z' },        //
-        { "a0", required_argument, nullptr, '0' },         //
-        { "b0", required_argument, nullptr, '1' },         //
-        { "gamma_a0", required_argument, nullptr, '0' },   //
-        { "gamma_a1", required_argument, nullptr, '1' },   //
-        { "verbose", no_argument, nullptr, 'v' },          //
-        { nullptr, no_argument, nullptr, 0 }
-    };
+    const option long_opts[] =
+        { { "mtx", required_argument, nullptr, 'm' },        //
+          { "data", required_argument, nullptr, 'm' },       //
+          { "annot_prob", required_argument, nullptr, 'A' }, //
+          { "annot", required_argument, nullptr, 'a' },      //
+          { "col", required_argument, nullptr, 'c' },        //
+          { "ind", required_argument, nullptr, 'i' },        //
+          { "trt", required_argument, nullptr, 't' },        //
+          { "trt_ind", required_argument, nullptr, 't' },    //
+          { "lab", required_argument, nullptr, 'l' },        //
+          { "label", required_argument, nullptr, 'l' },      //
+          { "out", required_argument, nullptr, 'o' },        //
+          { "log_scale", no_argument, nullptr, 'L' },        //
+          { "raw_scale", no_argument, nullptr, 'R' },        //
+          { "block_size", required_argument, nullptr, 'S' }, //
+          { "rank", required_argument, nullptr, 'r' },       //
+          { "lu_iter", required_argument, nullptr, 'u' },    //
+          { "row_weight", required_argument, nullptr, 'w' }, //
+          { "discretize", no_argument, nullptr, 'D' },       //
+          { "probabilistic", no_argument, nullptr, 'P' },    //
+          { "col_norm", required_argument, nullptr, 'C' },   //
+          { "knn", required_argument, nullptr, 'k' },        //
+          { "bilink", required_argument, nullptr, 'b' },     //
+          { "nlist", required_argument, nullptr, 'n' },      //
+          { "normalize", no_argument, nullptr, 'z' },        //
+          { "a0", required_argument, nullptr, '0' },         //
+          { "b0", required_argument, nullptr, '1' },         //
+          { "gamma_a0", required_argument, nullptr, '0' },   //
+          { "gamma_a1", required_argument, nullptr, '1' },   //
+          { "verbose", no_argument, nullptr, 'v' },          //
+          { nullptr, no_argument, nullptr, 0 } };
 
     while (true) {
         const auto opt = getopt_long(argc,                      //

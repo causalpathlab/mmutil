@@ -117,7 +117,7 @@ struct mm_info_reader_t {
         max_elem = 0;
     }
 
-    void set_file(BGZF *_fp) { }
+    void set_file(BGZF *_fp) {}
 
     void eval_after_header(const index_t r, const index_t c, const index_t e)
     {
@@ -134,9 +134,8 @@ struct mm_info_reader_t {
 // index bgzipped matrix market file //
 ///////////////////////////////////////
 
-int
-build_mmutil_index(std::string mtx_file,        // bgzip file
-                   std::string index_file = "") // index file
+int build_mmutil_index(std::string mtx_file,        // bgzip file
+                       std::string index_file = "") // index file
 {
 
     if (index_file.length() == 0) {
@@ -217,10 +216,12 @@ read_mmutil_index(std::string index_file, std::vector<Index> &_index)
 
     // Update missing spots with the next one
     for (Index j = 0; j < (MaxIdx - 1); ++j) {
+        // ELOG("j = " << j);
         if (_index[j] == MISSING_POS)
             _index[j] = _index[j + 1];
     }
 
+    TLOG("Read " << MaxIdx << " indexes");
     return ret;
 }
 
@@ -231,7 +232,6 @@ read_mmutil_index(std::string index_file, std::vector<Index> &_index)
 int
 check_index_tab(std::string mtx_file, std::vector<Index> &index_tab)
 {
-
     mm_info_reader_t info;
     CHECK(peek_bgzf_header(mtx_file, info));
 
