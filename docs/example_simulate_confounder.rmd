@@ -1,0 +1,325 @@
+---
+title: "Counterfactual Confounder Adjustment"
+author: "Yongjin Park"
+date: "`r Sys.time()`"
+---
+
+```{r include=FALSE}
+library(tidyverse)
+library(data.table)
+library(patchwork)
+library("R.utils")
+source("Util-rmd.R")
+```
+
+
+## Simulate single-cell data matrix
+
+
+$$
+f(y) = \frac{\beta^{\alpha}}{\Gamma(\alpha)} y^{\alpha-1} e^{-y\beta}
+$$
+
+Letting $\mu = \alpha/\beta$ and $\nu = \alpha$
+
+$$
+f(y) = \frac{\nu^{\nu}}{\mu(\nu)} \mu^{-\nu} y^{\nu-1} e^{-y \nu / \mu}
+$$
+
+$$
+f(y) = \exp\left\{ - (\nu/\mu) y + (\nu - 1) \ln y - \nu \ln \mu + \nu \ln \nu - \ln \mu(\nu) \right\}
+$$
+
+
+* $\rho_{j} \sim \mathsf{Gamma}(a_{\rho}, b_{\rho})$, which corresponds to a sequencing depth
+
+* $\lambda_{gi} \sim \mathsf{Gamma}(\nu_{gi}, \nu_{gi} / \mu_{gi}))$ where $\ln \mu_{gi} = \sum_{k} X_{ik}\beta_{kg}$
+
+* $Y_{gj} \sim \mathsf{Poisson}(\lambda_{gi} \rho_{j})$
+
+
+By regressing out $\mu$, we derive the following negative binomial model:
+
+$$
+\int d\lambda p(Y_{gj}|\lambda,\rho_{j}) p(\lambda|\nu_{g}, \mu_{gi}) =
+\frac{\Gamma(Y_{gj} + \nu_{g})}{\Gamma(Y_{gj} + 1) \Gamma(\nu_{g})}
+\left( \frac{\mu_{gi} \rho_{j}}{\mu_{gi} \rho_{j} + \nu_{g}} \right)^{Y_{gj}}
+\left( \frac{\nu_{g}}{\mu_{gi} \rho_{j} + \nu_{g}} \right)^{\nu_{g}}
+$$
+
+
+
+## Results
+
+
+### Estimate 
+
+
+
+
+
+
+### Simulate case-control data matrix
+
+
+```{r}
+
+.rnorm <- function(n1, n2) matrix(rnorm(n1 * n2), nrow = n1, ncol = n2)
+
+ngenes = 11000
+nind = 10
+
+n.covar = 3
+
+
+
+xx = .rnorm(nind, n.covar + 1)   # phenotype + covar. matrix
+xx[seq(1, nind/2), 1] = 1        # the first half = affected
+xx[seq(nind/2 + 1, nind), 1] = 0 # the next half = unaffected
+xx = scale(xx)
+
+.beta = .rnorm(ncol(xx), ngenes) # effect size matrix
+causal = sample(ngenes, 10)      # causal genes
+.beta[1, -causal] = 0            # no effect on the non-causal genes
+
+#' Simulate sparse count matrix based on desgin matrix. The first
+#' column contains phenotype information.
+#' @param xx design matrix (individual x variable)
+#' @param x.beta coefficients for xx
+simulate.data <- function(xx,
+                          x.beta,
+                          rho.a0 = .1,
+                          rho.b0 = .1,
+                          mu.a0 = 1.,
+                          ngenes = 10000,
+                          ncell.ind = 500) {
+
+    nind = nrow(xx)              # individual
+    ln.mu = scale(xx %*% x.beta) # individuals x genes
+    mu = exp(ln.mu)              # individuals x genes
+
+    mu.a = matrix(mu.a0, nrow=nrow(mu), ncol=ncol(mu))
+    lam = apply(mu, 2, function(x) rgamma(nind, shape = mu.a, scale = mu.a / x))
+
+    ## sequencing depth for each cell
+    yy = lapply(1:nind, function(ii) {
+        rho = rgamma(ncell.ind, shape=rho.a0, scale=1/rho.b0)
+        ret = matrix(lam[ii, ], ncol=1) %*% matrix(rho, nrow=1)
+        round(ret)
+    }) %>% do.call(what=cbind) %>% as.matrix
+
+    ## individual membership
+    ind.mem = lapply(1:nind, function(ii) rep(ii, ncell.ind)) %>%
+        do.call(what=c)
+
+    ## case-control membership
+    cc.mem = lapply(1:nind, function(ii) rep(xx[ii, 1], ncell.ind)) %>%
+        do.call(what=c)
+
+    list(y = yy, ind = ind.mem, cc = cc.mem)
+}
+
+```
+
+```{sh}
+
+# TODO: just aggregate the count matrix to show that
+
+
+
+
+```
+
+
+
+```{sh}
+
+# TODO: can CFA help?
+
+#../src/mmutil_cfa_col  -h || exit 0
+
+```
+
+
+
+### Phenotype-aware...
+
+```{r read_pheno_info}
+
+.pheno = fread("data/brain_2018-05-03/phenotypes.csv") %>% 
+  mutate(age.1 = if_else(age_death < 90, 0, 1)) %>%
+  mutate(age.2 = if_else(age_death < 100, 0, 1)) %>%
+  mutate(age = age.1 + age.2) %>% 
+  mutate(msex = factor(msex, c(0, 1), c("female", "male"))) %>% 
+  select(-age.1, -age.2)
+
+cell.pheno.dt = fread("data/brain_2018-05-03/filtered_column_metadata.txt.gz") %>%
+  select(TAG, projid) %>%
+  left_join(.pheno, by = "projid") %>%
+  filter(pathoAD != -9, np_sqrt != -9, nft_sqrt != -9) %>% 
+  select(TAG, projid, msex, age_death, age, pathoAD, np_sqrt, nft_sqrt) %>%
+  na.omit() %>% 
+  data.table
+
+.file = "example/aggregated_brain/phenotyped.cols.gz"
+if(!file.exists(.file)) {
+  .fwrite(cell.pheno.dt[, .(TAG)], .file)
+}
+```
+
+```{bash select_phenotyped_columns}
+[ -f ./example/aggregated_brain/data.mtx.gz ] || \
+	mmutil_select_col \
+		./data/brain_2018-05-03/filtered_count_matrix.mtx.gz \
+		./data/brain_2018-05-03/filtered_count_matrix.cols.gz \
+		./example/aggregated_brain/phenotyped.cols.gz  \
+		./example/aggregated_brain/data
+
+```
+
+
+```{r write_pheno_info_to_aggregate}
+.annot = .fread("./example/annotate_brain/out.annot.gz") %>%
+  (function(x) { colnames(x) = c("TAG", "k", "prob", "ln.score"); x })
+
+.cols = .fread("./example/aggregated_brain/data.columns.gz") %>%
+  rename(TAG = V1) %>% 
+  left_join(.annot, by = "TAG") %>% 
+  left_join(cell.pheno.dt, by = "TAG") %>%
+  as_tibble
+
+.fwrite(select(.cols, projid), "example/aggregated_brain/data.ind.gz")
+.fwrite(select(.cols, TAG, k), "example/aggregated_brain/data.annot.gz")
+.fwrite(select(.cols, msex), "example/aggregated_brain/data.msex.gz")
+.fwrite(select(.cols, age), "example/aggregated_brain/data.age.gz")
+.fwrite(select(.cols, pathoAD), "example/aggregated_brain/data.pathoAD.gz")
+```
+
+
+TODO
+
+```{bash}
+
+
+
+[ -f example/aggregated_brain/result_pathoAD.mu_cols.gz ] || \
+	../src/mmutil_cfa_col --knn 10 \
+		--mtx example/aggregated_brain/data.mtx.gz \
+		--col example/aggregated_brain/data.columns.gz \
+		--annot example/aggregated_brain/data.annot.gz \
+		--ind example/aggregated_brain/data.ind.gz \
+		--trt example/aggregated_brain/data.pathoAD.gz \
+		--lab example/annotate_brain/out.label_names.gz \
+		--out temp
+
+## example/aggregated_brain/result_pathoAD
+```
+
+
+
+
+```{r}
+
+row.info = .fread("data/brain_2018-05-03/filtered_gene_row_names.txt.gz") %>%
+  rename(gene = V1) %>%
+  mutate(r = 1:n())
+
+## hdr = "example/aggregated_brain/result_pathoAD"
+
+hdr = "temp"
+
+col.info = .fread(hdr %&% ".mu_cols.gz") %>%
+  separate("V1", c("projid", "k"), sep="[_]") %>%
+  mutate(projid = as.integer(projid)) %>% 
+  mutate(c = 1:n()) %>% 
+  left_join(.pheno, by = "projid") %>% 
+  select(projid, k, c, pathoAD) %>% 
+  as.data.table
+
+.adj = .read.mat(hdr %&% ".adj_mu.gz")
+.cf = .read.mat(hdr %&% ".cf_mu.gz")
+.obs = .read.mat(hdr %&% ".obs_mu.gz")
+
+.adj.tmm = .do.tmm(.adj)
+
+```
+
+
+```{r}
+
+.ind = .fread(hdr %&% ".mu_cols.gz") %>%
+  unlist(use.names=FALSE)
+
+n.ind = length(.ind)
+
+
+.svd.cf = rsvd::rsvd(log(1 + .cf))
+
+pc = .svd.cf$v %>%
+  (function(x) { colnames(x)="pc" %&% 1:ncol(x); x}) %>% 
+  as_tibble %>%
+  (function(x) bind_cols(col.info, x))
+
+.gg.plot(pc, aes(x = pc1, y = pc2, colour = k)) +
+  geom_point() +
+  scale_colour_brewer("cell type", palette="Paired", direction=1)
+
+.gg.plot(pc, aes(x = pc1, y = pc2, colour = as.factor(pathoAD))) +
+  geom_point() +
+  scale_colour_brewer("AD", palette="Paired", direction=1)
+
+
+```
+
+
+
+```{r}
+
+## ct = "Microglia"
+
+## idx.0 = col.info %>% filter(k==ct, pathoAD==0) %>% select("c") %>% unlist(use.names=FALSE)
+## idx.1 = col.info %>% filter(k==ct, pathoAD==1) %>% select("c") %>% unlist(use.names=FALSE)
+
+## ## y0 = .adj.tmm[, idx.0]
+## ## y1 = .adj.tmm[, idx.1]
+
+## ybar = apply(.adj[, c(idx.0, idx.1)], 1, mean)
+
+## c0 = .cf[, idx.0]
+## c1 = .cf[, idx.1]
+
+## o0 = .obs[, idx.0]
+## o1 = .obs[, idx.1]
+
+## y0 = .adj[, idx.0]
+## y1 = .adj[, idx.1]
+
+## pv = sapply(1:nrow(.adj), function(g) wilcox.test(y0[g, ], y1[g, ])$p.value)
+
+## obs.y0 = .obs[, idx.0]
+## obs.y1 = .obs[, idx.1]
+
+## pv.obs = sapply(1:nrow(.adj), function(g) wilcox.test(obs.y0[g, ], obs.y1[g, ])$p.value)
+
+## cbind(row.info, pv, pv.obs) %>% filter(pv < .05) %>% arrange(pv) %>% head
+
+## cbind(row.info, pv, pv.obs) %>% filter(pv.obs < .05) %>% arrange(pv.obs) %>% head
+
+## cbind(row.info, pv) %>% arrange(1.-pv) %>% head
+
+## g = which.min(pv)
+
+## par(mfrow=c(2,2))
+
+## plot(c0[g, ], o0[g, ]); abline(a=0,b=1,col=2)
+## plot(c1[g, ], o1[g, ]); abline(a=0,b=1,col=2)
+
+## boxplot(y0[g, ], y1[g, ], names=c("0", "1"))
+## boxplot(obs.y0[g, ], obs.y1[g, ], names=c("0", "1"))
+
+
+## quartz()
+
+## boxplot(c0[g, ], c1[g, ])
+
+```
