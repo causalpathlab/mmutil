@@ -27,6 +27,17 @@ log.msg <- function(...) {
     cat(sprintf('[%s] ', ss), sprintf(...), '\n', file = stderr(), sep = '')
 }
 
+################################################################
+
+.cor.str <- function(x, y, ...) {
+  .ret = cor.test(x, y, ...)
+  num.round(.ret$estimate) %&%
+    " (p=" %&% num.sci(.ret$p.value) %&% ")"
+}
+
+
+################################################################
+
 .gg.save <- function(filename, ...) {
     if(file.exists(filename)) {
         log.msg('File already exits: %s', filename)

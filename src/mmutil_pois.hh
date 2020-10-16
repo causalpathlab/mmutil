@@ -38,13 +38,17 @@ struct poisson_t {
         , denomN(N, 1)
         , onesD(D, 1)
     {
+        TLOG("Creating a model for " << D << " x " << N << " data");
         onesD.setOnes();
-        rho.setOnes();
-        ln_rho.setZero();
+
+        rho.setConstant(a0 / b0);
+        ln_rho.setConstant(fasterdigamma(a0) - fasterlog(b0));
+
         mu.setOnes();
         ln_mu.setZero();
         Ytot = yy.transpose() * onesD; // N x 1
-        ZY = zz * yy.transpose();      // K x D
+
+        ZY = zz * yy.transpose(); // K x D
         verbose = false;
     }
 
@@ -83,6 +87,9 @@ struct poisson_t {
         , denomN(N, 1)
         , onesD(D, 1)
     {
+
+        TLOG("Creating a model for " << D << " x " << N << " data");
+
         onesD.setOnes();
 
         rho.setConstant(a0 / b0);
@@ -99,7 +106,6 @@ struct poisson_t {
 
         ZY = zz * yy.transpose();        // K x D
         ZY += zz_cf * yy_cf.transpose(); // K x D
-
         verbose = false;
     }
 
@@ -179,7 +185,11 @@ public:
 private:
     inline void solve_mu()
     {
-        denomK = zz * rho + zz_cf * rho_cf;
+        if (eval_cf) {
+            denomK = zz * rho + zz_cf * rho_cf;
+        } else {
+            denomK = zz * rho;
+        }
 
         for (Index g = 0; g < D; ++g) {
             mu.col(g) = ZY.col(g).binaryExpr(denomK, rate_opt_op);
@@ -191,14 +201,14 @@ private:
     inline void solve_rho()
     {
         // observed model
-        denomN = zz.transpose() * (mu * onesD);
+        denomN = zz.transpose() * mu * onesD;
         rho = Ytot.binaryExpr(denomN, rate_opt_op);
         ln_rho = Ytot.binaryExpr(denomN, rate_opt_ln_op);
         ent_rho = Ytot.binaryExpr(denomN, ent_op);
 
         // counterfactual model
         if (eval_cf) {
-            denomN = zz_cf.transpose() * (mu * onesD);
+            denomN = zz_cf.transpose() * mu * onesD;
             rho_cf = Ytot_cf.binaryExpr(denomN, rate_opt_op);
             ln_rho_cf = Ytot_cf.binaryExpr(denomN, rate_opt_ln_op);
             ent_rho_cf = Ytot_cf.binaryExpr(denomN, ent_op);

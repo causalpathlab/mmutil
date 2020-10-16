@@ -10,11 +10,152 @@ library(data.table)
 library(patchwork)
 library("R.utils")
 source("Util-rmd.R")
+
+fig.dir = 'Fig/example/simulation/'
+dir.create(fig.dir, recursive = TRUE, showWarnings = FALSE)
+knitr::opts_chunk$set(fig.path = fig.dir, fig.width = 4, fig.height = 3)
+knitr::opts_chunk$set(dev.args = list(bg = "transparent"))
+options(stringsAsFactors = FALSE)
+
+.fread <- function(...) data.table::fread(..., header=FALSE)
+```
+
+```{r simulation_code, include=FALSE}
+#' Random Normal
+#' @param n1
+#' @param n2
+.rnorm <- function(n1, n2) {
+  matrix(rnorm(n1 * n2), nrow = n1, ncol = n2)
+}
+
+#' Simulate GLM with multiple outcomes
+#' @param nind number of individuals/samples
+#' @param ncovar number of other covariates
+#' @param ngenes number of genes/features
+#' @param ncausal number of causal genes
+simulate.glm <- function(nind, ncovar, ngenes, ncausal, confounded=FALSE) {
+
+  if(ncovar > 0) {
+
+    cc = .rnorm(nind, ncovar)
+
+    if(confounded) {
+      ww = cc %*% .rnorm(ncovar, 1) / sqrt(ncovar)
+    } else {
+      ww = .rnorm(nind, 1)
+    }
+
+    ww[ww > 0] = 1
+    ww[ww < 0] = -1
+    xx = cbind(ww, cc)
+
+  } else {
+    xx = .rnorm(nind, 1) # just Randomized assignment
+    xx[xx > 0] = 1       # positive = case
+    xx[xx < 0] = -1      # negative = control
+  }
+
+  .beta = .rnorm(ncol(xx), ngenes) # effect size matrix
+  causal = sample(ngenes, ncausal) # causal genes
+  .beta[1, -causal] = 0            # no effect on the non-causal genes
+
+  list(x = xx, beta = .beta, causal = causal)
+}
+
+#' Simulate sparse count matrix based on desgin matrix. The first
+#' column contains phenotype information.
+#' @param xx design matrix (individual x variable)
+#' @param x.beta coefficients for xx
+#' @param rho.a shape parameter for dispersion
+#' @param rho.b rate parameter for dispersion
+#' @param mu.a0 shape parameter for the mean model
+#' @param ncell.ind number of cells per individual
+simulate.data <- function(xx,
+                          x.beta,
+                          pve.1,
+                          pve.c,
+                          rho.a = 1.6,
+                          rho.b = 2.0,
+                          mu.nu = 1.,
+                          ncell.ind = 500) {
+
+  nind = nrow(xx)       # individual
+  ngenes = ncol(x.beta) # genes
+  ncovar = ncol(xx) - 1 # other covariates
+
+  ln.mu.1 = xx[, 1, drop=FALSE] %*% x.beta[1, , drop=FALSE]
+  .sd = apply(ln.mu.1, 2, sd)
+  ln.mu.1[, .sd > 0] = scale(ln.mu.1[, .sd > 0], center=FALSE) * sqrt(pve.1)
+
+  if(ncovar > 0) {
+    ln.mu.c = scale(xx[, -1, drop=FALSE] %*% x.beta[-1, , drop=FALSE]) * sqrt(pve.c)
+  } else {
+    ln.mu.c = 0
+  }
+
+  .temp1 = scale(.rnorm(nind, ngenes)) * sqrt(1 - pve.1 - pve.c + 1e-8)
+  .temp0 = scale(.rnorm(nind, ngenes)) * sqrt(1 - pve.c)
+
+  ln.mu.0 = .temp0
+  ln.mu.0[, .sd > 0] = .temp1[, .sd > 0]
+
+  ln.mu = ln.mu.1 + ln.mu.c + ln.mu.0 # individuals x genes
+  ln.mu = scale(ln.mu)
+  ln.mu[is.na(ln.mu)] = 0
+
+  mu = exp(ln.mu) # individuals x genes
+  nu = matrix(mu.nu, nrow=nrow(mu), ncol=1)
+  lam = apply(mu, 2, function(x) rgamma(nind, shape = nu, scale = nu / x))
+  
+  ## sequencing depth for each cell
+  rho = c()
+  yy = c()
+  ind.mem = c()
+  cc.mem = c()
+  
+  for(ii in 1:nind) {
+    .rho = rgamma(ncell.ind, shape=rho.a, scale=1/rho.b)
+    .pois.rate = matrix(mu[ii, ], ncol=1) %*% matrix(.rho, nrow=1)
+    .yy = apply(.pois.rate, 2, function(x) rpois(n=nrow(.pois.rate), lambda=x))
+    yy = cbind(yy, .yy)
+
+    rho = c(rho, .rho)
+    ## individual membership
+    ind.mem = c(ind.mem, rep(ii, ncell.ind))
+    ## case-control annotation
+    cc.mem = c(cc.mem, rep(round(xx[ii, 1]), ncell.ind))
+  }
+
+  yy = as.matrix(yy)
+  
+  list(y = yy, ind = ind.mem, cc = cc.mem, rho = rho, ln.mu = t(ln.mu))
+}
+
+write.data <- function(.glm, .data, .hdr) {
+  y.sparse = Matrix::Matrix(.data$y, sparse=TRUE)
+
+  .fwrite <- function(...) data.table::fwrite(..., col.names=FALSE, sep=" ")
+
+  system(command = "rm -f " %&% .hdr %&% ".*")
+  Matrix::writeMM(y.sparse, file=.hdr %&% ".mtx")
+  system(command = "rm -f " %&% .hdr %&% ".mtx.gz*")
+  system(command = "bgzip " %&% .hdr %&% ".mtx")
+
+  .fwrite(as.data.table(.data$ind), file=.hdr %&% ".ind.gz")
+  .fwrite(as.data.table(.data$cc), file=.hdr %&% ".trt.gz")
+
+  .annot = data.table(V1 = 1:ncol(y.sparse), V2 = 0)
+  .cols = .annot[, .(V1)]
+  .lab = data.table(lab=0)
+
+  .fwrite(.annot, file=.hdr %&% ".annot.gz")
+  .fwrite(.cols, file=.hdr %&% ".cols.gz")
+  .fwrite(.lab, file=.hdr %&% ".lab.gz")
+}
 ```
 
 
 ## Simulate single-cell data matrix
-
 
 $$
 f(y) = \frac{\beta^{\alpha}}{\Gamma(\alpha)} y^{\alpha-1} e^{-y\beta}
@@ -30,18 +171,16 @@ $$
 f(y) = \exp\left\{ - (\nu/\mu) y + (\nu - 1) \ln y - \nu \ln \mu + \nu \ln \nu - \ln \mu(\nu) \right\}
 $$
 
-
 * $\rho_{j} \sim \mathsf{Gamma}(a_{\rho}, b_{\rho})$, which corresponds to a sequencing depth
 
 * $\lambda_{gi} \sim \mathsf{Gamma}(\nu_{gi}, \nu_{gi} / \mu_{gi}))$ where $\ln \mu_{gi} = \sum_{k} X_{ik}\beta_{kg}$
 
 * $Y_{gj} \sim \mathsf{Poisson}(\lambda_{gi} \rho_{j})$
 
-
-By regressing out $\mu$, we derive the following negative binomial model:
+By integrating out $\lambda$, we derive the following negative binomial model:
 
 $$
-\int d\lambda p(Y_{gj}|\lambda,\rho_{j}) p(\lambda|\nu_{g}, \mu_{gi}) =
+\int d\lambda p(Y_{gj}|\lambda, \rho_{j}) p(\lambda|\nu_{g}, \mu_{gi}) =
 \frac{\Gamma(Y_{gj} + \nu_{g})}{\Gamma(Y_{gj} + 1) \Gamma(\nu_{g})}
 \left( \frac{\mu_{gi} \rho_{j}}{\mu_{gi} \rho_{j} + \nu_{g}} \right)^{Y_{gj}}
 \left( \frac{\nu_{g}}{\mu_{gi} \rho_{j} + \nu_{g}} \right)^{\nu_{g}}
@@ -52,74 +191,353 @@ $$
 ## Results
 
 
-### Estimate 
+### Testing the accuracy of individual-level aggregate effect estimation
+
+```{r}
+## Testing on the null data
+set.seed(1)
+exp.hdr = "example/simulation/confounder/exp1"
+dir.create(dirname(exp.hdr), recursive=TRUE, showWarnings=FALSE)
+
+temp.file = exp.hdr %&% ".rdata"
+if(!file.exists(temp.file)) {
+  .glm = simulate.glm(nind = 20,
+                      ncovar = 0,
+                      ngenes = 10000,
+                      ncausal = 10)
+
+  .data = simulate.data(xx = .glm$x,
+                        x.beta = .glm$beta,
+                        pve.1 = .0,
+                        pve.c = .0,
+                        ncell.ind = 100)
+  save(.glm, .data, file=temp.file)
+} else {
+  load(file=temp.file)
+}
+
+mtx.file = exp.hdr %&% ".mtx.gz"
+if(!file.exists(mtx.file)) {
+  write.data(.glm, .data, exp.hdr)
+}
+```
+
+```{sh}
+[ -f example/simulation/confounder/out_exp1.mean.gz ] || 
+	../src/mmutil_aggregate_col \
+		--mtx example/simulation/confounder/exp1.mtx.gz \
+		--col example/simulation/confounder/exp1.cols.gz \
+		--annot example/simulation/confounder/exp1.annot.gz \
+		--lab example/simulation/confounder/exp1.lab.gz \
+		--ind example/simulation/confounder/exp1.ind.gz \
+ 		--out example/simulation/confounder/out_exp1
+
+```
 
 
+```{r Fig_Sim_Exp1}
+r.hdr = gsub("exp", "out_exp", exp.hdr)
 
+.mean = .fread(r.hdr %&% ".mean.gz")
+.mu = .fread(r.hdr %&% ".mu.gz") %>%  log
+.rho = .fread(r.hdr %&% ".rho.gz") %>% unlist
 
+.dt = data.table(rho.true = .data$rho, rho.hat = .rho)
+
+p1 = .gg.plot(.dt, aes(x=rho.true, y=rho.hat)) +
+  geom_point(size=.5) +
+  geom_abline(slope=1, colour="red") +
+  ggtitle(.cor.str(.dt$rho.true, .dt$rho.hat))
+
+.mu.true = as.data.table(.data$ln.mu)
+
+.dt = tibble(ln.mu.true = .mu.true$V1, ln.mu.hat = .mu$V1) %>%
+  filter(ln.mu.hat >  -5)
+
+p2 = .gg.plot(.dt, aes(x=ln.mu.true, y=ln.mu.hat)) +
+  geom_point(size=.5) +
+  geom_abline(slope=1, colour="red") +
+  ggtitle(.cor.str(.dt$ln.mu.true, .dt$ln.mu.hat))
+
+p1 | p2
+```
 
 
 ### Simulate case-control data matrix
 
 
 ```{r}
+set.seed(1)
+exp.hdr = "example/simulation/confounder/exp2"
+dir.create(dirname(exp.hdr), recursive=TRUE, showWarnings=FALSE)
 
-.rnorm <- function(n1, n2) matrix(rnorm(n1 * n2), nrow = n1, ncol = n2)
+temp.file = exp.hdr %&% ".rdata"
+if(!file.exists(temp.file)) {
+  .glm = simulate.glm(nind = 100,
+                      ncovar = 5,
+                      ngenes = 1000,
+                      ncausal = 10,
+                      confounded = FALSE)
 
-ngenes = 11000
-nind = 10
-
-n.covar = 3
-
-
-
-xx = .rnorm(nind, n.covar + 1)   # phenotype + covar. matrix
-xx[seq(1, nind/2), 1] = 1        # the first half = affected
-xx[seq(nind/2 + 1, nind), 1] = 0 # the next half = unaffected
-xx = scale(xx)
-
-.beta = .rnorm(ncol(xx), ngenes) # effect size matrix
-causal = sample(ngenes, 10)      # causal genes
-.beta[1, -causal] = 0            # no effect on the non-causal genes
-
-#' Simulate sparse count matrix based on desgin matrix. The first
-#' column contains phenotype information.
-#' @param xx design matrix (individual x variable)
-#' @param x.beta coefficients for xx
-simulate.data <- function(xx,
-                          x.beta,
-                          rho.a0 = .1,
-                          rho.b0 = .1,
-                          mu.a0 = 1.,
-                          ngenes = 10000,
-                          ncell.ind = 500) {
-
-    nind = nrow(xx)              # individual
-    ln.mu = scale(xx %*% x.beta) # individuals x genes
-    mu = exp(ln.mu)              # individuals x genes
-
-    mu.a = matrix(mu.a0, nrow=nrow(mu), ncol=ncol(mu))
-    lam = apply(mu, 2, function(x) rgamma(nind, shape = mu.a, scale = mu.a / x))
-
-    ## sequencing depth for each cell
-    yy = lapply(1:nind, function(ii) {
-        rho = rgamma(ncell.ind, shape=rho.a0, scale=1/rho.b0)
-        ret = matrix(lam[ii, ], ncol=1) %*% matrix(rho, nrow=1)
-        round(ret)
-    }) %>% do.call(what=cbind) %>% as.matrix
-
-    ## individual membership
-    ind.mem = lapply(1:nind, function(ii) rep(ii, ncell.ind)) %>%
-        do.call(what=c)
-
-    ## case-control membership
-    cc.mem = lapply(1:nind, function(ii) rep(xx[ii, 1], ncell.ind)) %>%
-        do.call(what=c)
-
-    list(y = yy, ind = ind.mem, cc = cc.mem)
+  .data = simulate.data(xx = .glm$x,
+                        x.beta = .glm$beta,
+                        pve.1 = .2,
+                        pve.c = .6,
+                        ncell.ind = 100)
+  save(.glm, .data, file=temp.file)
+} else {
+  load(file=temp.file)
 }
 
+mtx.file = exp.hdr %&% ".mtx.gz"
+if(!file.exists(mtx.file)) {
+  write.data(.glm, .data, exp.hdr)
+}
 ```
+
+
+
+```{sh}
+[ -f example/simulation/confounder/naive_exp2.mean.gz ] || 
+	../src/mmutil_aggregate_col \
+		--mtx example/simulation/confounder/exp2.mtx.gz \
+		--col example/simulation/confounder/exp2.cols.gz \
+		--annot example/simulation/confounder/exp2.annot.gz \
+		--lab example/simulation/confounder/exp2.lab.gz \
+		--ind example/simulation/confounder/exp2.ind.gz \
+ 		--out example/simulation/confounder/naive_exp2
+```
+
+
+```{sh}
+#[ -f example/simulation/confounder/cfa_exp2.mean.gz ] || 
+	../src/mmutil_cfa_col \
+		--mtx example/simulation/confounder/exp2.mtx.gz \
+		--col example/simulation/confounder/exp2.cols.gz \
+		--annot example/simulation/confounder/exp2.annot.gz \
+		--lab example/simulation/confounder/exp2.lab.gz \
+		--ind example/simulation/confounder/exp2.ind.gz \
+		--trt_ind example/simulation/confounder/exp2.trt.gz \
+		--knn 5 \
+ 		--out example/simulation/confounder/cfa_exp2
+```
+
+
+
+
+
+```{r}
+
+r.hdr = gsub("exp", "cfa_exp", exp.hdr)
+causal.genes = .glm$causal
+label = .glm$x[, 1]
+
+mu.obs = .fread(r.hdr %&% ".obs_mu.gz") %>% as.matrix
+mu.adj = .fread(r.hdr %&% ".adj_mu.gz") %>% as.matrix
+mu.cf = .fread(r.hdr %&% ".cf_mu.gz") %>% as.matrix
+
+## plot(mu.cf[, 1], mu.adj[, 1])
+## plot(mu.cf[, 1], mu.obs[, 1])
+
+.temp.adj = cor(t(mu.adj), label)
+
+.temp.cf = cor(t(mu.cf), label)
+
+.temp.naive = cor(t(mu.obs), label)
+
+par(mfrow=c(1,2))
+
+plot(.temp.naive, .temp.adj)
+points(.temp.naive[causal.genes], .temp.adj[causal.genes], col="red", pch=19)
+abline(a=0, b=1, col=3)
+
+plot(.temp.naive, .temp.cf)
+points(.temp.naive[causal.genes], .temp.cf[causal.genes], col="red", pch=19)
+abline(a=0, b=1, col=3)
+
+
+g = causal.genes[1]
+
+g = 127
+
+t.test(c(mu.obs[g, label==1], mu.cf[g, label==-1]),
+       c(mu.cf[g, label==1], mu.obs[g, label==-1]),
+       paired=TRUE)
+
+wilcox.test(c(mu.obs[g, label==1], mu.cf[g, label==-1]),
+            c(mu.cf[g, label==1], mu.obs[g, label==-1]))
+
+
+plot(1:100, c(mu.obs[g, label==1], mu.cf[g, label==-1]), log="y")
+points(1:100, c(mu.cf[g, label==1], mu.obs[g, label==-1]), pch = 19)
+
+t.test(mu.adj[g, label==1], mu.adj[g, label==-1])
+
+
+
+g = 133
+
+mean(log(mu.obs[g, label == 1] / mu.cf[g, label == 1]))
+
+mean(log(mu.cf[g, label == -1] / mu.obs[g, label == -1]))
+
+
+
+## for(g in causal.genes)
+
+g = causal.genes[2]
+
+##
+g = 10
+
+x = mu.adj[g, label==1]
+y = mu.adj[g, label==-1]
+
+x0 = mu.obs[g, label==1]
+y0 = mu.obs[g, label==-1]
+
+x.c = mu.cf[g, label==1]
+y.c = mu.cf[g, label==-1]
+
+
+rr = lm(mu.obs[g, ] ~ mu.cf[g, ]) %>% residuals
+
+x.r = rr[label==1]
+y.r = rr[label==-1]
+
+par(mfrow=c(1,3))
+
+wilcox.test(x, y)
+
+boxplot(log(1 + x), log(1 + y))
+
+wilcox.test(x.r, y.r)
+
+boxplot(x.r, y.r)
+
+wilcox.test(x0, y0)
+
+boxplot(log(1 + x0), log(1 + y0))
+
+
+```
+
+
+
+
+
+```{r}
+
+r.hdr = gsub("exp", "naive_exp", exp.hdr)
+causal.genes = .glm$causal
+label = .glm$x[, 1]
+
+mu.vanilla = .fread(r.hdr %&% ".mu.gz")
+
+.temp.0 = cor(t(mu.vanilla), label)
+
+.temp.0[causal.genes]
+
+
+```
+
+
+
+
+```{r}
+
+## rho.true = .data$rho
+## rho = unlist(fread("temp2.rho.gz"))
+## mu = as.matrix(fread("temp2.mu.gz"))
+
+## plot(log(mu[, 1]/10), .data$ln.mu[1, ]); abline(a=0, b=1, col=2)
+
+## plot(log(mu[, 11]/10), .data$ln.mu[11, ]); abline(a=0, b=1, col=2)
+
+## plot(rho, rho.true)
+
+## mu.0 = apply(.data$y, 2, mean)
+
+## plot(mu.0, rho.true)
+
+## plot(log(mu.0), rho)
+
+
+```
+
+
+
+```{sh}
+
+# ../src/mmutil_cfa_col \
+# 	--mtx temp.mtx.gz \
+# 	--col temp.cols.gz \
+# 	--annot temp.annot.gz \
+# 	--lab temp.lab.gz \
+# 	--ind temp.ind.gz \
+# 	--trt_ind temp.trt.gz \
+# 	--log_scale --knn 10 \
+# 	--out temp3
+
+
+```
+
+
+```{r}
+
+
+
+## rho.2 = as.matrix(fread("temp3.rho.gz"))
+
+
+## mu.hat = log(1 + as.matrix(fread("temp2.mu.gz")))
+## adj.hat = log(1 + as.matrix(fread("temp3.adj_mu.gz")))
+## cf.hat = log(1 + as.matrix(fread("temp3.cf_mu.gz")))
+## mean.hat = as.matrix(fread("temp2.mean.gz"))
+
+## mu.true = t(.glm$x[, 1, drop=F] %*% .glm$beta[1, , drop=F])
+
+## causal = .glm$causal
+## .case = which(.glm$x[, 1] > 0) 
+## wilcox.test(adj.hat[g, .case], adj.hat[g, -.case])
+
+## pv = apply(t(mean.hat), 2, function(x) wilcox.test(x[.case], x[-.case])$p.value)
+## pv.a = apply(t(adj.hat), 2, function(x) wilcox.test(x[.case], x[-.case])$p.value)
+
+## pv[.glm$causal]
+## pv.a[.glm$causal]
+
+## nn = nrow(mu.hat)
+## nc = setdiff(1:nn, .glm$causal)
+
+## g = nc[which.min(pv[-.glm$causal])]
+
+## par(mfrow=c(2,1))
+## plot(-log10(pv))
+## points(causal, -log10(pv[causal]), col=2, pch=19)
+
+## plot(-log10(pv.a))
+## points(causal, -log10(pv.a[causal]), col=2, pch=19)
+
+## par(mfrow=c(1,4))
+## ##boxplot(mean.hat[g, .case], mean.hat[g, -.case], main="marginal")
+## boxplot(mu.hat[g, .case], mu.hat[g, -.case], main="marginal")
+## boxplot(adj.hat[g, .case], adj.hat[g, -.case], main="adjusted")
+## boxplot(cf.hat[g, .case], cf.hat[g, -.case], main="couterfactual")
+## boxplot(mu.true[g, .case], mu.true[g, -.case], main="true")
+
+## plot(mu.hat[, 1], adj.hat[, 1])
+
+## plot(mu.hat[, 73], adj.hat[, 73])
+
+## plot(adj.hat[, 73], cf.hat[, 73])
+
+
+## plot(mean.hat[, 1], mu.hat[, 1])
+
+```
+
+
 
 ```{sh}
 
@@ -141,185 +559,3 @@ simulate.data <- function(xx,
 ```
 
 
-
-### Phenotype-aware...
-
-```{r read_pheno_info}
-
-.pheno = fread("data/brain_2018-05-03/phenotypes.csv") %>% 
-  mutate(age.1 = if_else(age_death < 90, 0, 1)) %>%
-  mutate(age.2 = if_else(age_death < 100, 0, 1)) %>%
-  mutate(age = age.1 + age.2) %>% 
-  mutate(msex = factor(msex, c(0, 1), c("female", "male"))) %>% 
-  select(-age.1, -age.2)
-
-cell.pheno.dt = fread("data/brain_2018-05-03/filtered_column_metadata.txt.gz") %>%
-  select(TAG, projid) %>%
-  left_join(.pheno, by = "projid") %>%
-  filter(pathoAD != -9, np_sqrt != -9, nft_sqrt != -9) %>% 
-  select(TAG, projid, msex, age_death, age, pathoAD, np_sqrt, nft_sqrt) %>%
-  na.omit() %>% 
-  data.table
-
-.file = "example/aggregated_brain/phenotyped.cols.gz"
-if(!file.exists(.file)) {
-  .fwrite(cell.pheno.dt[, .(TAG)], .file)
-}
-```
-
-```{bash select_phenotyped_columns}
-[ -f ./example/aggregated_brain/data.mtx.gz ] || \
-	mmutil_select_col \
-		./data/brain_2018-05-03/filtered_count_matrix.mtx.gz \
-		./data/brain_2018-05-03/filtered_count_matrix.cols.gz \
-		./example/aggregated_brain/phenotyped.cols.gz  \
-		./example/aggregated_brain/data
-
-```
-
-
-```{r write_pheno_info_to_aggregate}
-.annot = .fread("./example/annotate_brain/out.annot.gz") %>%
-  (function(x) { colnames(x) = c("TAG", "k", "prob", "ln.score"); x })
-
-.cols = .fread("./example/aggregated_brain/data.columns.gz") %>%
-  rename(TAG = V1) %>% 
-  left_join(.annot, by = "TAG") %>% 
-  left_join(cell.pheno.dt, by = "TAG") %>%
-  as_tibble
-
-.fwrite(select(.cols, projid), "example/aggregated_brain/data.ind.gz")
-.fwrite(select(.cols, TAG, k), "example/aggregated_brain/data.annot.gz")
-.fwrite(select(.cols, msex), "example/aggregated_brain/data.msex.gz")
-.fwrite(select(.cols, age), "example/aggregated_brain/data.age.gz")
-.fwrite(select(.cols, pathoAD), "example/aggregated_brain/data.pathoAD.gz")
-```
-
-
-TODO
-
-```{bash}
-
-
-
-[ -f example/aggregated_brain/result_pathoAD.mu_cols.gz ] || \
-	../src/mmutil_cfa_col --knn 10 \
-		--mtx example/aggregated_brain/data.mtx.gz \
-		--col example/aggregated_brain/data.columns.gz \
-		--annot example/aggregated_brain/data.annot.gz \
-		--ind example/aggregated_brain/data.ind.gz \
-		--trt example/aggregated_brain/data.pathoAD.gz \
-		--lab example/annotate_brain/out.label_names.gz \
-		--out temp
-
-## example/aggregated_brain/result_pathoAD
-```
-
-
-
-
-```{r}
-
-row.info = .fread("data/brain_2018-05-03/filtered_gene_row_names.txt.gz") %>%
-  rename(gene = V1) %>%
-  mutate(r = 1:n())
-
-## hdr = "example/aggregated_brain/result_pathoAD"
-
-hdr = "temp"
-
-col.info = .fread(hdr %&% ".mu_cols.gz") %>%
-  separate("V1", c("projid", "k"), sep="[_]") %>%
-  mutate(projid = as.integer(projid)) %>% 
-  mutate(c = 1:n()) %>% 
-  left_join(.pheno, by = "projid") %>% 
-  select(projid, k, c, pathoAD) %>% 
-  as.data.table
-
-.adj = .read.mat(hdr %&% ".adj_mu.gz")
-.cf = .read.mat(hdr %&% ".cf_mu.gz")
-.obs = .read.mat(hdr %&% ".obs_mu.gz")
-
-.adj.tmm = .do.tmm(.adj)
-
-```
-
-
-```{r}
-
-.ind = .fread(hdr %&% ".mu_cols.gz") %>%
-  unlist(use.names=FALSE)
-
-n.ind = length(.ind)
-
-
-.svd.cf = rsvd::rsvd(log(1 + .cf))
-
-pc = .svd.cf$v %>%
-  (function(x) { colnames(x)="pc" %&% 1:ncol(x); x}) %>% 
-  as_tibble %>%
-  (function(x) bind_cols(col.info, x))
-
-.gg.plot(pc, aes(x = pc1, y = pc2, colour = k)) +
-  geom_point() +
-  scale_colour_brewer("cell type", palette="Paired", direction=1)
-
-.gg.plot(pc, aes(x = pc1, y = pc2, colour = as.factor(pathoAD))) +
-  geom_point() +
-  scale_colour_brewer("AD", palette="Paired", direction=1)
-
-
-```
-
-
-
-```{r}
-
-## ct = "Microglia"
-
-## idx.0 = col.info %>% filter(k==ct, pathoAD==0) %>% select("c") %>% unlist(use.names=FALSE)
-## idx.1 = col.info %>% filter(k==ct, pathoAD==1) %>% select("c") %>% unlist(use.names=FALSE)
-
-## ## y0 = .adj.tmm[, idx.0]
-## ## y1 = .adj.tmm[, idx.1]
-
-## ybar = apply(.adj[, c(idx.0, idx.1)], 1, mean)
-
-## c0 = .cf[, idx.0]
-## c1 = .cf[, idx.1]
-
-## o0 = .obs[, idx.0]
-## o1 = .obs[, idx.1]
-
-## y0 = .adj[, idx.0]
-## y1 = .adj[, idx.1]
-
-## pv = sapply(1:nrow(.adj), function(g) wilcox.test(y0[g, ], y1[g, ])$p.value)
-
-## obs.y0 = .obs[, idx.0]
-## obs.y1 = .obs[, idx.1]
-
-## pv.obs = sapply(1:nrow(.adj), function(g) wilcox.test(obs.y0[g, ], obs.y1[g, ])$p.value)
-
-## cbind(row.info, pv, pv.obs) %>% filter(pv < .05) %>% arrange(pv) %>% head
-
-## cbind(row.info, pv, pv.obs) %>% filter(pv.obs < .05) %>% arrange(pv.obs) %>% head
-
-## cbind(row.info, pv) %>% arrange(1.-pv) %>% head
-
-## g = which.min(pv)
-
-## par(mfrow=c(2,2))
-
-## plot(c0[g, ], o0[g, ]); abline(a=0,b=1,col=2)
-## plot(c1[g, ], o1[g, ]); abline(a=0,b=1,col=2)
-
-## boxplot(y0[g, ], y1[g, ], names=c("0", "1"))
-## boxplot(obs.y0[g, ], obs.y1[g, ], names=c("0", "1"))
-
-
-## quartz()
-
-## boxplot(c0[g, ], c1[g, ])
-
-```

@@ -94,13 +94,13 @@ using KnnAlg = hnswlib::HierarchicalNSW<Scalar>;
 
 struct SrcSparseRowsT {
     explicit SrcSparseRowsT(const SpMat &_data)
-        : data(_data) {};
+        : data(_data){};
     const SpMat &data;
 };
 
 struct TgtSparseRowsT {
     explicit TgtSparseRowsT(const SpMat &_data)
-        : data(_data) {};
+        : data(_data){};
     const SpMat &data;
 };
 
@@ -458,7 +458,9 @@ normalize_weights(const Index deg_i,
 
     Scalar fval = f(lambda);
 
-    while (true) {
+    const Index max_iter = 100;
+
+    for (Index iter = 0; iter < max_iter; ++iter) {
         Scalar _lam = lambda;
         if (fval < 0.) {
             _lam = lambda * 1.1;
@@ -685,29 +687,28 @@ parse_match_options(const int argc,     //
 
     const char *const short_opts = "s:c:t:g:k:m:f:o:u:r:l:w:C:S:B:PLRM:h";
 
-    const option long_opts[] = {
-        { "src_mtx", required_argument, nullptr, 's' },         //
-        { "src_col", required_argument, nullptr, 'c' },         //
-        { "tgt_mtx", required_argument, nullptr, 't' },         //
-        { "tgt_col", required_argument, nullptr, 'g' },         //
-        { "knn", required_argument, nullptr, 'k' },             //
-        { "bilink", required_argument, nullptr, 'm' },          //
-        { "nlist", required_argument, nullptr, 'f' },           //
-        { "out", required_argument, nullptr, 'o' },             //
-        { "tau", required_argument, nullptr, 'u' },             //
-        { "rank", required_argument, nullptr, 'r' },            //
-        { "lu_iter", required_argument, nullptr, 'l' },         //
-        { "row_weight", required_argument, nullptr, 'w' },      //
-        { "col_norm", required_argument, nullptr, 'C' },        //
-        { "prune_knn", no_argument, nullptr, 'P' },             //
-        { "log_scale", no_argument, nullptr, 'L' },             //
-        { "raw_scale", no_argument, nullptr, 'R' },             //
-        { "initial_sample", required_argument, nullptr, 'S' },  //
-        { "block_size", required_argument, nullptr, 'B' },      //
-        { "sampling_method", required_argument, nullptr, 'M' }, //
-        { "help", no_argument, nullptr, 'h' },                  //
-        { nullptr, no_argument, nullptr, 0 }
-    };
+    const option long_opts[] =
+        { { "src_mtx", required_argument, nullptr, 's' },         //
+          { "src_col", required_argument, nullptr, 'c' },         //
+          { "tgt_mtx", required_argument, nullptr, 't' },         //
+          { "tgt_col", required_argument, nullptr, 'g' },         //
+          { "knn", required_argument, nullptr, 'k' },             //
+          { "bilink", required_argument, nullptr, 'm' },          //
+          { "nlist", required_argument, nullptr, 'f' },           //
+          { "out", required_argument, nullptr, 'o' },             //
+          { "tau", required_argument, nullptr, 'u' },             //
+          { "rank", required_argument, nullptr, 'r' },            //
+          { "lu_iter", required_argument, nullptr, 'l' },         //
+          { "row_weight", required_argument, nullptr, 'w' },      //
+          { "col_norm", required_argument, nullptr, 'C' },        //
+          { "prune_knn", no_argument, nullptr, 'P' },             //
+          { "log_scale", no_argument, nullptr, 'L' },             //
+          { "raw_scale", no_argument, nullptr, 'R' },             //
+          { "initial_sample", required_argument, nullptr, 'S' },  //
+          { "block_size", required_argument, nullptr, 'B' },      //
+          { "sampling_method", required_argument, nullptr, 'M' }, //
+          { "help", no_argument, nullptr, 'h' },                  //
+          { nullptr, no_argument, nullptr, 0 } };
 
     while (true) {
         const auto opt = getopt_long(argc,                      //

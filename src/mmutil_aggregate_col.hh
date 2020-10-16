@@ -32,6 +32,7 @@ struct aggregate_options_t {
         verbose = false;
 
         discretize = true;
+        normalize = false;
     }
 
     std::string mtx_file;
@@ -82,23 +83,22 @@ parse_aggregate_options(const int argc,     //
 
     const char *const short_opts = "m:c:a:A:i:l:o:C:DPhv";
 
-    const option long_opts[] = {
-        { "mtx", required_argument, nullptr, 'm' },        //
-        { "data", required_argument, nullptr, 'm' },       //
-        { "annot_prob", required_argument, nullptr, 'A' }, //
-        { "annot", required_argument, nullptr, 'a' },      //
-        { "col", required_argument, nullptr, 'c' },        //
-        { "ind", required_argument, nullptr, 'i' },        //
-        { "lab", required_argument, nullptr, 'l' },        //
-        { "label", required_argument, nullptr, 'l' },      //
-        { "out", required_argument, nullptr, 'o' },        //
-        { "discretize", no_argument, nullptr, 'D' },       //
-        { "probabilistic", no_argument, nullptr, 'P' },    //
-        { "col_norm", required_argument, nullptr, 'C' },   //
-        { "normalize", no_argument, nullptr, 'z' },        //
-        { "verbose", no_argument, nullptr, 'v' },          //
-        { nullptr, no_argument, nullptr, 0 }
-    };
+    const option long_opts[] =
+        { { "mtx", required_argument, nullptr, 'm' },        //
+          { "data", required_argument, nullptr, 'm' },       //
+          { "annot_prob", required_argument, nullptr, 'A' }, //
+          { "annot", required_argument, nullptr, 'a' },      //
+          { "col", required_argument, nullptr, 'c' },        //
+          { "ind", required_argument, nullptr, 'i' },        //
+          { "lab", required_argument, nullptr, 'l' },        //
+          { "label", required_argument, nullptr, 'l' },      //
+          { "out", required_argument, nullptr, 'o' },        //
+          { "discretize", no_argument, nullptr, 'D' },       //
+          { "probabilistic", no_argument, nullptr, 'P' },    //
+          { "col_norm", required_argument, nullptr, 'C' },   //
+          { "normalize", no_argument, nullptr, 'z' },        //
+          { "verbose", no_argument, nullptr, 'v' },          //
+          { nullptr, no_argument, nullptr, 0 } };
 
     while (true) {
         const auto opt = getopt_long(argc,                      //
@@ -314,7 +314,7 @@ aggregate_col(const OPTIONS &options)
         return (x > 0.) ? std::sqrt(x) : 0.;
     };
 
-    const Scalar a0 = 1., b0 = 1.;
+    const Scalar a0 = 1e-4, b0 = 1e-4;
 
     Index s_obs = 0; // cumulative for obs (be cautious; do not touch)
     const Scalar eps = 1e-4;
@@ -330,9 +330,9 @@ aggregate_col(const OPTIONS &options)
 
         const std::string indv_name = indv_id_name.at(i);
 
-        TLOG("Reading " << indv_index_set.at(i).size()
-                        << " cells for an individual " << i << " [" << indv_name
-                        << "]");
+        TLOG("Reading [" << indv_name << "] " << indv_index_set.at(i).size()
+                         << " cells for an individual " << (i + 1) << " / "
+                         << Nind);
 
         // Y: features x columns
         const std::vector<Index> &cols_i = indv_index_set.at(i);

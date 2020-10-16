@@ -607,8 +607,8 @@ cfa_col(const OPTIONS &options)
             Index deg_j = 0;                     // # of neighbours
 
             for (Index sj = 0; sj < Ntrt; ++sj) { // Pick cells in the different
-                if (sj != tj)                     // treatment conditions
-                    continue;                     //
+                if (sj == tj)                     // treatment conditions
+                    continue;                     // skip the same one
 
                 // counterfactual data points
                 KnnAlg &alg = *knn_lookup_vec[sj].get();
@@ -680,11 +680,12 @@ cfa_col(const OPTIONS &options)
         TLOG("Estimating confounding effects on the sample, ind=" << ii);
         Mat y0, z0;
         std::tie(y0, z0) = read_cf_block(ii);
-        Mat y = read_y_block(indv_index_set.at(ii)); // D x N
-        Mat z = read_z_block(indv_index_set.at(ii)); // K x N
-        Vec _denom = z * Mat::Ones(z.cols(), 1);     // K x 1
+        // Mat y = read_y_block(indv_index_set.at(ii)); // D x N
+        // Mat z = read_z_block(indv_index_set.at(ii)); // K x N
+        // poisson_t pois(y, z, y0, z0, a0, b0);
 
-        poisson_t pois(y, z, y0, z0, a0, b0);
+        Vec _denom = z0 * Mat::Ones(z0.cols(), 1); // K x 1
+        poisson_t pois(y0, z0, a0, b0);
         pois.optimize();
         const Mat mu_i = pois.mu_DK();
 
