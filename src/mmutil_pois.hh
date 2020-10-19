@@ -20,6 +20,7 @@ struct poisson_t {
         , K(zz.rows())
         , eval_cf(false)
         , rate_opt_op(a0, b0)
+        , rate_sd_opt_op(a0, b0)
         , rate_opt_ln_op(a0, b0)
         , ent_op(a0, b0)
         , mu(K, D)
@@ -69,6 +70,7 @@ struct poisson_t {
         , K(zz.rows())
         , eval_cf(true)
         , rate_opt_op(a0, b0)
+        , rate_sd_opt_op(a0, b0)
         , rate_opt_ln_op(a0, b0)
         , ent_op(a0, b0)
         , mu(K, D)
@@ -178,6 +180,19 @@ public:
 
     inline Mat mu_DK() const { return mu.transpose(); }
 
+    inline Mat ln_mu_DK() const { return ln_mu.transpose(); }
+
+    inline Mat mu_sd_DK() const
+    {
+        Mat ret(K, D);
+
+        for (Index g = 0; g < D; ++g) {
+            ret.col(g) = ZY.col(g).binaryExpr(denomK, rate_sd_opt_op);
+        }
+        ret.transposeInPlace();
+        return ret;
+    }
+
     inline Mat rho_N() const { return rho; }
 
     inline Mat rho_cf_N() const { return rho_cf; }
@@ -229,6 +244,19 @@ public:
         const Scalar a0, b0;
     };
 
+    struct rate_sd_opt_op_t {
+        explicit rate_sd_opt_op_t(const Scalar _a0, const Scalar _b0)
+            : a0(_a0)
+            , b0(_b0)
+        {
+        }
+        Scalar operator()(const Scalar &a, const Scalar &b) const
+        {
+            return std::sqrt(a + a0) / (b + b0);
+        }
+        const Scalar a0, b0;
+    };
+
     struct rate_opt_ln_op_t {
         explicit rate_opt_ln_op_t(const Scalar _a0, const Scalar _b0)
             : a0(_a0)
@@ -263,6 +291,7 @@ public:
 
 private:
     rate_opt_op_t rate_opt_op;
+    rate_sd_opt_op_t rate_sd_opt_op;
     rate_opt_ln_op_t rate_opt_ln_op;
     ent_op_t ent_op;
 

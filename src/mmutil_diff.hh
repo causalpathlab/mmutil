@@ -342,8 +342,8 @@ parse_diff_options(const int argc,     //
         "--lab (-l)        : K x 1 annotation label name (e.g., cell type) \n"
         "--out (-o)        : Output file header\n"
         "\n"
-        "--gamma_a0        : prior for gamma distribution(a0,b0) (default: 1)"
-        "--gamma_b0        : prior for gamma distribution(a0,b0) (default: 1)"
+        "--gamma_a0        : prior for gamma distribution(a0,b0) (default: 1)\n"
+        "--gamma_b0        : prior for gamma distribution(a0,b0) (default: 1)\n"
         "\n";
 
     const char *const short_opts =

@@ -117,7 +117,7 @@ struct mm_info_reader_t {
         max_elem = 0;
     }
 
-    void set_file(BGZF *_fp) {}
+    void set_file(BGZF *_fp) { }
 
     void eval_after_header(const index_t r, const index_t c, const index_t e)
     {
@@ -134,8 +134,9 @@ struct mm_info_reader_t {
 // index bgzipped matrix market file //
 ///////////////////////////////////////
 
-int build_mmutil_index(std::string mtx_file,        // bgzip file
-                       std::string index_file = "") // index file
+int
+build_mmutil_index(std::string mtx_file,        // bgzip file
+                   std::string index_file = "") // index file
 {
 
     if (index_file.length() == 0) {
@@ -225,6 +226,34 @@ read_mmutil_index(std::string index_file, std::vector<Index> &_index)
     return ret;
 }
 
+struct _index_checker_t {
+
+    // using scalar_t = Scalar;
+    // using index_t = Index;
+
+    explicit _index_checker_t() { _found = 0; }
+
+    void set_file(BGZF *_fp) { fp = _fp; }
+
+    void eval_after_header(const Index r, const Index c, const Index e) { }
+
+    void eval(const Index row, const Index col, const Scalar weight)
+    {
+        _found = col;
+    }
+
+    void eval_end_of_file() { }
+
+    BGZF *fp;
+
+public:
+    bool check(const Index expected) const { return _found == expected; }
+    Index found() const { return _found; }
+
+private:
+    Index _found;
+};
+
 /**
    @param mtx_file matrix market file
    @param index_tab a vector of index pairs
@@ -235,15 +264,28 @@ check_index_tab(std::string mtx_file, std::vector<Index> &index_tab)
     mm_info_reader_t info;
     CHECK(peek_bgzf_header(mtx_file, info));
 
-    const Index sz = index_tab.size();
-    const Index last_col = sz - 1;
+    if (index_tab.size() < info.max_col) {
+        return EXIT_FAILURE;
+    }
 
-    if (last_col == (info.max_col - 1))
-        return EXIT_SUCCESS;
+    Index nerr = 0;
+    _index_checker_t checker;
+    for (Index j = 0; j < (info.max_col - 1); ++j) {
+        const Index beg = index_tab[j];
+        const Index end = index_tab[j];
+        visit_bgzf_block(mtx_file, beg, end, checker);
 
-    ELOG("This index file is corrupted: " << last_col << " < "
-                                          << (info.max_col - 1));
-    return EXIT_FAILURE;
+        if (!checker.check(j)) {
+            nerr++;
+            ELOG("Expected = " << j << " " << beg
+                               << " Found = " << checker.found());
+        }
+    }
+
+    if (nerr > 0)
+        return EXIT_FAILURE;
+
+    return EXIT_SUCCESS;
 }
 
 } // namespace index

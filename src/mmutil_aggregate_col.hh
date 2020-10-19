@@ -83,22 +83,23 @@ parse_aggregate_options(const int argc,     //
 
     const char *const short_opts = "m:c:a:A:i:l:o:C:DPhv";
 
-    const option long_opts[] =
-        { { "mtx", required_argument, nullptr, 'm' },        //
-          { "data", required_argument, nullptr, 'm' },       //
-          { "annot_prob", required_argument, nullptr, 'A' }, //
-          { "annot", required_argument, nullptr, 'a' },      //
-          { "col", required_argument, nullptr, 'c' },        //
-          { "ind", required_argument, nullptr, 'i' },        //
-          { "lab", required_argument, nullptr, 'l' },        //
-          { "label", required_argument, nullptr, 'l' },      //
-          { "out", required_argument, nullptr, 'o' },        //
-          { "discretize", no_argument, nullptr, 'D' },       //
-          { "probabilistic", no_argument, nullptr, 'P' },    //
-          { "col_norm", required_argument, nullptr, 'C' },   //
-          { "normalize", no_argument, nullptr, 'z' },        //
-          { "verbose", no_argument, nullptr, 'v' },          //
-          { nullptr, no_argument, nullptr, 0 } };
+    const option long_opts[] = {
+        { "mtx", required_argument, nullptr, 'm' },        //
+        { "data", required_argument, nullptr, 'm' },       //
+        { "annot_prob", required_argument, nullptr, 'A' }, //
+        { "annot", required_argument, nullptr, 'a' },      //
+        { "col", required_argument, nullptr, 'c' },        //
+        { "ind", required_argument, nullptr, 'i' },        //
+        { "lab", required_argument, nullptr, 'l' },        //
+        { "label", required_argument, nullptr, 'l' },      //
+        { "out", required_argument, nullptr, 'o' },        //
+        { "discretize", no_argument, nullptr, 'D' },       //
+        { "probabilistic", no_argument, nullptr, 'P' },    //
+        { "col_norm", required_argument, nullptr, 'C' },   //
+        { "normalize", no_argument, nullptr, 'z' },        //
+        { "verbose", no_argument, nullptr, 'v' },          //
+        { nullptr, no_argument, nullptr, 0 }
+    };
 
     while (true) {
         const auto opt = getopt_long(argc,                      //
@@ -300,6 +301,7 @@ aggregate_col(const OPTIONS &options)
     ///////////////////////////
 
     Mat out_mu;
+    Mat out_mu_sd;
     Mat out_mean;
     Mat out_sum;
 
@@ -348,9 +350,11 @@ aggregate_col(const OPTIONS &options)
 
         if (i == 0) {
             out_mu.resize(D, Nind * K);
+            out_mu_sd.resize(D, Nind * K);
             out_mean.resize(D, Nind * K);
             out_sum.resize(D, Nind * K);
             out_mu.setZero();
+            out_mu_sd.setZero();
             out_mean.setZero();
             out_sum.setZero();
         }
@@ -385,6 +389,7 @@ aggregate_col(const OPTIONS &options)
         poisson_t pois(yy, zz, a0, b0);
         pois.optimize();
         Mat _mu = pois.mu_DK();
+        Mat _mu_sd = pois.mu_sd_DK();
         Mat _rho = pois.rho_N();
 
         Mat _sum = yy * zz.transpose();            // D x K
@@ -399,6 +404,7 @@ aggregate_col(const OPTIONS &options)
                 out_sum.col(s_obs) = _sum.col(k);
                 out_mean.col(s_obs) = _sum.col(k) / _denom_k;
                 out_mu.col(s_obs) = _mu.col(k);
+                out_mu_sd.col(s_obs) = _mu_sd.col(k);
             }
             ++s_obs;
         }
@@ -415,6 +421,7 @@ aggregate_col(const OPTIONS &options)
     write_vector_file(output + ".rho.gz", std_vector(out_rho));
 
     write_data_file(output + ".mu.gz", out_mu);
+    write_data_file(output + ".mu_sd.gz", out_mu_sd);
     write_data_file(output + ".mean.gz", out_mean);
     write_data_file(output + ".sum.gz", out_sum);
 
