@@ -38,21 +38,24 @@ simulate.glm <- function(nind, ncovar, ngenes, ncausal, confounded=FALSE) {
   if(ncovar > 0) {
 
     cc = .rnorm(nind, ncovar)
+    W = .rnorm(nind, 1)
 
     if(confounded) {
-      ww = cc %*% .rnorm(ncovar, 1) / sqrt(ncovar)
+      pr = sigmoid(cc %*% .rnorm(ncovar, 1) / sqrt(ncovar) + W)
     } else {
-      ww = .rnorm(nind, 1)
+      pr = sigmoid(W)
     }
 
-    ww[ww > 0] = 1
-    ww[ww < 0] = -1
+    ww = as.integer(runif(nind) < pr)
     xx = cbind(ww, cc)
 
   } else {
-    xx = .rnorm(nind, 1) # just Randomized assignment
-    xx[xx > 0] = 1       # positive = case
-    xx[xx < 0] = -1      # negative = control
+
+    W = .rnorm(nind, 1)
+    pr = sigmoid(W)
+    ww = as.integer(runif(nind) < pr)
+    xx = ww
+
   }
 
   .beta = .rnorm(ncol(xx), ngenes) # effect size matrix
@@ -100,8 +103,6 @@ simulate.data <- function(xx,
   ln.mu.0[, .sd > 0] = .temp1[, .sd > 0]
 
   ln.mu = ln.mu.1 + ln.mu.c + ln.mu.0 # individuals x genes
-  ln.mu = scale(ln.mu)
-  ln.mu[is.na(ln.mu)] = 0
 
   mu = exp(ln.mu) # individuals x genes
   nu = matrix(mu.nu, nrow=nrow(mu), ncol=1)
@@ -127,8 +128,17 @@ simulate.data <- function(xx,
   }
 
   yy = as.matrix(yy)
+
+  ## remove empty column
+  nnz = apply(yy > 0, 2, sum)
+  .valid = which(nnz > 0)
+
+  yy = yy[, .valid, drop = FALSE]
+  rho = rho[.valid]
+  cc.mem = cc.mem[.valid]
+  ind.mem = ind.mem[.valid]
   
-  list(y = yy, ind = ind.mem, cc = cc.mem, rho = rho, ln.mu = t(ln.mu))
+  list(y = yy, ind = ind.mem, cc = cc.mem, rho = rho, ln.mu = t(ln.mu), ln.mu.c = t(ln.mu.c))
 }
 
 write.data <- function(.glm, .data, .hdr) {
@@ -282,7 +292,7 @@ if(!file.exists(temp.file)) {
   .data = simulate.data(xx = .glm$x,
                         x.beta = .glm$beta,
                         pve.1 = .2,
-                        pve.c = .6,
+                        pve.c = .5,
                         ncell.ind = 100)
   save(.glm, .data, file=temp.file)
 } else {
@@ -318,8 +328,8 @@ if(!file.exists(mtx.file)) {
 		--lab example/simulation/confounder/exp2.lab.gz \
 		--ind example/simulation/confounder/exp2.ind.gz \
 		--trt_ind example/simulation/confounder/exp2.trt.gz \
-		--knn 5 \
  		--out example/simulation/confounder/cfa_exp2
+
 ```
 
 
@@ -333,11 +343,379 @@ causal.genes = .glm$causal
 label = .glm$x[, 1]
 
 mu.obs = .fread(r.hdr %&% ".obs_mu.gz") %>% as.matrix
-mu.adj = .fread(r.hdr %&% ".adj_mu.gz") %>% as.matrix
+se.obs = .fread(r.hdr %&% ".obs_mu_sd.gz") %>% as.matrix
+
 mu.cf = .fread(r.hdr %&% ".cf_mu.gz") %>% as.matrix
+se.cf = .fread(r.hdr %&% ".cf_mu_sd.gz") %>% as.matrix
+
+mu.r = .fread(r.hdr %&% ".resid_mu.gz") %>% as.matrix
+se.r = .fread(r.hdr %&% ".resid_mu_sd.gz") %>% as.matrix
+
+mu.r0 = .fread(r.hdr %&% ".resid_null_mu.gz") %>% as.matrix
+se.r0 = .fread(r.hdr %&% ".resid_null_mu_sd.gz") %>% as.matrix
+
+g = causal.genes[3]
+
+g = 123
+o = order(label)
+plot(mu.obs[g, o], log="y")
+points(mu.cf[g, o], col=2)
+points(mu.r[g, o], col=3, pch=19)
+
+fit.glm <- function(xx, y, reg = 1) {
+  p = ncol(xx)
+  beta = rep(0, p)
+  beta.se = rep(sqrt(reg), p)
+  eta = xx %*% beta
+
+  llik = 0
+  
+  for(iter in 1:100) {
+
+    llik.old = llik
+
+    y.pseudo = -1 + eta + exp(-eta) * y
+    ww = exp(eta)
+
+    for(j in 1:p) {
+      .r = eta - xx[, j] * beta[j]
+      .num = sum(ww * xx[, j] * (y.pseudo - .r))
+      .denom = sum(ww * xx[, j]^2) + reg
+      beta[j] = .num / .denom
+      beta.se[j] = 1 / sqrt(sum(ww * xx[, j]^2))
+      eta = .r + xx[, j] * beta[j]      
+    }
+
+    llik = mean(y * eta - exp(eta))
+    if(abs(llik.old - llik) / abs(llik.old + 1e-4) < 1e-4){
+      break
+    }
+  }
+
+  list(beta = beta, se = beta.se)
+}
+
+rr = matrix(nrow=nrow(mu.obs), ncol=ncol(mu.obs))
+
+for(j in 1:ncol(rr)) {
+
+  xx = cbind(log(mu.cf[, j]), 1)
+  y = matrix(mu.obs[, j])
+
+  .out = fit.glm(xx, y)
+  rr[, j] = log(y) - xx[, 1] * .out$beta[1] - .out$beta[2]
+}
+
+rr = scale(t(rr)) %>% t
+
+pv0 = sapply(1:1000, function(g) wilcox.test(mu.obs[g, label==1], mu.obs[g, label!=1])$p.value)
+
+pv1 = sapply(1:1000, function(g) wilcox.test(mu.obs[g, label==1], mu.cf[g, label==1])$p.value)
+
+plot(-log10(pv0), -log10(pv1))
+points(-log10(pv0[causal.genes]), -log10(pv1[causal.genes]), pch=19, cex=.5, col=2)
+
+pv = sapply(1:1000, function(g) wilcox.test(rr[g, label==1], rr[g, label!=1])$p.value)
+
+.svd = rsvd::rsvd(rr, k=4)
+
+par(mfrow=c(1,3))
+
+plot(.svd$v[, 1], .svd$v[, 2], xlab="PC1", ylab="PC2")
+points(.svd$v[label==1, 1], .svd$v[label==1, 2], pch=19)
+
+plot(.svd$v[, 2], .svd$v[, 3], xlab="PC2", ylab="PC3")
+points(.svd$v[label==1, 2], .svd$v[label==1, 3], pch=19)
+
+plot(.svd$v[, 3], .svd$v[, 4], xlab="PC3", ylab="PC4")
+points(.svd$v[label==1, 3], .svd$v[label==1, 4], pch=19)
+
+
+
+g = causal.genes[10]
+
+g = 1
+
+par(mfrow=c(2,2))
+
+boxplot(.data$ln.mu[g, label==1], .data$ln.mu[g, label!=1])
+
+boxplot(.data$ln.mu.c[g, label==1], .data$ln.mu.c[g, label!=1])
+
+boxplot(mu.cf[g, label==1], mu.cf[g, label!=1], log="y")
+
+
+plot(mu.cf[, 1], .data$ln.mu.c[,1], log="x")
+
+
+################################################################
+
+pv.best = sapply(1:1000,
+       function(g) {
+         y = .data$ln.mu[g, ]
+         x = .data$ln.mu.c[g, ]
+         w = .glm$x[, 1]
+         summary(lm(y ~ x + w))$coefficients['w', 4]
+       })
+
+pv.2 = sapply(1:1000,
+       function(g) {
+         y = lm(log(mu.obs[g, ]) ~ .svd$v) %>% residuals
+         x = log(mu.cf[g, ])
+         w = .glm$x[, 1]
+         summary(lm(y ~ x + w))$coefficients['w', 4]
+       })
+
+
+ate = sapply(1:1000,
+             function(g) {
+               w = .glm$x[, 1]
+               cc = log(mu.cf[g, ])
+               pr = glm(w ~ cc, family="binomial") %>% fitted
+               
+               y1 = mean(log(mu.obs[g, label == 1]) / pr[label==1])
+               y0 = mean(log(mu.obs[g, label != 1]) / (1 - pr[label!=1]))
+               y1 - y0
+             })
+
+
+par(mfrow=c(2,2))
+
+plot(-log10(pv.best), -log10(pv0))
+points(-log10(pv.best)[causal.genes], -log10(pv0)[causal.genes], pch=19)
+abline(a=0,b=1,col=2)
+
+plot(-log10(pv.best), -log10(pv))
+points(-log10(pv.best)[causal.genes], -log10(pv)[causal.genes], pch=19)
+abline(a=0,b=1,col=2)
+
+plot(-log10(pv.best), -log10(pv.2))
+points(-log10(pv.best)[causal.genes], -log10(pv.2)[causal.genes], pch=19)
+abline(a=0,b=1,col=2)
+
+## qqnorm(ate)
+## abline(a=0,b=1,col=2)
+
+plot(-log10(pv), ate)
+points(-log10(pv)[causal.genes], ate[causal.genes], pch=19)
+abline(a=0,b=1,col=2)
+
+
+
+summary(lm(y ~ w))
+
+
+
+
+
+################################################################
+
+
+x11()
+plot(as.numeric(mu.cf), as.numeric(.data$ln.mu.c), log="x")
+
+
+
+plot(.data$ln.mu[g, ], mu.cf[g, ], log="y")
+
+plot(.data$ln.mu[g, ], mu.obs[g, ], log="y")
+
+plot(.data$ln.mu[g, ], mu.obs[g, ]/mu.cf[g, ], log="y")
+
+
+
+hist(pv)
+hist(pv0)
+
+pv[causal.genes]
+pv0[causal.genes]
+
+plot(-log10(pv0), -log10(pv))
+points(-log10(pv0[causal.genes]), -log10(pv[causal.genes]), pch=19, col=2)
+abline(a=0,b=1,col=2)
+
+
+plot(log(mu.obs[g, label==1]) - xx[,1] * .out$beta[1])
+abline(h=0,col=2)
+
+
+.temp = sapply(1:1000, function(g) {
+  xx = cbind(log(mu.cf[g, label==1]), 1)
+  y = mu.obs[g, label==1]
+  .out = fit.glm(xx, y)
+  c(.out$beta[2], .out$se[2])
+})
+
+.ash = ashr::ash(.temp[1, ], .temp[2, ])
+
+.ash$result[causal.genes,]
+
+
+
+z = sapply(1:1000, function(g) {
+  xx = cbind(rr[g, label==1], 1)
+  y = exp(rr[g, label==1])
+  .out = fit.glm(xx, y)
+  .out$beta[2] / .out$se[2]
+})
+
+plot(z)
+points(causal.genes, z[causal.genes], col=2, pch=19)
+
+z0 = sapply(1:1000, function(g) {
+  xx = cbind(rr[g, label!=1], 1)
+  y = exp(rr[g, label!=1])
+  .out = fit.glm(xx, y)
+  .out$beta[2] / .out$se[2]
+})
+
+plot(z0)
+points(causal.genes, z0[causal.genes], col=2, pch=19)
+
+
+
+
+o = order(z)
+z0 = qnorm((1:1000)/1001)
+
+plot(z0, z[o])
+
+
+
+
+################################################################
+TODO
+
+
+
+x = log(mu.cf[g, label==1])
+xx = cbind(x, 1)
+
+.lm = glm(y ~ x, family="poisson")
+summary(.lm)
+
+
+
+points(causal.genes, residuals(.lm)[causal.genes], col=2, pch=19)
+
+
+
+
+boxplot(as.numeric(mu.adj[, label==1]),
+        as.numeric(mu.adj[, label!=1]))
+
+t.test(as.numeric(mu.adj[, label==1]),
+        as.numeric(mu.adj[, label!=1]))
+
+
+
+Y = preprocessCore::normalize.quantiles(mu.obs)
+Y.cf = preprocessCore::normalize.quantiles(mu.cf)
+
+.svd = rsvd::rsvd(Y, k=3)
+.svd.cf = rsvd::rsvd(Y.cf, k=3)
+
+R = cor(.glm$x, .svd$v)
+Matrix::image(Matrix::Matrix(R))
+
+R.cf = cor(.glm$x, .svd.cf$v)
+Matrix::image(Matrix::Matrix(R.cf))
+
+
+
+Y.rr = lm(t(Y) ~ .svd.cf$v) %>% residuals %>% t
+
+rho.obs = .fread(r.hdr %&% ".rho.gz") %>% as.matrix
+
+.test.0 =
+  lapply(1:ngene, function(g) {
+    x = log(1 + mu.obs[g, label==1])
+    y = log(1 + mu.obs[g, label!=1])
+    t.test(x, y)
+    })
+
+pv.0 = sapply(.test.0, function(x) x$p.value)
+
+.test.1 =
+  lapply(1:ngene, function(g) {
+    x = log(1 + Y.rr[g, label==1])
+    y = log(1 + Y.rr[g, label!=1])
+    t.test(x, y)
+    })
+
+pv.1 = sapply(.test.1, function(x) x$p.value)
+
+qqplot(-log10(pv.0), -log10(pv.1))
+abline(a=0, b=1, col=2)
+
+
+
+TODO
+
+
+g = which.min(pv.1)
+
+.lm = lm(log(mu.obs[g, ]) ~ log(mu.cf[g, ]) + 1)
+
+.yhat = predict(.lm)
+
+boxplot(log(mu.obs[g, label==1]), .yhat[label==1])
+
+plot(log(mu.obs[g, label==1]), .yhat[label==1])
+
+
+boxplot(.lm$residuals[label==1], .lm$residuals[label!=1])
+
+t.test(.lm$residuals[label==1])
+
+t.test(.lm$residuals[label!=1])
+
+boxplot(mu.obs[g, label==1], mu.obs[g, label!=1], log="y")
+
+boxplot(mu.cf[g, label==1], mu.cf[g, label!=1], log="y")
+
+
+
+
+boxplot(rr[2, label==1], rr[2, label=-1])
+
+mu.obs = mu.obs / mean(mu.obs)
+mu.cf = mu.cf / mean(mu.cf)
+
 
 ## plot(mu.cf[, 1], mu.adj[, 1])
 ## plot(mu.cf[, 1], mu.obs[, 1])
+
+ngenes = nrow(mu.obs)
+
+t.test.out =
+  lapply(1:ngene, function(g) {
+    x = log(1 + mu.obs[g, label==1])
+    y = log(1 + mu.cf[g, label==1]) * .88
+    t.test(x, y)
+    })
+
+pv = sapply(t.test.out, function(x) x$p.value)
+
+x = -log10((1:ngenes)/(ngenes+1)); y= -log10(sort(pv))
+plot(x, y)
+abline(a=0,b=1,col=2)
+
+
+w.test.out =
+  lapply(1:ngene, function(g) {
+    x = mu.obs[g, label==1]
+    y = mu.cf[g, label==1]
+    wilcox.test(x, y)
+    })
+
+## pv = sapply(w.test.out, function(x) x$p.value)
+
+hist(pv)
+
+
+
+
 
 .temp.adj = cor(t(mu.adj), label)
 
@@ -360,18 +738,18 @@ g = causal.genes[1]
 
 g = 127
 
-t.test(c(mu.obs[g, label==1], mu.cf[g, label==-1]),
-       c(mu.cf[g, label==1], mu.obs[g, label==-1]),
+t.test(c(mu.obs[g, label==1], mu.cf[g, label!=1]),
+       c(mu.cf[g, label==1], mu.obs[g, label!=1]),
        paired=TRUE)
 
-wilcox.test(c(mu.obs[g, label==1], mu.cf[g, label==-1]),
-            c(mu.cf[g, label==1], mu.obs[g, label==-1]))
+wilcox.test(c(mu.obs[g, label==1], mu.cf[g, label!=1]),
+            c(mu.cf[g, label==1], mu.obs[g, label!=1]))
 
 
-plot(1:100, c(mu.obs[g, label==1], mu.cf[g, label==-1]), log="y")
-points(1:100, c(mu.cf[g, label==1], mu.obs[g, label==-1]), pch = 19)
+plot(1:100, c(mu.obs[g, label==1], mu.cf[g, label!=1]), log="y")
+points(1:100, c(mu.cf[g, label==1], mu.obs[g, label!=1]), pch = 19)
 
-t.test(mu.adj[g, label==1], mu.adj[g, label==-1])
+t.test(mu.adj[g, label==1], mu.adj[g, label!=1])
 
 
 
@@ -391,19 +769,19 @@ g = causal.genes[2]
 g = 10
 
 x = mu.adj[g, label==1]
-y = mu.adj[g, label==-1]
+y = mu.adj[g, label!=1]
 
 x0 = mu.obs[g, label==1]
-y0 = mu.obs[g, label==-1]
+y0 = mu.obs[g, label!=1]
 
 x.c = mu.cf[g, label==1]
-y.c = mu.cf[g, label==-1]
+y.c = mu.cf[g, label!=1]
 
 
 rr = lm(mu.obs[g, ] ~ mu.cf[g, ]) %>% residuals
 
 x.r = rr[label==1]
-y.r = rr[label==-1]
+y.r = rr[label!=1]
 
 par(mfrow=c(1,3))
 

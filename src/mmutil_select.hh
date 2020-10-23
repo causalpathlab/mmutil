@@ -169,7 +169,7 @@ copy_selected_columns(const std::string mtx_file,
 
     TLOG("Created valid column names");
 
-    const Str output_column_file = output + ".columns.gz";
+    const Str output_column_file = output + ".cols.gz";
     const Str output_mtx_file = output + ".mtx.gz";
 
     write_vector_file(output_column_file, out_column_names);

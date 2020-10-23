@@ -153,7 +153,7 @@ struct cfa_depth_finder_t {
 #endif
     }
 
-    void eval_end_of_file() { }
+    void eval_end_of_file() {}
 
     Vec estimate_depth() { return num_vec.binaryExpr(denom_vec, opt_op); }
 
@@ -448,7 +448,7 @@ cfa_col(const OPTIONS &options)
     /// @param subcol cells
     /// @returns y
 
-    auto read_y_block = [&](std::vector<Index> &subcol) -> Mat {
+    auto read_y_block = [&](const std::vector<Index> &subcol) -> Mat {
         return Mat(read_eigen_sparse_subset_col(mtx_file, mtx_idx_tab, subcol));
     };
 
@@ -456,7 +456,7 @@ cfa_col(const OPTIONS &options)
     /// @param subcol cells
     /// @returns z
 
-    auto read_z_block = [&](std::vector<Index> &subcol) -> Mat {
+    auto read_z_block = [&](const std::vector<Index> &subcol) -> Mat {
         Mat zz_prob = row_sub(Z, subcol); //
         zz_prob.transposeInPlace();       // Z: K x N
 
@@ -475,45 +475,6 @@ cfa_col(const OPTIONS &options)
             // TLOG("Using the probabilistic Z: " << zz.sum());
         }
         return zz;
-    };
-
-    /// Take spectral data for a particular treatment group "k"
-    /// @param k type index
-    /// @returns eigenvectors
-
-    auto build_spectral_data = [&](const Index k) -> Mat {
-        std::vector<Index> &col_k = trt_index_set[k];
-        const Index Nk = col_k.size();
-        const Index block_size = options.block_size;
-        const Index rank = proj.cols();
-
-        Mat ret(rank, Nk);
-        ret.setZero();
-
-        Index r = 0;
-        for (Index lb = 0; lb < Nk; lb += block_size) {
-            const Index ub = std::min(Nk, block_size + lb);
-
-            std::vector<Index> subcol_k(ub - lb);
-            std::copy(col_k.begin() + lb, col_k.begin() + ub, subcol_k.begin());
-
-            Mat x0 = read_y_block(subcol_k);
-
-            Mat xx = make_normalized_laplacian(x0,
-                                               ww,
-                                               options.tau,
-                                               options.col_norm,
-                                               options.log_scale);
-
-            Mat vv = proj.transpose() * xx; // rank x block_size
-            normalize_columns(vv);          // to make cosine distance
-
-            for (Index j = 0; j < vv.cols(); ++j) {
-                ret.col(r) = vv.col(j);
-                ++r;
-            }
-        }
-        return ret;
     };
 
     ////////////////////
@@ -543,38 +504,83 @@ cfa_col(const OPTIONS &options)
     ///////////////////////////////////////////////////////
     // construct dictionary for each treatment condition //
     ///////////////////////////////////////////////////////
+    using vs_type = hnswlib::InnerProductSpace;
 
-    std::vector<std::shared_ptr<hnswlib::InnerProductSpace>> vs_vec;
-    std::vector<std::shared_ptr<KnnAlg>> knn_lookup_vec;
-    Mat V;
+    // std::vector<std::shared_ptr<hnswlib::InnerProductSpace>> vs_vec_trt;
+    // std::vector<std::shared_ptr<KnnAlg>> knn_lookup_trt;
 
-    TLOG("Constructing spectral dictionary for matching");
+    // TLOG("Constructing spectral dictionary for matching");
 
-    V.resize(rank, Nsample);
+    // for (Index tt = 0; tt < Ntrt; ++tt) {
+    //     const Index n_tot = trt_index_set[tt].size();
 
-    for (Index tt = 0; tt < Ntrt; ++tt) {
-        const Index n_tot = trt_index_set[tt].size();
+    //     vs_vec_trt.emplace_back(std::make_shared<vs_type>(rank));
 
-        using vs_type = hnswlib::InnerProductSpace;
+    //     vs_type &VS = *vs_vec_trt[tt].get();
+    //     knn_lookup_trt.emplace_back(
+    //         std::make_shared<KnnAlg>(&VS, n_tot, param_bilink,
+    //         param_nnlist));
+    // }
 
-        vs_vec.emplace_back(std::make_shared<vs_type>(rank));
+    //////////////////////////////////////////////
+    // construct dictionary for each individual //
+    //////////////////////////////////////////////
 
-        vs_type &VS = *vs_vec[vs_vec.size() - 1].get();
-        knn_lookup_vec.emplace_back(
+    std::vector<std::shared_ptr<hnswlib::InnerProductSpace>> vs_vec_indv;
+    std::vector<std::shared_ptr<KnnAlg>> knn_lookup_indv;
+
+    for (Index ii = 0; ii < Nind; ++ii) {
+        const Index n_tot = indv_index_set[ii].size();
+        vs_vec_indv.emplace_back(std::make_shared<vs_type>(rank));
+
+        vs_type &VS = *vs_vec_indv[ii].get();
+        knn_lookup_indv.emplace_back(
             std::make_shared<KnnAlg>(&VS, n_tot, param_bilink, param_nnlist));
     }
 
+    /////////////////////
+    // add data points //
+    /////////////////////
+
+    Mat V(rank, Nsample);
+
+    const Index block_size = options.block_size;
+
+    for (Index lb = 0; lb < Nsample; lb += block_size) {
+        const Index ub = std::min(Nsample, block_size + lb);
+
+        std::vector<Index> sub_b(ub - lb);
+        std::iota(sub_b.begin(), sub_b.end(), lb);
+
+        Mat x0 = read_y_block(sub_b);
+
+        Mat xx = make_normalized_laplacian(x0,
+                                           ww,
+                                           options.tau,
+                                           options.col_norm,
+                                           options.log_scale);
+
+        Mat vv = proj.transpose() * xx; // rank x block_size
+        normalize_columns(vv);          // to make cosine distance
+
+        for (Index j = 0; j < vv.cols(); ++j) {
+            const Index r = sub_b[j];
+            V.col(r) = vv.col(j);
+        }
+    }
+
+    TLOG("Updating each individual's dictionary");
+
     progress_bar_t<Index> prog(Nsample, 1e2);
 
-    for (Index tt = 0; tt < Ntrt; ++tt) {
-        const Index n_tot = trt_index_set[tt].size();
-        KnnAlg &alg = *knn_lookup_vec[tt].get();
-        Mat dat = build_spectral_data(tt);
-        float *mass = dat.data(); // adding data points
+    for (Index ii = 0; ii < Nind; ++ii) {
+        const Index n_tot = indv_index_set[ii].size(); // # cells
+        KnnAlg &alg = *knn_lookup_indv[ii].get();      // lookup
+        float *mass = V.data();                        // raw data
+
         for (Index i = 0; i < n_tot; ++i) {
-            alg.addPoint((void *)(mass + rank * i), i);
-            const Index j = trt_index_set.at(tt).at(i);
-            V.col(j) = dat.col(i);
+            const Index cell_j = indv_index_set.at(ii).at(i);
+            alg.addPoint((void *)(mass + rank * cell_j), i);
             prog.update();
             prog(std::cerr);
         }
@@ -584,88 +590,141 @@ cfa_col(const OPTIONS &options)
     // For each individual i //
     ///////////////////////////
 
-    std::size_t knn_max = options.knn * (Ntrt - 1);
-    std::vector<Scalar> dist_ij(knn_max), weights_ij(knn_max);
-    std::vector<Index> neigh_j(knn_max);
+    const std::size_t knn_each = options.knn;
+    const std::size_t knn_max = knn_each * (Nind - 1);
+
+    std::vector<Scalar> within_dist(knn_max), within_weights(knn_max);
+    std::vector<Index> within_neigh(knn_max);
+
+    std::vector<Scalar> between_dist(knn_max), between_weights(knn_max);
+    std::vector<Index> between_neigh(knn_max);
 
     /// Read counterfactually-matched blocks
     /// @param ind_i individual i [0, Nind)
-    /// @returns (y0, z0) D x n_i and K x n_i
-    auto read_cf_block = [&](const Index ind_i) {
+    /// @returns (y0_within, z0_within, y0_between, z0_between)
+    /// D x n_i and K x n_i
+    auto read_cf_block = [&](const std::vector<Index> &cells_j) {
         float *mass = V.data();
-        const Index n_i = indv_index_set.at(ind_i).size();
-        Mat y0(D, n_i), z0(K, n_i);
-        y0.setZero();
-        z0.setZero();
+        const Index n_j = cells_j.size();
 
-        TLOG("Constructing the counterfactual data for ind="
-             << ind_i << ", #cells=" << n_i << ", max knn=" << knn_max);
+        Mat y0_within(D, n_j), z0_within(K, n_j);
+        Mat y0_between(D, n_j), z0_between(K, n_j);
+        y0_within.setZero();
+        z0_within.setZero();
+        y0_between.setZero();
+        z0_between.setZero();
 
-        for (Index jth = 0; jth < n_i; ++jth) { // For each cell j
-            const Index cell_j = indv_index_set.at(ind_i).at(jth);
-            const Index tj = trt_map.at(cell_j); // Trt group for this cell j
-            Index deg_j = 0;                     // # of neighbours
+        // TLOG("Constructing the counterfactual data of "
+        //      << n_j << " cells, max knn=" << knn_max);
 
-            for (Index sj = 0; sj < Ntrt; ++sj) { // Pick cells in the different
-                if (sj == tj)                     // treatment conditions
-                    continue;                     // skip the same one
+        for (Index jth = 0; jth < n_j; ++jth) {    // For each cell j
+            const Index _cell_j = cells_j.at(jth); //
+            const Index tj = trt_map.at(_cell_j);  // Trt group for this cell j
+            const Index jj = indv.at(_cell_j);     // Individual for this cell j
+            Index within_deg = 0;                  // # of neighbours
+            Index between_deg = 0;                 // # of neighbours
 
-                // counterfactual data points
-                KnnAlg &alg = *knn_lookup_vec[sj].get();
-                const Index n_sj = trt_index_set.at(sj).size();
-                const std::size_t nquery = std::min(options.knn, n_sj);
+            for (Index ii = 0; ii < Nind; ++ii) { // Pick cells from the other
+                if (ii == jj)                     // individuals
+                    continue;                     // skip the same individual
 
-                auto pq = alg.searchKnn((void *)(mass + rank * cell_j), nquery);
+                const std::vector<Index> &cells_i = indv_index_set.at(ii);
+
+                KnnAlg &alg = *knn_lookup_indv[ii].get();
+                const std::size_t n_i = cells_i.size();
+                const std::size_t nquery = std::min(knn_each, n_i);
+
+                auto pq =
+                    alg.searchKnn((void *)(mass + rank * _cell_j), nquery);
+
                 while (!pq.empty()) {
-                    float d = 0;
-                    std::size_t k;
-                    std::tie(d, k) = pq.top();
-                    const Index i = trt_index_set.at(sj).at(k);
-                    if (deg_j < dist_ij.size()) {
-                        dist_ij[deg_j] = d;
-                        neigh_j[deg_j] = i;
-                        ++deg_j;
+                    float d = 0;                              // distance
+                    std::size_t k;                            // local index
+                    std::tie(d, k) = pq.top();                //
+                    const Index _cell_i = cells_i.at(k);      // global index
+                    const Index ti = trt_map.at(_cell_i);     // treatment
+                                                              //
+                    if (ti == tj) {                           // matching trt
+                        within_dist[within_deg] = d;          //
+                        within_neigh[within_deg] = _cell_i;   //
+                        ++within_deg;                         //
+                    } else {                                  // unmatched
+                        between_dist[between_deg] = d;        //
+                        between_neigh[between_deg] = _cell_i; //
+                        ++between_deg;                        //
                     }
                     pq.pop();
                 }
             }
 
-            // BBKNN, Kernelized weights
-            normalize_weights(deg_j, dist_ij, weights_ij);
+            // BBKNN-inspired, Kernelized weights
+            normalize_weights(within_deg, within_dist, within_weights);
+            normalize_weights(between_deg, between_dist, between_weights);
 
             // take care of the leftover (if it exists)
-            for (Index k = deg_j; k < knn_max; ++k) {
-                dist_ij[k] = 0;
-                neigh_j[k] = 0;
-                weights_ij[k] = 0;
+            for (Index k = within_deg; k < knn_max; ++k) {
+                within_dist[k] = 0;
+                within_weights[k] = 0;
+                if (within_deg > 0)
+                    within_neigh[k] = within_neigh[within_deg - 1];
+            }
+
+            for (Index k = between_deg; k < knn_max; ++k) {
+                between_dist[k] = 0;
+                between_weights[k] = 0;
+                if (between_deg > 0)
+                    between_neigh[k] = between_neigh[between_deg - 1];
             }
 
             // Take the weighted average of matched data points
-            Mat _y0 = read_y_block(neigh_j);   // D x n
-            Mat _z0 = read_z_block(neigh_j);   // K x n
-            Vec w0 = eigen_vector(weights_ij); // n x 1
-            const Scalar denom = w0.sum();     // must be > 0
+            {
+                Mat _y0 = read_y_block(within_neigh);  // D x n
+                Mat _z0 = read_z_block(within_neigh);  // K x n
+                Vec w0 = eigen_vector(within_weights); // n x 1
 
-            y0.col(jth) = _y0 * w0 / denom;
-            z0.col(jth) = _z0 * w0 / denom;
+                const Scalar denom = w0.sum(); // must be > 0
 
-            const Scalar _z = z0.col(jth).sum(); // normalize
-            z0.col(jth) /= _z;                   // to 1
+                y0_within.col(jth) = _y0 * w0 / denom;
+                z0_within.col(jth) = _z0 * w0 / denom;
+
+                const Scalar _z = z0_within.col(jth).sum(); // normalize
+                z0_within.col(jth) /= _z;                   // to 1
+            }
+            {
+                Mat _y0 = read_y_block(between_neigh);  // D x n
+                Mat _z0 = read_z_block(between_neigh);  // K x n
+                Vec w0 = eigen_vector(between_weights); // n x 1
+
+                const Scalar denom = w0.sum(); // must be > 0
+
+                y0_between.col(jth) = _y0 * w0 / denom;
+                z0_between.col(jth) = _z0 * w0 / denom;
+
+                const Scalar _z = z0_between.col(jth).sum(); // normalize
+                z0_between.col(jth) /= _z;                   // to 1
+            }
         }
 
-        return std::make_tuple(y0, z0);
+        return std::make_tuple(y0_within, z0_within, y0_between, z0_between);
     };
-
-    //////////////////////////////////////////
-    // Pass I : train counterfactual models //
-    //////////////////////////////////////////
 
     const Scalar a0 = options.gamma_a0, b0 = options.gamma_b0;
 
-    Mat cf_mu(D, K * Nind);
-    Mat cf_mu_sd(D, K * Nind);
     std::vector<std::string> mu_col_names;
     mu_col_names.reserve(K * Nind);
+
+    Mat obs_mu(D, K * Nind);
+    Mat obs_mu_sd(D, K * Nind);
+
+    Mat cf_mu(D, K * Nind);
+    Mat cf_mu_sd(D, K * Nind);
+    Mat cf_null_mu(D, K * Nind);
+    Mat cf_null_mu_sd(D, K * Nind);
+
+    Mat resid_mu(D, K * Nind);
+    Mat resid_mu_sd(D, K * Nind);
+    Mat resid_null_mu(D, K * Nind);
+    Mat resid_null_mu_sd(D, K * Nind);
 
     const Scalar eps = 1e-4;
 
@@ -678,131 +737,95 @@ cfa_col(const OPTIONS &options)
         }
 #endif
 
-        TLOG("Estimating confounding effects on the sample, ind=" << ii);
-        Mat y0, z0;
-        std::tie(y0, z0) = read_cf_block(ii);
-        // Mat y = read_y_block(indv_index_set.at(ii)); // D x N
-        // Mat z = read_z_block(indv_index_set.at(ii)); // K x N
-        // poisson_t pois(y, z, y0, z0, a0, b0);
+        Mat y0_within, z0_within;
+        Mat y0_between, z0_between;
 
-        Vec _denom = z0 * Mat::Ones(z0.cols(), 1); // K x 1
-        poisson_t pois(y0, z0, a0, b0);
-        pois.optimize();
-        const Mat mu_i = pois.mu_DK();
-        const Mat mu_sd_i = pois.mu_sd_DK();
+        const std::vector<Index> &cells_i = indv_index_set.at(ii);
+        std::tie(y0_within, z0_within, y0_between, z0_between) =
+            read_cf_block(cells_i);
 
-        for (Index k = 0; k < K; ++k) {
-            const Index s = K * ii + k;
-            if (_denom(k) > eps) {
-                cf_mu.col(s) = mu_i.col(k);
-                cf_mu_sd.col(s) = mu_sd_i.col(k);
+        Mat y = read_y_block(cells_i); // D x N
+        Mat z = read_z_block(cells_i); // K x N
+
+        TLOG("Estimating on the sample, ind=" << ii);
+
+        {
+
+            poisson_t pois(y, z, y0_between, z0_between, a0, b0);
+            pois.optimize();
+
+            const Mat cf_mu_i = pois.mu_DK();
+            const Mat cf_mu_sd_i = pois.mu_sd_DK();
+
+            for (Index k = 0; k < K; ++k) {
+                const Index s = K * ii + k;
+                cf_mu.col(s) = cf_mu_i.col(k);
+                cf_mu_sd.col(s) = cf_mu_sd_i.col(k);
+                const std::string c =
+                    indv_id_name.at(ii) + "_" + annot_name.at(k);
+                mu_col_names.emplace_back(c);
             }
-            const std::string c = indv_id_name.at(ii) + "_" + annot_name.at(k);
-            mu_col_names.emplace_back(c);
+
+            const Mat resid_mu_i = pois.residual_mu_DK();
+            const Mat resid_mu_sd_i = pois.residual_mu_sd_DK();
+
+            for (Index k = 0; k < K; ++k) {
+                const Index s = K * ii + k;
+                resid_mu.col(s) = resid_mu_i.col(k);
+                resid_mu_sd.col(s) = resid_mu_sd_i.col(k);
+            }
+        }
+
+        {
+            poisson_t pois(y, z, y0_within, z0_within, a0, b0);
+            pois.optimize();
+
+            const Mat cf_null_mu_i = pois.mu_DK();
+            const Mat cf_null_mu_sd_i = pois.mu_sd_DK();
+
+            for (Index k = 0; k < K; ++k) {
+                const Index s = K * ii + k;
+                cf_null_mu.col(s) = cf_null_mu_i.col(k);
+                cf_null_mu_sd.col(s) = cf_null_mu_sd_i.col(k);
+            }
+
+            const Mat resid_null_mu_i = pois.residual_mu_DK();
+            const Mat resid_null_mu_sd_i = pois.residual_mu_sd_DK();
+
+            for (Index k = 0; k < K; ++k) {
+                const Index s = K * ii + k;
+                resid_null_mu.col(s) = resid_null_mu_i.col(k);
+                resid_null_mu_sd.col(s) = resid_null_mu_sd_i.col(k);
+            }
+        }
+
+        {
+            poisson_t pois(y, z, a0, b0);
+            pois.optimize();
+
+            const Mat obs_mu_i = pois.mu_DK();
+            const Mat obs_mu_sd_i = pois.mu_sd_DK();
+
+            for (Index k = 0; k < K; ++k) {
+                const Index s = K * ii + k;
+                obs_mu.col(s) = obs_mu_i.col(k);
+                obs_mu_sd.col(s) = obs_mu_sd_i.col(k);
+            }
         }
     }
 
-    TLOG("Writing down the estimated confounding factors");
+    TLOG("Writing down the results ...");
 
-    write_data_file(options.out + ".cf_mu.gz", cf_mu);
     write_vector_file(options.out + ".mu_cols.gz", mu_col_names);
 
-    ///////////////////////////////////////////
-    // Pass II :  Adjust the observed values //
-    ///////////////////////////////////////////
-
-    TLOG("Estimating depth for the columns");
-    cfa_depth_finder_t depth_finder(cf_mu, Z, indv, a0, b0);
-    visit_bgzf(mtx_file, depth_finder);
-    const Vec rho = depth_finder.estimate_depth();
-    write_data_file(options.out + ".rho.gz", rho);
-
-    TLOG("Adjusting confounding factors for each element...");
-
-    const std::string adj_mtx_file = options.out + ".mtx.gz";
-    cfa_normalizer_t normalizer(cf_mu, Z, rho, indv, adj_mtx_file);
-    visit_bgzf(mtx_file, normalizer);
-
-    const std::string adj_idx_file = adj_mtx_file + ".index";
-
-    if (file_exists(adj_idx_file)) {
-        std::remove(adj_idx_file.c_str());
-        WLOG("Removing the existing index file");
-    }
-    CHECK(build_mmutil_index(adj_mtx_file, adj_idx_file));
-
-    TLOG("Aggregating on the adjusted values...");
-
-    std::vector<Index> adj_mtx_idx_tab;
-    CHECK(read_mmutil_index(adj_idx_file, adj_mtx_idx_tab));
-    CHECK(check_index_tab(adj_mtx_file, adj_mtx_idx_tab));
-
-    /// Take a block of ADJUSTED Y matrix
-    /// @param subcol cells
-    /// @returns y
-
-    auto read_y_adj_block = [&](std::vector<Index> &subcol) -> Mat {
-        return Mat(read_eigen_sparse_subset_col(adj_mtx_file,
-                                                adj_mtx_idx_tab,
-                                                subcol));
-    };
-
-    Mat adj_mu(D, K * Nind);
-    Mat obs_mu(D, K * Nind);
-
-    Mat adj_mu_sd(D, K * Nind);
-    Mat obs_mu_sd(D, K * Nind);
-
-    for (Index ii = 0; ii < Nind; ++ii) {
-
-#ifdef CPYTHON
-        if (PyErr_CheckSignals() != 0) {
-            ELOG("Interrupted at Ind = " << (ii));
-            return EXIT_FAILURE;
-        }
-#endif
-
-        TLOG("Estimating observed effects on the sample, ind=" << ii);
-
-        {
-            Mat y = read_y_block(indv_index_set.at(ii));
-            Mat z = read_z_block(indv_index_set.at(ii));
-
-            poisson_t pois(y, z, a0, b0);
-            pois.optimize();
-            Mat mu_i = pois.mu_DK();
-            Mat mu_sd_i = pois.mu_sd_DK();
-            for (Index k = 0; k < K; ++k) {
-                const Index s = K * ii + k;
-                obs_mu.col(s) = mu_i.col(k);
-            }
-        }
-
-        TLOG("Estimating adjusted effects on the sample, ind=" << ii);
-
-        {
-            Mat y = read_y_adj_block(indv_index_set.at(ii));
-            Mat z = read_z_block(indv_index_set.at(ii));
-
-            poisson_t pois(y, z, a0, b0);
-            pois.optimize();
-            Mat mu_i = pois.mu_DK();
-            Mat mu_sd_i = pois.mu_sd_DK();
-            for (Index k = 0; k < K; ++k) {
-                const Index s = K * ii + k;
-                adj_mu.col(s) = mu_i.col(k);
-                adj_mu_sd.col(s) = mu_sd_i.col(k);
-            }
-        }
-    }
-
-    write_data_file(options.out + ".adj_mu.gz", adj_mu);
+    write_data_file(options.out + ".cf_mu.gz", cf_mu);
+    write_data_file(options.out + ".cf_mu_sd.gz", cf_mu_sd);
     write_data_file(options.out + ".obs_mu.gz", obs_mu);
-
-    write_data_file(options.out + ".adj_mu_sd.gz", adj_mu_sd);
     write_data_file(options.out + ".obs_mu_sd.gz", obs_mu_sd);
-
-    TLOG("Done");
+    write_data_file(options.out + ".resid_mu.gz", resid_mu);
+    write_data_file(options.out + ".resid_mu_sd.gz", resid_mu_sd);
+    write_data_file(options.out + ".resid_null_mu.gz", resid_null_mu);
+    write_data_file(options.out + ".resid_null_mu_sd.gz", resid_null_mu_sd);
 
     return EXIT_SUCCESS;
 }
@@ -888,38 +911,37 @@ parse_cfa_options(const int argc,     //
     const char *const short_opts =
         "m:c:a:A:i:l:t:o:LRS:r:u:w:g:G:BDPC:k:b:n:hzv0:1:";
 
-    const option long_opts[] = {
-        { "mtx", required_argument, nullptr, 'm' },        //
-        { "data", required_argument, nullptr, 'm' },       //
-        { "annot_prob", required_argument, nullptr, 'A' }, //
-        { "annot", required_argument, nullptr, 'a' },      //
-        { "col", required_argument, nullptr, 'c' },        //
-        { "ind", required_argument, nullptr, 'i' },        //
-        { "trt", required_argument, nullptr, 't' },        //
-        { "trt_ind", required_argument, nullptr, 't' },    //
-        { "lab", required_argument, nullptr, 'l' },        //
-        { "label", required_argument, nullptr, 'l' },      //
-        { "out", required_argument, nullptr, 'o' },        //
-        { "log_scale", no_argument, nullptr, 'L' },        //
-        { "raw_scale", no_argument, nullptr, 'R' },        //
-        { "block_size", required_argument, nullptr, 'S' }, //
-        { "rank", required_argument, nullptr, 'r' },       //
-        { "lu_iter", required_argument, nullptr, 'u' },    //
-        { "row_weight", required_argument, nullptr, 'w' }, //
-        { "discretize", no_argument, nullptr, 'D' },       //
-        { "probabilistic", no_argument, nullptr, 'P' },    //
-        { "col_norm", required_argument, nullptr, 'C' },   //
-        { "knn", required_argument, nullptr, 'k' },        //
-        { "bilink", required_argument, nullptr, 'b' },     //
-        { "nlist", required_argument, nullptr, 'n' },      //
-        { "normalize", no_argument, nullptr, 'z' },        //
-        { "a0", required_argument, nullptr, '0' },         //
-        { "b0", required_argument, nullptr, '1' },         //
-        { "gamma_a0", required_argument, nullptr, '0' },   //
-        { "gamma_a1", required_argument, nullptr, '1' },   //
-        { "verbose", no_argument, nullptr, 'v' },          //
-        { nullptr, no_argument, nullptr, 0 }
-    };
+    const option long_opts[] =
+        { { "mtx", required_argument, nullptr, 'm' },        //
+          { "data", required_argument, nullptr, 'm' },       //
+          { "annot_prob", required_argument, nullptr, 'A' }, //
+          { "annot", required_argument, nullptr, 'a' },      //
+          { "col", required_argument, nullptr, 'c' },        //
+          { "ind", required_argument, nullptr, 'i' },        //
+          { "trt", required_argument, nullptr, 't' },        //
+          { "trt_ind", required_argument, nullptr, 't' },    //
+          { "lab", required_argument, nullptr, 'l' },        //
+          { "label", required_argument, nullptr, 'l' },      //
+          { "out", required_argument, nullptr, 'o' },        //
+          { "log_scale", no_argument, nullptr, 'L' },        //
+          { "raw_scale", no_argument, nullptr, 'R' },        //
+          { "block_size", required_argument, nullptr, 'S' }, //
+          { "rank", required_argument, nullptr, 'r' },       //
+          { "lu_iter", required_argument, nullptr, 'u' },    //
+          { "row_weight", required_argument, nullptr, 'w' }, //
+          { "discretize", no_argument, nullptr, 'D' },       //
+          { "probabilistic", no_argument, nullptr, 'P' },    //
+          { "col_norm", required_argument, nullptr, 'C' },   //
+          { "knn", required_argument, nullptr, 'k' },        //
+          { "bilink", required_argument, nullptr, 'b' },     //
+          { "nlist", required_argument, nullptr, 'n' },      //
+          { "normalize", no_argument, nullptr, 'z' },        //
+          { "a0", required_argument, nullptr, '0' },         //
+          { "b0", required_argument, nullptr, '1' },         //
+          { "gamma_a0", required_argument, nullptr, '0' },   //
+          { "gamma_a1", required_argument, nullptr, '1' },   //
+          { "verbose", no_argument, nullptr, 'v' },          //
+          { nullptr, no_argument, nullptr, 0 } };
 
     while (true) {
         const auto opt = getopt_long(argc,                      //

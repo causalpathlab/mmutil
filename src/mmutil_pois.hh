@@ -39,7 +39,7 @@ struct poisson_t {
         , denomN(N, 1)
         , onesD(D, 1)
     {
-        TLOG("Creating a model for " << D << " x " << N << " data");
+        // TLOG("Creating a model for " << D << " x " << N << " data");
         onesD.setOnes();
 
         rho.setConstant(a0 / b0);
@@ -90,7 +90,7 @@ struct poisson_t {
         , onesD(D, 1)
     {
 
-        TLOG("Creating a model for " << D << " x " << N << " data");
+        // TLOG("Creating a model for " << D << " x " << N << " data");
 
         onesD.setOnes();
 
@@ -157,8 +157,6 @@ public:
         solve_rho();
         Scalar score = elbo() / denom;
 
-        TLOG(score);
-
         const Index maxIter = 100;
 
         for (Index iter = 0; iter < maxIter; ++iter) {
@@ -167,12 +165,11 @@ public:
             Scalar _score = elbo() / denom;
             Scalar diff = (score - _score) / (std::abs(score) + tol);
 
-            if (iter > 3 && diff < tol) {
+            if (diff < tol) {
                 break;
             }
 
             score = _score;
-            TLOG(score);
         }
 
         return score;
@@ -189,6 +186,36 @@ public:
         for (Index g = 0; g < D; ++g) {
             ret.col(g) = ZY.col(g).binaryExpr(denomK, rate_sd_opt_op);
         }
+        ret.transposeInPlace();
+        return ret;
+    }
+
+    inline Mat residual_mu_DK() const
+    {
+        Mat _zy = zz * yy.transpose(); // K x D
+        Mat _denomK = zz * rho;        // K x 1
+
+        Mat ret(K, D);
+        for (Index g = 0; g < D; ++g) {
+            ret.col(g) = _zy.col(g).binaryExpr(_denomK.cwiseProduct(mu.col(g)),
+                                               rate_opt_op);
+        }
+
+        ret.transposeInPlace();
+        return ret;
+    }
+
+    inline Mat residual_mu_sd_DK() const
+    {
+        Mat _zy = zz * yy.transpose(); // K x D
+        Mat _denomK = zz * rho;        // K x 1
+
+        Mat ret(K, D);
+        for (Index g = 0; g < D; ++g) {
+            ret.col(g) = _zy.col(g).binaryExpr(_denomK.cwiseProduct(mu.col(g)),
+                                               rate_sd_opt_op);
+        }
+
         ret.transposeInPlace();
         return ret;
     }

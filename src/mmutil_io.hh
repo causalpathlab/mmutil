@@ -233,17 +233,17 @@ find_consecutive_blocks(const std::vector<Index> &index_tab,
 
         for (Index jj = 1; jj < sorted.size(); ++jj) {
             const Index ii = sorted[jj];
-            if (ii >= (end + gap)) {                  //
-                intervals.emplace_back(beg, end + 1); //
-                beg = ii;                             // start a new interval
-                end = ii;                             //
-            } else {                                  // extend this interval
-                end = ii;                             //
-            }
-        }
-
-        if (beg <= sorted[sorted.size() - 1]) {
-            intervals.emplace_back(beg, end + 1);
+            if (ii >= (end + gap)) {                  // Is it worth adding
+                intervals.emplace_back(beg, end + 1); // a new block?
+                beg = ii;                             // Start a new block
+                end = ii;                             // with this ii
+            } else {                                  //
+                end = ii;                             // Extend the current one
+            }                                         // to cover this point
+        }                                             //
+                                                      //
+        if (beg <= sorted[sorted.size() - 1]) {       // Set the upper-bound
+            intervals.emplace_back(beg, end + 1);     //
         }
     }
 
@@ -259,16 +259,11 @@ find_consecutive_blocks(const std::vector<Index> &index_tab,
 
         lb_mem = index_tab[lb];
 
-        // if (ub == lb) {
-        //     ub = ub + 1;
-        // }
-
         if (ub < N) {
             ub_mem = index_tab[ub];
         }
 
-        // TLOG(lb << ", " << ub << " " << lb_mem << " " << ub_mem);
-        ret.emplace_back(memory_block_t { lb, lb_mem, ub, ub_mem });
+        ret.emplace_back(memory_block_t{ lb, lb_mem, ub, ub_mem });
     }
 
     return ret;
