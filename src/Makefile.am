@@ -1,8 +1,8 @@
-bin_PROGRAMS = mmutil_select_row mmutil_select_col mmutil_filter_row mmutil_filter_col mmutil_merge_col mmutil_index_col mmutil_row_score mmutil_col_score mmutil_bbknn mmutil_cfa_col mmutil_aggregate_col mmutil_spectral_col mmutil_match_col mmutil_annotate_col mmutil_embed_annot mmutil_spectral_match_col mmutil_spectral_cluster_col mmutil_diff
+bin_PROGRAMS = mmutil_select_row mmutil_select_col mmutil_filter_row mmutil_filter_col mmutil_merge_col mmutil_index_col mmutil_row_score mmutil_col_score mmutil_bbknn mmutil_cfa_col mmutil_aggregate_col mmutil_spectral_col mmutil_match_col mmutil_annotate_col mmutil_embed_annot mmutil_spectral_match_col mmutil_spectral_cluster_col mmutil_diff mmutil_simulate
 
 tabix = ext/tabix/bgzf.h ext/tabix/bgzf.c utils/bgzstream.hh utils/bgzstream.cc ext/tabix/kstring.c ext/tabix/kstring.h
 
-utils = utils/sse.h utils/cast.h utils/math.hh utils/fastexp.h utils/fastlog.h utils/fastgamma.h utils/gzstream.hh utils/gzstream.cc utils/util.hh utils/check.hh utils/tuple_util.hh utils/progress.hh utils/strbuf.hh utils/eigen_util.hh utils/std_util.hh
+utils = utils/sse.h utils/cast.h utils/math.hh  utils/stat.hh utils/fastexp.h utils/fastlog.h utils/fastgamma.h utils/gzstream.hh utils/gzstream.cc utils/util.hh utils/check.hh utils/tuple_util.hh utils/progress.hh utils/strbuf.hh utils/eigen_util.hh utils/std_util.hh
 
 common = mmutil.hh mmutil_util.hh mmutil_stat.hh mmutil_bgzf_util.hh mmutil_index.hh mmutil_io.hh io.hh io_visitor.hh $(utils) $(tabix)
 
@@ -63,6 +63,8 @@ mmutil_select_col_SOURCES = mmutil_select_col.cc mmutil_select.hh $(common)
 ###############
 
 mmutil_aggregate_col_SOURCES = mmutil_aggregate_col.cc mmutil_aggregate_col.hh mmutil_pois.hh $(common)
+
+mmutil_simulate_SOURCES = mmutil_simulate.cc mmutil_simulate.hh $(common)
 
 ###########################
 # counterfactual analysis #

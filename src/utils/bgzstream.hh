@@ -1,6 +1,6 @@
 /////////////////////////////////////////////////////////////////
 // A streambuffer wrapper for bgizpped file provided by TABIX. //
-// The filed is just modified from gzstream.hh and gzstream.cc //
+// This file is just modified from gzstream.hh and gzstream.cc //
 // 							       //
 // Mon Mar 16 12:53:30 EDT 2020				       //
 /////////////////////////////////////////////////////////////////

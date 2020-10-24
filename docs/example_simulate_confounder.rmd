@@ -354,13 +354,31 @@ se.r = .fread(r.hdr %&% ".resid_mu_sd.gz") %>% as.matrix
 mu.r0 = .fread(r.hdr %&% ".resid_null_mu.gz") %>% as.matrix
 se.r0 = .fread(r.hdr %&% ".resid_null_mu_sd.gz") %>% as.matrix
 
-g = causal.genes[3]
+g = causal.genes[1]
 
-g = 123
+g = 713
+
 o = order(label)
-plot(mu.obs[g, o], log="y")
-points(mu.cf[g, o], col=2)
+plot(mu.obs[g, o], log="y", col="gray20", cex=.2)
+points(mu.cf[g, o], col="gray", cex=.2)
 points(mu.r[g, o], col=3, pch=19)
+points(mu.r0[g, o], col=4, pch="+")
+
+par(mfrow=c(1,2))
+plot(mu.r[g, label ==1], mu.r0[g, label == 1]); abline(a=0, b=1, col=2)
+plot(mu.r[g, label !=1], mu.r0[g, label != 1]); abline(a=0, b=1, col=2)
+
+x = mu.r[g, label == 1] %>% log
+y = mu.r0[g, label == 1] %>% log
+
+t.test(x, y)
+
+x = mu.r[g, label != 1] %>% log
+y = mu.r0[g, label != 1] %>% log
+
+t.test(x, y)
+
+
 
 fit.glm <- function(xx, y, reg = 1) {
   p = ncol(xx)

@@ -23,7 +23,8 @@ struct discrete_sampler_t {
         const Scalar maxval = xx.maxCoeff(&argmax_k);
         const Scalar exp_sumval = xx.unaryExpr([&maxval](const Scalar x) {
                                         return fasterexp(x - maxval);
-                                    }).sum();
+                                    })
+                                      .sum();
 
         const Scalar u = Unif(Rng) * exp_sumval;
         Scalar cum = 0.0;
@@ -43,8 +44,8 @@ struct discrete_sampler_t {
     const Index K;
 
 private:
-    std::mt19937 Rng { std::random_device {}() };
-    std::uniform_real_distribution<Scalar> Unif { 0.0, 1.0 };
+    std::minstd_rand Rng{ std::random_device{}() };
+    std::uniform_real_distribution<Scalar> Unif{ 0.0, 1.0 };
 
     template <typename Derived>
     inline Scalar _log_sum_exp(const Eigen::MatrixBase<Derived> &log_vec)

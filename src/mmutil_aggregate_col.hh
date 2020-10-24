@@ -78,28 +78,29 @@ parse_aggregate_options(const int argc,     //
         "\n"
         "${out}.mean.gz       : (M x n) Mean matrix\n"
         "${out}.sum.gz        : (M x n) Summation matrix\n"
+        "${out}.mu.gz         : (M x n) Depth-adjusted Mean matrix\n"
+        "${out}.mu_sd.gz      : (M x n) SD of the depth-adjusted mean\n"
         "${out}.mu_cols.gz    : (n x 1) Column names\n"
         "\n";
 
     const char *const short_opts = "m:c:a:A:i:l:o:C:DPhv";
 
-    const option long_opts[] = {
-        { "mtx", required_argument, nullptr, 'm' },        //
-        { "data", required_argument, nullptr, 'm' },       //
-        { "annot_prob", required_argument, nullptr, 'A' }, //
-        { "annot", required_argument, nullptr, 'a' },      //
-        { "col", required_argument, nullptr, 'c' },        //
-        { "ind", required_argument, nullptr, 'i' },        //
-        { "lab", required_argument, nullptr, 'l' },        //
-        { "label", required_argument, nullptr, 'l' },      //
-        { "out", required_argument, nullptr, 'o' },        //
-        { "discretize", no_argument, nullptr, 'D' },       //
-        { "probabilistic", no_argument, nullptr, 'P' },    //
-        { "col_norm", required_argument, nullptr, 'C' },   //
-        { "normalize", no_argument, nullptr, 'z' },        //
-        { "verbose", no_argument, nullptr, 'v' },          //
-        { nullptr, no_argument, nullptr, 0 }
-    };
+    const option long_opts[] =
+        { { "mtx", required_argument, nullptr, 'm' },        //
+          { "data", required_argument, nullptr, 'm' },       //
+          { "annot_prob", required_argument, nullptr, 'A' }, //
+          { "annot", required_argument, nullptr, 'a' },      //
+          { "col", required_argument, nullptr, 'c' },        //
+          { "ind", required_argument, nullptr, 'i' },        //
+          { "lab", required_argument, nullptr, 'l' },        //
+          { "label", required_argument, nullptr, 'l' },      //
+          { "out", required_argument, nullptr, 'o' },        //
+          { "discretize", no_argument, nullptr, 'D' },       //
+          { "probabilistic", no_argument, nullptr, 'P' },    //
+          { "col_norm", required_argument, nullptr, 'C' },   //
+          { "normalize", no_argument, nullptr, 'z' },        //
+          { "verbose", no_argument, nullptr, 'v' },          //
+          { nullptr, no_argument, nullptr, 0 } };
 
     while (true) {
         const auto opt = getopt_long(argc,                      //
@@ -312,14 +313,14 @@ aggregate_col(const OPTIONS &options)
 
     std::vector<std::string> out_col;
 
-    auto _sqrt = [](const Scalar &x) -> Scalar {
-        return (x > 0.) ? std::sqrt(x) : 0.;
-    };
+    // auto _sqrt = [](const Scalar &x) -> Scalar {
+    //     return (x > 0.) ? std::sqrt(x) : 0.;
+    // };
 
     const Scalar a0 = 1e-4, b0 = 1e-4;
 
-    Index s_obs = 0; // cumulative for obs (be cautious; do not touch)
-    const Scalar eps = 1e-4;
+    Index s_obs = 0;         // cumulative for obs (be cautious)
+    const Scalar eps = 1e-4; //
 
     for (Index i = 0; i < Nind; ++i) {
 
