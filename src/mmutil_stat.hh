@@ -1,4 +1,6 @@
 #include "mmutil.hh"
+#include <cmath>
+#include <unordered_map>
 
 #ifndef MMUTIL_STAT_HH_
 #define MMUTIL_STAT_HH_
@@ -185,6 +187,44 @@ struct row_col_stat_collector_t {
     Vec Col_S1;
     Vec Col_S2;
     IntVec Col_N;
+};
+
+struct histogram_collector_t {
+    using index_t = Index;
+    using scalar_t = Scalar;
+
+    explicit histogram_collector_t()
+    {
+        max_row = 0;
+        max_col = 0;
+        max_elem = 0;
+    }
+
+    void eval_after_header(const index_t r, const index_t c, const index_t e)
+    {
+        std::tie(max_row, max_col, max_elem) = std::make_tuple(r, c, e);
+
+#ifdef DEBUG
+        TLOG("Start reading a list of triplets");
+#endif
+    }
+
+    void eval(const index_t row, const index_t col, const scalar_t weight)
+    {
+        if (row < max_row && col < max_col) {
+            const index_t k = std::lround(weight);
+            if (freq_map.count(k) == 0)
+                freq_map[k] = 0;
+            freq_map[k]++;
+        }
+    }
+
+    void eval_end_of_file() {}
+
+    Index max_row;
+    Index max_col;
+    Index max_elem;
+    std::unordered_map<Index, Index> freq_map;
 };
 
 #endif

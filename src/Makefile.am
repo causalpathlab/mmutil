@@ -1,4 +1,4 @@
-bin_PROGRAMS = mmutil_select_row mmutil_select_col mmutil_filter_row mmutil_filter_col mmutil_merge_col mmutil_index_col mmutil_row_score mmutil_col_score mmutil_bbknn mmutil_cfa_col mmutil_aggregate_col mmutil_spectral_col mmutil_match_col mmutil_annotate_col mmutil_embed_annot mmutil_spectral_match_col mmutil_spectral_cluster_col mmutil_diff mmutil_simulate
+bin_PROGRAMS = mmutil_select_row mmutil_select_col mmutil_filter_row mmutil_filter_col mmutil_merge_col mmutil_index_col mmutil_row_score mmutil_col_score mmutil_histogram mmutil_bbknn mmutil_cfa_col mmutil_aggregate_col mmutil_spectral_col mmutil_match_col mmutil_annotate_col mmutil_embed_annot mmutil_spectral_match_col mmutil_spectral_cluster_col mmutil_diff mmutil_simulate
 
 tabix = ext/tabix/bgzf.h ext/tabix/bgzf.c utils/bgzstream.hh utils/bgzstream.cc ext/tabix/kstring.c ext/tabix/kstring.h
 
@@ -57,6 +57,8 @@ mmutil_col_score_SOURCES = mmutil_col_score.cc mmutil_score.hh mmutil_filter_col
 mmutil_select_row_SOURCES = mmutil_select_row.cc mmutil_select.hh $(common)
 
 mmutil_select_col_SOURCES = mmutil_select_col.cc mmutil_select.hh $(common)
+
+mmutil_histogram_SOURCES = mmutil_histogram.cc mmutil_histogram.hh $(common)
 
 ###############
 # aggregation #
