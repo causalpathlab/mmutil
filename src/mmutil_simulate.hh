@@ -4,6 +4,8 @@
 #include <random>
 #include "mmutil.hh"
 #include "mmutil_index.hh"
+#include "mmutil_merge_col.hh"
+
 #include "utils/stat.hh"
 #include "utils/std_util.hh"
 #include "utils/bgzstream.hh"
@@ -99,12 +101,14 @@ parse_simulate_options(const int argc,     //
 
 /// @param mu D x 1
 /// @param rho N x 1
+/// @param col_offset column index offset
 /// @param ofs write out sparse triplets here
 /// @return number of non-zero elements
 template <typename OFS>
 Index
 sample_poisson_data(const Vec mu,
                     const Vec rho,
+                    const Index col_offset,
                     OFS &ofs,
                     const std::string FS = " ")
 {
@@ -122,7 +126,7 @@ sample_poisson_data(const Vec mu,
         temp = mu.unaryExpr(
             [&r, &rpois](const Scalar &m) -> Scalar { return rpois(r * m); });
 
-        const Index col = j + 1; // one-based
+        const Index col = col_offset + j + 1; // one-based
 
         if (temp.sum() < 1.) {   // for an empty column
             const Index row = 1; // one-based
@@ -201,7 +205,7 @@ simulate_mtx_matrix(const OPTIONS &options)
     //////////////////////////////////
 
     Index nnz = 0;
-    Index ntot = 0;
+    Index ncol = 0;
 
     std::vector<std::string> temp_files;
     temp_files.reserve(partition.size());
@@ -225,8 +229,9 @@ simulate_mtx_matrix(const OPTIONS &options)
             rho_i(j) = rho(unif_rho(rng));
         }
 
-        ntot += n_i;
-        nnz += sample_poisson_data(mu.col(i), rho_i, ofs, FS);
+        nnz += sample_poisson_data(mu.col(i), rho_i, ncol, ofs, FS);
+        ncol += n_i;
+
         ofs.close();
         temp_files.emplace_back(_temp_file);
 
@@ -243,7 +248,7 @@ simulate_mtx_matrix(const OPTIONS &options)
     obgzf_stream ofs(mtx_file.c_str(), std::ios::out);
 
     ofs << "%%MatrixMarket matrix coordinate integer general" << std::endl;
-    ofs << max_row << FS << ntot << FS << nnz << std::endl;
+    ofs << max_row << FS << ncol << FS << nnz << std::endl;
 
     for (std::string f : temp_files) {
         ibgzf_stream ifs(f.c_str(), std::ios::in);

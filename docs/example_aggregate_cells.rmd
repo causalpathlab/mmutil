@@ -1,0 +1,133 @@
+---
+title: "Aggregation of cells into individuals of origin"
+author: "Yongjin Park"
+date: "`r Sys.time()`"
+---
+
+```{r include=FALSE}
+library(tidyverse)
+library(data.table)
+library(patchwork)
+library("R.utils")
+library("lemon")
+source("Util-rmd.R")
+
+fig.dir = 'Fig/example/aggregation/'
+dir.create(fig.dir, recursive = TRUE, showWarnings = FALSE)
+knitr::opts_chunk$set(fig.path = fig.dir, fig.width = 6, fig.height = 4)
+knitr::opts_chunk$set(dev.args = list(bg = "transparent"))
+options(stringsAsFactors = FALSE)
+```
+
+```{r include=FALSE}
+.fread <- function(...) fread(..., header=FALSE)
+.fwrite <- function(...) fwrite(..., sep="\t", col.names=FALSE, row.names=FALSE)
+.read.mat <- function(...) .fread(...) %>% as.matrix
+```
+
+## Creating psuedo-bulk data with little memory footprint
+
+### Take top 500 rows and confirm that the aggregation method works correctly
+
+```{sh run_aggregate_top500}
+mkdir -p example/filtered_brain/
+mkdir -p example/aggregated_brain/
+
+# Take the top 500 genes
+[ -f example/filtered_brain/top500.mtx.gz ] || \
+	../src/mmutil_filter_row \
+		--mtx data/brain_2018-05-03/filtered_count_matrix.mtx.gz \
+		--row data/brain_2018-05-03/filtered_gene_row_names.txt.gz \
+		--col data/brain_2018-05-03/filtered_count_matrix.cols.gz \
+		--out example/filtered_brain/top500 \
+		--score NNZ \
+		--ntop 500
+
+[ -f example/filtered_brain/top500.annot.gz ] || \
+	gzip -cd example/annotate_brain/out.annot.gz | \
+		awk '{ print $1 FS $2 }' | \
+		gzip > example/filtered_brain/top500.annot.gz
+
+[ -f example/filtered_brain/top500.ind.gz ] || \
+	gzip -cd example/filtered_brain/top500.cols.gz | \
+		awk -F'.' '{ print $2 }' | \
+		gzip > example/filtered_brain/top500.ind.gz
+
+# Aggregate them into individuals
+[ -f example/aggregated_brain/top500.mean.gz ] || \
+	mmutil_aggregate_col \
+		--mtx example/filtered_brain/top500.mtx.gz \
+		--col example/filtered_brain/top500.cols.gz  \
+		--annot example/filtered_brain/top500.annot.gz \
+		--ind example/filtered_brain/top500.ind.gz \
+		--lab example/annotate_brain/out.label_names.gz \
+		--out example/aggregated_brain/top500
+```
+
+Let's compare with the results combined after reading the full matrix by R's `Matrix::readMM`.
+
+```{r test_sum_by_indv}
+## Individuals
+.ind = .fread("example/aggregated_brain/top500.mu_cols.gz") %>%
+  unlist(use.names=FALSE)
+
+n.ind = length(.ind)
+
+## Read the full sparse matrix (may take some time)
+.dat = Matrix::readMM("example/filtered_brain/top500.mtx.gz") %>%
+  as.matrix
+
+## Read the annotation results
+.temp = .fread("example/filtered_brain/top500.annot.gz") %>%
+  (function(x) { colnames(x) = c("cell", "k"); x })
+
+annot.tab = .fread("example/filtered_brain/top500.cols.gz") %>%
+  (function(x) { colnames(x) = "cell"; x }) %>%
+  mutate(j = 1:n()) %>%
+  left_join(.temp, by="cell") %>%
+  separate("cell", c("barcode", "i"), sep = "[.]") %>% 
+  mutate(ind = i %&% "_" %&% k) %>% 
+  as.data.table
+
+.take.sum <- function(i) {
+  ii = .ind[i]
+  jj = annot.tab %>%
+    filter(ind == ii) %>%
+    select(j) %>%
+    unlist(use.names=FALSE)
+  x = apply(.dat[, jj, drop = FALSE], 1, sum)
+  return(x)
+}
+
+sum.mat.debug = lapply(1:n.ind,.take.sum) %>%
+  bind_cols %>%
+  as.matrix
+
+## Compare with our results
+sum.mat = .fread("example/aggregated_brain/top500.sum.gz") %>%
+  (function(x) { colnames(x) = .ind; x }) %>% 
+  as.matrix
+
+diff = abs(sum.mat - sum.mat.debug) %>% 
+  apply(MARGIN=2, FUN=sum)
+```
+
+We found `r sum(diff)` difference between the two methods.
+
+### Aggregated pseudo-bulk matrix preserves cell-type-specific signatures
+
+```{r FigTop500PCA}
+.svd = svd(log(1 + sum.mat))
+
+.temp = tibble(x = .ind) %>%
+  separate("x", c("ind", "ct"))
+
+pc = .svd$v %>%
+  (function(x) { colnames(x)="pc" %&% 1:ncol(x); x}) %>% 
+  as_tibble %>%
+  (function(x) bind_cols(.temp, x))
+
+.gg.plot(pc, aes(x = pc1, y = pc2, colour = ct)) +
+  geom_point() +
+  scale_colour_brewer("cell type", palette="Paired", direction=1)
+```
