@@ -64,7 +64,6 @@ parse_aggregate_options(const int argc,     //
         "--annot (-a)         : annotation/clustering assignment (N x 2)\n"
         "--annot_prob (-A)    : annotation/clustering probability (N x K)\n"
         "--ind (-i)           : N x 1 sample to individual (n)\n"
-        "--trt_ind (-t)       : N x 1 sample to case-control membership\n"
         "--lab (-l)           : K x 1 annotation label name (e.g., cell type) \n"
         "--out (-o)           : Output file header\n"
         "\n"
@@ -85,22 +84,23 @@ parse_aggregate_options(const int argc,     //
 
     const char *const short_opts = "m:c:a:A:i:l:o:C:DPhv";
 
-    const option long_opts[] =
-        { { "mtx", required_argument, nullptr, 'm' },        //
-          { "data", required_argument, nullptr, 'm' },       //
-          { "annot_prob", required_argument, nullptr, 'A' }, //
-          { "annot", required_argument, nullptr, 'a' },      //
-          { "col", required_argument, nullptr, 'c' },        //
-          { "ind", required_argument, nullptr, 'i' },        //
-          { "lab", required_argument, nullptr, 'l' },        //
-          { "label", required_argument, nullptr, 'l' },      //
-          { "out", required_argument, nullptr, 'o' },        //
-          { "discretize", no_argument, nullptr, 'D' },       //
-          { "probabilistic", no_argument, nullptr, 'P' },    //
-          { "col_norm", required_argument, nullptr, 'C' },   //
-          { "normalize", no_argument, nullptr, 'z' },        //
-          { "verbose", no_argument, nullptr, 'v' },          //
-          { nullptr, no_argument, nullptr, 0 } };
+    const option long_opts[] = {
+        { "mtx", required_argument, nullptr, 'm' },        //
+        { "data", required_argument, nullptr, 'm' },       //
+        { "annot_prob", required_argument, nullptr, 'A' }, //
+        { "annot", required_argument, nullptr, 'a' },      //
+        { "col", required_argument, nullptr, 'c' },        //
+        { "ind", required_argument, nullptr, 'i' },        //
+        { "lab", required_argument, nullptr, 'l' },        //
+        { "label", required_argument, nullptr, 'l' },      //
+        { "out", required_argument, nullptr, 'o' },        //
+        { "discretize", no_argument, nullptr, 'D' },       //
+        { "probabilistic", no_argument, nullptr, 'P' },    //
+        { "col_norm", required_argument, nullptr, 'C' },   //
+        { "normalize", no_argument, nullptr, 'z' },        //
+        { "verbose", no_argument, nullptr, 'v' },          //
+        { nullptr, no_argument, nullptr, 0 }
+    };
 
     while (true) {
         const auto opt = getopt_long(argc,                      //
