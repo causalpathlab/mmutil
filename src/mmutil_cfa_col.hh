@@ -153,7 +153,7 @@ struct cfa_depth_finder_t {
 #endif
     }
 
-    void eval_end_of_file() {}
+    void eval_end_of_file() { }
 
     Vec estimate_depth() { return num_vec.binaryExpr(denom_vec, opt_op); }
 
@@ -350,8 +350,9 @@ cfa_col(const OPTIONS &options)
     indv_membership.reserve(Z.rows());
     CHECK(read_vector_file(ind_file, indv_membership));
 
-    ASSERT(indv_membership.size() == Z.rows(),
-           "Individual membership file mismatches with Z");
+    ASSERT(indv_membership.size() == Nsample,
+           "Check the individual membership file: "
+               << indv_membership.size() << " vs. expected N = " << Nsample);
 
     std::vector<std::string> indv_id_name;
     std::vector<Index> indv; // map: col -> indv index
@@ -371,28 +372,18 @@ cfa_col(const OPTIONS &options)
     // case-control-like treatment membership //
     ////////////////////////////////////////////
 
-    std::vector<std::string> trt_membership;
-    trt_membership.reserve(Nsample);
+    Mat Ptrt;
+    CHECK(read_data_file(options.trt_ind_file, Ptrt));
+    TLOG("Read treatment probability file: " << options.trt_ind_file);
 
-    std::vector<std::string> trt_id_name;
-    std::vector<Index> trt_map; // map: col -> trt index
+    ASSERT(Ptrt.rows() == Nsample,
+           "Check the treatment probability file:"
+               << Ptrt.rows() << " vs. expected N = " << Nsample);
 
-    TLOG("Found treatment membership file: " << options.trt_ind_file);
+    ASSERT(Ptrt.cols() == 1, "Currently only support one treatment condition");
 
-    CHECK(read_vector_file(options.trt_ind_file, trt_membership));
-
-    ASSERT(trt_membership.size() == Z.rows(),
-           "size(Treatment) != row(Z) " << trt_membership.size() << " vs. "
-                                        << Z.rows());
-
-    std::tie(trt_map, trt_id_name, std::ignore) =
-        make_indexed_vector<std::string, Index>(trt_membership);
-
-    auto trt_index_set = make_index_vec_vec(trt_map);
-    const Index Ntrt = trt_index_set.size();
-    TLOG("Identified " << Ntrt << " treatment conditions");
-
-    ASSERT(Ntrt > 1, "Must have more than one treatment conditions");
+    ASSERT(Ptrt.maxCoeff() <= 1 && Ptrt.minCoeff() >= 0,
+           "Needs the probability vector");
 
     //////////////////////////////
     // Indexing all the columns //
@@ -593,11 +584,10 @@ cfa_col(const OPTIONS &options)
     const std::size_t knn_each = options.knn;
     const std::size_t knn_max = knn_each * (Nind - 1);
 
-    std::vector<Scalar> within_dist(knn_max), within_weights(knn_max);
-    std::vector<Index> within_neigh(knn_max);
-
-    std::vector<Scalar> between_dist(knn_max), between_weights(knn_max);
-    std::vector<Index> between_neigh(knn_max);
+    std::vector<Scalar> dist(knn_max), nn_weights(knn_max);
+    std::vector<Index> neigh(knn_max);
+    Vec w_ptrt_between(knn_max);
+    Vec w_ptrt_within(knn_max);
 
     /// Read counterfactually-matched blocks
     /// @param ind_i individual i [0, Nind)
@@ -614,15 +604,15 @@ cfa_col(const OPTIONS &options)
         y0_between.setZero();
         z0_between.setZero();
 
-        // TLOG("Constructing the counterfactual data of "
-        //      << n_j << " cells, max knn=" << knn_max);
+        w_ptrt_between.setZero();
+        w_ptrt_within.setZero();
 
         for (Index jth = 0; jth < n_j; ++jth) {    // For each cell j
             const Index _cell_j = cells_j.at(jth); //
-            const Index tj = trt_map.at(_cell_j);  // Trt group for this cell j
             const Index jj = indv.at(_cell_j);     // Individual for this cell j
-            Index within_deg = 0;                  // # of neighbours
-            Index between_deg = 0;                 // # of neighbours
+            Index deg = 0;                         // # of neighbours
+
+            const Scalar ptrt_j = Ptrt(_cell_j, 0); // Pr{W(j) == 1}
 
             for (Index ii = 0; ii < Nind; ++ii) { // Pick cells from the other
                 if (ii == jj)                     // individuals
@@ -638,71 +628,61 @@ cfa_col(const OPTIONS &options)
                     alg.searchKnn((void *)(mass + rank * _cell_j), nquery);
 
                 while (!pq.empty()) {
-                    float d = 0;                              // distance
-                    std::size_t k;                            // local index
-                    std::tie(d, k) = pq.top();                //
-                    const Index _cell_i = cells_i.at(k);      // global index
-                    const Index ti = trt_map.at(_cell_i);     // treatment
-                                                              //
-                    if (ti == tj) {                           // matching trt
-                        within_dist[within_deg] = d;          //
-                        within_neigh[within_deg] = _cell_i;   //
-                        ++within_deg;                         //
-                    } else {                                  // unmatched
-                        between_dist[between_deg] = d;        //
-                        between_neigh[between_deg] = _cell_i; //
-                        ++between_deg;                        //
-                    }
+                    float d = 0;                         // distance
+                    std::size_t k;                       // local index
+                    std::tie(d, k) = pq.top();           //
+                    const Index _cell_i = cells_i.at(k); // global index
+
+                    const Scalar ptrt_i = Ptrt(_cell_i, 0);
+
+                    const Scalar ptrt_between =
+                        (1. - ptrt_i) * (ptrt_j) + (1. - ptrt_j) * (ptrt_i);
+
+                    const Scalar ptrt_within = 1. - ptrt_between;
+
+                    w_ptrt_between(deg) = ptrt_between;
+                    w_ptrt_within(deg) = ptrt_within;
+
+                    dist[deg] = d;
+                    neigh[deg] = _cell_i;
+                    ++deg;
+
                     pq.pop();
                 }
             }
 
             // BBKNN-inspired, Kernelized weights
-            normalize_weights(within_deg, within_dist, within_weights);
-            normalize_weights(between_deg, between_dist, between_weights);
+            normalize_weights(deg, dist, nn_weights);
 
             // take care of the leftover (if it exists)
-            for (Index k = within_deg; k < knn_max; ++k) {
-                within_dist[k] = 0;
-                within_weights[k] = 0;
-                if (within_deg > 0)
-                    within_neigh[k] = within_neigh[within_deg - 1];
-            }
-
-            for (Index k = between_deg; k < knn_max; ++k) {
-                between_dist[k] = 0;
-                between_weights[k] = 0;
-                if (between_deg > 0)
-                    between_neigh[k] = between_neigh[between_deg - 1];
+            for (Index k = deg; k < knn_max; ++k) {
+                dist[k] = 0;
+                nn_weights[k] = 0;
+                if (deg > 0)
+                    neigh[k] = neigh[deg - 1];
             }
 
             // Take the weighted average of matched data points
-            {
-                Mat _y0 = read_y_block(within_neigh);  // D x n
-                Mat _z0 = read_z_block(within_neigh);  // K x n
-                Vec w0 = eigen_vector(within_weights); // n x 1
+            Mat y0 = read_y_block(neigh);      // D x n
+            Mat z0 = read_z_block(neigh);      // K x n
+            Vec w0 = eigen_vector(nn_weights); // n x 1
+            Vec w_between = w0.cwiseProduct(w_ptrt_between);
+            Vec w_within = w0.cwiseProduct(w_ptrt_within);
 
-                const Scalar denom = w0.sum(); // must be > 0
+            const Scalar denom_between = w_between.sum();
+            const Scalar denom_within = w_within.sum();
 
-                y0_within.col(jth) = _y0 * w0 / denom;
-                z0_within.col(jth) = _z0 * w0 / denom;
+            y0_between.col(jth) = y0 * w_between / denom_between;
+            z0_between.col(jth) = z0 * w_between / denom_between;
 
-                const Scalar _z = z0_within.col(jth).sum(); // normalize
-                z0_within.col(jth) /= _z;                   // to 1
-            }
-            {
-                Mat _y0 = read_y_block(between_neigh);  // D x n
-                Mat _z0 = read_z_block(between_neigh);  // K x n
-                Vec w0 = eigen_vector(between_weights); // n x 1
+            y0_within.col(jth) = y0 * w_within / denom_within;
+            z0_within.col(jth) = z0 * w_within / denom_within;
 
-                const Scalar denom = w0.sum(); // must be > 0
+            const Scalar _z_between = z0_between.col(jth).sum(); // normalize
+            z0_between.col(jth) /= _z_between;                   // to 1
 
-                y0_between.col(jth) = _y0 * w0 / denom;
-                z0_between.col(jth) = _z0 * w0 / denom;
-
-                const Scalar _z = z0_between.col(jth).sum(); // normalize
-                z0_between.col(jth) /= _z;                   // to 1
-            }
+            const Scalar _z_within = z0_within.col(jth).sum(); // normalize
+            z0_within.col(jth) /= _z_within;                   // to 1
         }
 
         return std::make_tuple(y0_within, z0_within, y0_between, z0_between);
@@ -741,13 +721,16 @@ cfa_col(const OPTIONS &options)
         Mat y0_between, z0_between;
 
         const std::vector<Index> &cells_i = indv_index_set.at(ii);
+
+        TLOG("Creating imputed data by kNN matching,     ind="
+             << ii << ", #cells=" << cells_i.size());
         std::tie(y0_within, z0_within, y0_between, z0_between) =
             read_cf_block(cells_i);
 
         Mat y = read_y_block(cells_i); // D x N
         Mat z = read_z_block(cells_i); // K x N
 
-        TLOG("Estimating on the sample, ind=" << ii);
+        TLOG("Estimating model parameters on the sample, ind=" << ii);
 
         {
 
@@ -839,47 +822,47 @@ parse_cfa_options(const int argc,     //
     const char *_usage =
         "\n"
         "[Arguments]\n"
-        "--mtx (-m)           : data MTX file (M x N)\n"
-        "--data (-m)          : data MTX file (M x N)\n"
-        "--col (-c)           : data column file (N x 1)\n"
-        "--annot (-a)         : annotation/clustering assignment (N x 2)\n"
-        "--annot_prob (-A)    : annotation/clustering probability (N x K)\n"
-        "--ind (-i)           : N x 1 sample to individual (n)\n"
-        "--trt_ind (-t)       : N x 1 sample to case-control membership\n"
-        "--lab (-l)           : K x 1 annotation label name (e.g., cell type) \n"
-        "--out (-o)           : Output file header\n"
+        "--mtx (-m)              : data MTX file (M x N)\n"
+        "--data (-m)             : data MTX file (M x N)\n"
+        "--col (-c)              : data column file (N x 1)\n"
+        "--annot (-a)            : annotation/clustering assignment (N x 2)\n"
+        "--annot_prob (-A)       : annotation/clustering probability (N x K)\n"
+        "--ind (-i)              : N x 1 sample to individual (n)\n"
+        "--trt (-t)              : N x 1 sample to case-control membership/probability\n"
+        "--lab (-l)              : K x 1 annotation label name (e.g., cell type) \n"
+        "--out (-o)              : Output file header\n"
         "\n"
         "[Options]\n"
         "\n"
-        "--col_norm (-C)      : Column normalization (default: 10000)\n"
-        "--normalize (-z)     : Normalize columns (default: false) \n"
+        "--col_norm (-C)         : Column normalization (default: 10000)\n"
+        "--normalize (-z)        : Normalize columns (default: false) \n"
         "\n"
-        "--discretize (-D)    : Use discretized annotation matrix (default: true)\n"
-        "--probabilistic (-P) : Use expected annotation matrix (default: false)\n"
+        "--discretize (-D)       : Use discretized annotation matrix (default: true)\n"
+        "--probabilistic (-P)    : Use expected annotation matrix (default: false)\n"
         "\n"
-        "--gamma_a0           : prior for gamma distribution(a0,b0) (default: 1)"
-        "--gamma_b0           : prior for gamma distribution(a0,b0) (default: 1)"
+        "--gamma_a0              : prior for gamma distribution(a0,b0) (default: 1)\n"
+        "--gamma_b0              : prior for gamma distribution(a0,b0) (default: 1)\n"
         "\n"
         "[Matching options]\n"
         "\n"
-        "--knn (-k)           : k nearest neighbours (default: 1)\n"
-        "--bilink (-b)        : # of bidirectional links (default: 5)\n"
-        "--nlist (-n)         : # nearest neighbor lists (default: 5)\n"
+        "--knn (-k)              : k nearest neighbours (default: 1)\n"
+        "--bilink (-b)           : # of bidirectional links (default: 5)\n"
+        "--nlist (-n)            : # nearest neighbor lists (default: 5)\n"
         "\n"
-        "--rank (-r)          : # of SVD factors (default: rank = 50)\n"
-        "--lu_iter (-u)       : # of LU iterations (default: iter = 5)\n"
-        "--row_weight (-w)    : Feature re-weighting (default: none)\n"
+        "--rank (-r)             : # of SVD factors (default: rank = 50)\n"
+        "--lu_iter (-u)          : # of LU iterations (default: iter = 5)\n"
+        "--row_weight (-w)       : Feature re-weighting (default: none)\n"
         "\n"
-        "--log_scale (-L)     : Data in a log-scale (default: false)\n"
-        "--raw_scale (-R)     : Data in a raw-scale (default: true)\n"
+        "--log_scale (-L)        : Data in a log-scale (default: false)\n"
+        "--raw_scale (-R)        : Data in a raw-scale (default: true)\n"
         "\n"
         "[Output]\n"
         "\n"
-        "${out}.obs_mu.gz     : (M x n) observed matrix\n"
-        "${out}.cf_mu.gz      : (M x n) confounding factors matrix\n"
-        "${out}.adj_mu.gz     : (M x n) adjusted matrix\n"
-        "${out}.mu_col.gz     : (n x 1) column names\n"
-        "${out}.mtx.gz        : sparse (D x N) matrix\n"
+        "${out}.obs_mu.gz        : (M x n) observed matrix\n"
+        "${out}.cf_mu.gz         : (M x n) confounding factors matrix\n"
+        "${out}.resid_mu.gz      : (M x n) after adjusting confounders in different batches\n"
+        "${out}.resid_null_mu.gz : (M x n) after adjusting confounders in the same batch\n"
+        "${out}.mu_col.gz        : (n x 1) column names\n"
         "\n"
         "[Details for kNN graph]\n"
         "\n"
@@ -911,37 +894,38 @@ parse_cfa_options(const int argc,     //
     const char *const short_opts =
         "m:c:a:A:i:l:t:o:LRS:r:u:w:g:G:BDPC:k:b:n:hzv0:1:";
 
-    const option long_opts[] =
-        { { "mtx", required_argument, nullptr, 'm' },        //
-          { "data", required_argument, nullptr, 'm' },       //
-          { "annot_prob", required_argument, nullptr, 'A' }, //
-          { "annot", required_argument, nullptr, 'a' },      //
-          { "col", required_argument, nullptr, 'c' },        //
-          { "ind", required_argument, nullptr, 'i' },        //
-          { "trt", required_argument, nullptr, 't' },        //
-          { "trt_ind", required_argument, nullptr, 't' },    //
-          { "lab", required_argument, nullptr, 'l' },        //
-          { "label", required_argument, nullptr, 'l' },      //
-          { "out", required_argument, nullptr, 'o' },        //
-          { "log_scale", no_argument, nullptr, 'L' },        //
-          { "raw_scale", no_argument, nullptr, 'R' },        //
-          { "block_size", required_argument, nullptr, 'S' }, //
-          { "rank", required_argument, nullptr, 'r' },       //
-          { "lu_iter", required_argument, nullptr, 'u' },    //
-          { "row_weight", required_argument, nullptr, 'w' }, //
-          { "discretize", no_argument, nullptr, 'D' },       //
-          { "probabilistic", no_argument, nullptr, 'P' },    //
-          { "col_norm", required_argument, nullptr, 'C' },   //
-          { "knn", required_argument, nullptr, 'k' },        //
-          { "bilink", required_argument, nullptr, 'b' },     //
-          { "nlist", required_argument, nullptr, 'n' },      //
-          { "normalize", no_argument, nullptr, 'z' },        //
-          { "a0", required_argument, nullptr, '0' },         //
-          { "b0", required_argument, nullptr, '1' },         //
-          { "gamma_a0", required_argument, nullptr, '0' },   //
-          { "gamma_a1", required_argument, nullptr, '1' },   //
-          { "verbose", no_argument, nullptr, 'v' },          //
-          { nullptr, no_argument, nullptr, 0 } };
+    const option long_opts[] = {
+        { "mtx", required_argument, nullptr, 'm' },        //
+        { "data", required_argument, nullptr, 'm' },       //
+        { "annot_prob", required_argument, nullptr, 'A' }, //
+        { "annot", required_argument, nullptr, 'a' },      //
+        { "col", required_argument, nullptr, 'c' },        //
+        { "ind", required_argument, nullptr, 'i' },        //
+        { "trt", required_argument, nullptr, 't' },        //
+        { "trt_ind", required_argument, nullptr, 't' },    //
+        { "lab", required_argument, nullptr, 'l' },        //
+        { "label", required_argument, nullptr, 'l' },      //
+        { "out", required_argument, nullptr, 'o' },        //
+        { "log_scale", no_argument, nullptr, 'L' },        //
+        { "raw_scale", no_argument, nullptr, 'R' },        //
+        { "block_size", required_argument, nullptr, 'S' }, //
+        { "rank", required_argument, nullptr, 'r' },       //
+        { "lu_iter", required_argument, nullptr, 'u' },    //
+        { "row_weight", required_argument, nullptr, 'w' }, //
+        { "discretize", no_argument, nullptr, 'D' },       //
+        { "probabilistic", no_argument, nullptr, 'P' },    //
+        { "col_norm", required_argument, nullptr, 'C' },   //
+        { "knn", required_argument, nullptr, 'k' },        //
+        { "bilink", required_argument, nullptr, 'b' },     //
+        { "nlist", required_argument, nullptr, 'n' },      //
+        { "normalize", no_argument, nullptr, 'z' },        //
+        { "a0", required_argument, nullptr, '0' },         //
+        { "b0", required_argument, nullptr, '1' },         //
+        { "gamma_a0", required_argument, nullptr, '0' },   //
+        { "gamma_a1", required_argument, nullptr, '1' },   //
+        { "verbose", no_argument, nullptr, 'v' },          //
+        { nullptr, no_argument, nullptr, 0 }
+    };
 
     while (true) {
         const auto opt = getopt_long(argc,                      //
