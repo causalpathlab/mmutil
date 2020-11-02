@@ -590,7 +590,7 @@ cfa_col(const OPTIONS &options)
     ///////////////////////////
 
     const std::size_t knn_each = options.knn;
-    const std::size_t knn_max = knn_each * (Nind - 1);
+    const std::size_t knn_max = knn_each * Nind;
 
     /// Read counterfactually-matched blocks
     /// @param ind_i individual i [0, Nind)
@@ -612,21 +612,27 @@ cfa_col(const OPTIONS &options)
             const Index _cell_j = cells_j.at(jth); //
             const Index tj = trt_map.at(_cell_j);  // Trt group for this cell j
             const Index jj = indv.at(_cell_j);     // Individual for this cell j
+            const std::size_t n_j = cells_j.size(); // number of cells
 
             Index within_deg = 0;  // # of neighbours
             Index between_deg = 0; // # of neighbours
 
             std::vector<Scalar> within_dist(knn_max), within_weights(knn_max);
             std::vector<Index> within_neigh(knn_max);
+
             std::vector<Scalar> between_dist(knn_max), between_weights(knn_max);
             std::vector<Index> between_neigh(knn_max);
 
-            for (Index ii = 0; ii < Nind; ++ii) { // Pick cells from the other
-                if (ii == jj)                     // individuals
-                    continue;                     // skip the same individual
+#ifdef CPYTHON
+            if (PyErr_CheckSignals() != 0) {
+                ELOG("Interrupted while working on kNN");
+                std::exit(1);
+            }
+#endif
+
+            for (Index ii = 0; ii < Nind; ++ii) {
 
                 const std::vector<Index> &cells_i = indv_index_set.at(ii);
-
                 KnnAlg &alg = *knn_lookup_indv[ii].get();
                 const std::size_t n_i = cells_i.size();
                 const std::size_t nquery = std::min(knn_each, n_i);
@@ -640,8 +646,12 @@ cfa_col(const OPTIONS &options)
                     std::tie(d, k) = pq.top();            //
                     const Index _cell_i = cells_i.at(k);  // global index
                     const Index ti = trt_map.at(_cell_i); // treatment
+                                                          //
+                    if (_cell_j == _cell_i)               // skip the same cell
+                        continue;                         //
 
                     if (ti == tj) {
+
                         within_dist[within_deg] = d;
                         within_neigh[within_deg] = _cell_i;
                         ++within_deg;
@@ -759,8 +769,10 @@ cfa_col(const OPTIONS &options)
                 const Index s = K * ii + k;
                 cf_mu.col(s) = cf_mu_i.col(k);
                 cf_mu_sd.col(s) = cf_mu_sd_i.col(k);
+
                 const std::string c =
                     indv_id_name.at(ii) + "_" + annot_name.at(k);
+
                 mu_col_names.emplace_back(c);
             }
 
@@ -818,6 +830,8 @@ cfa_col(const OPTIONS &options)
 
     write_data_file(options.out + ".cf_mu.gz", cf_mu);
     write_data_file(options.out + ".cf_mu_sd.gz", cf_mu_sd);
+    write_data_file(options.out + ".cf_null_mu.gz", cf_null_mu);
+    write_data_file(options.out + ".cf_null_mu_sd.gz", cf_null_mu_sd);
     write_data_file(options.out + ".obs_mu.gz", obs_mu);
     write_data_file(options.out + ".obs_mu_sd.gz", obs_mu_sd);
     write_data_file(options.out + ".resid_mu.gz", resid_mu);
