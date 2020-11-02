@@ -47,7 +47,6 @@ struct cfa_options_t {
         gamma_b0 = 1;
 
         discretize = true;
-        normalize = false;
     }
 
     std::string mtx_file;
@@ -88,7 +87,6 @@ struct cfa_options_t {
 
     // pois
     bool discretize;
-    bool normalize;
 };
 
 ///////////////////////////////////////////////
@@ -594,18 +592,16 @@ cfa_col(const OPTIONS &options)
 
     /// Read counterfactually-matched blocks
     /// @param ind_i individual i [0, Nind)
-    /// @returns (y0_within, z0_within, y0_between, z0_between)
+    /// @returns (y0_within, y0_between)
     /// D x n_i and K x n_i
     auto read_cf_block = [&](const std::vector<Index> &cells_j) {
         float *mass = V.data();
         const Index n_j = cells_j.size();
 
-        Mat y0_within(D, n_j), z0_within(K, n_j);
-        Mat y0_between(D, n_j), z0_between(K, n_j);
+        Mat y0_within(D, n_j);
+        Mat y0_between(D, n_j);
         y0_within.setZero();
-        z0_within.setZero();
         y0_between.setZero();
-        z0_between.setZero();
 
 #pragma omp parallel for
         for (Index jth = 0; jth < n_j; ++jth) {    // For each cell j
@@ -690,29 +686,20 @@ cfa_col(const OPTIONS &options)
             // Take the weighted average of matched data points
             {
                 Mat _y0 = read_y_block(within_neigh);  // D x n
-                Mat _z0 = read_z_block(within_neigh);  // K x n
                 Vec w0 = eigen_vector(within_weights); // n x 1
                 const Scalar denom = w0.sum();         // must be > 0
                 y0_within.col(jth) = _y0 * w0 / denom;
-                z0_within.col(jth) = _z0 * w0 / denom;
-                const Scalar _z = z0_within.col(jth).sum(); // normalize
-                z0_within.col(jth) /= _z;                   // to 1
             }
 
             {
                 Mat _y0 = read_y_block(between_neigh);  // D x n
-                Mat _z0 = read_z_block(between_neigh);  // K x n
                 Vec w0 = eigen_vector(between_weights); // n x 1
                 const Scalar denom = w0.sum();          // must be > 0
                 y0_between.col(jth) = _y0 * w0 / denom;
-                z0_between.col(jth) = _z0 * w0 / denom;
-
-                const Scalar _z = z0_between.col(jth).sum(); // normalize
-                z0_between.col(jth) /= _z;                   // to 1
             }
         }
 
-        return std::make_tuple(y0_within, z0_within, y0_between, z0_between);
+        return std::make_tuple(y0_within, y0_between);
     };
 
     const Scalar a0 = options.gamma_a0, b0 = options.gamma_b0;
@@ -725,13 +712,13 @@ cfa_col(const OPTIONS &options)
 
     Mat cf_mu(D, K * Nind);
     Mat cf_mu_sd(D, K * Nind);
-    Mat cf_null_mu(D, K * Nind);
-    Mat cf_null_mu_sd(D, K * Nind);
+    Mat cf_internal_mu(D, K * Nind);
+    Mat cf_internal_mu_sd(D, K * Nind);
 
     Mat resid_mu(D, K * Nind);
     Mat resid_mu_sd(D, K * Nind);
-    Mat resid_null_mu(D, K * Nind);
-    Mat resid_null_mu_sd(D, K * Nind);
+    Mat resid_internal_mu(D, K * Nind);
+    Mat resid_internal_mu_sd(D, K * Nind);
 
     const Scalar eps = 1e-4;
 
@@ -744,15 +731,14 @@ cfa_col(const OPTIONS &options)
         }
 #endif
 
-        Mat y0_within, z0_within;
-        Mat y0_between, z0_between;
+        Mat y0_within, y0_between;
 
         const std::vector<Index> &cells_i = indv_index_set.at(ii);
 
         TLOG("Creating imputed data by kNN matching,     ind="
              << ii << ", #cells=" << cells_i.size());
-        std::tie(y0_within, z0_within, y0_between, z0_between) =
-            read_cf_block(cells_i);
+
+        std::tie(y0_within, y0_between) = read_cf_block(cells_i);
 
         Mat y = read_y_block(cells_i); // D x N
         Mat z = read_z_block(cells_i); // K x N
@@ -760,8 +746,7 @@ cfa_col(const OPTIONS &options)
         TLOG("Estimating model parameters on the sample, ind=" << ii);
 
         {
-
-            poisson_t pois(y, z, y0_between, z0_between, a0, b0);
+            poisson_t pois(y, z, y0_between, z, a0, b0);
             pois.optimize();
 
             const Mat cf_mu_i = pois.mu_DK();
@@ -789,25 +774,25 @@ cfa_col(const OPTIONS &options)
         }
 
         {
-            poisson_t pois(y, z, y0_within, z0_within, a0, b0);
+            poisson_t pois(y, z, y0_within, z, a0, b0);
             pois.optimize();
 
-            const Mat cf_null_mu_i = pois.mu_DK();
-            const Mat cf_null_mu_sd_i = pois.mu_sd_DK();
+            const Mat cf_internal_mu_i = pois.mu_DK();
+            const Mat cf_internal_mu_sd_i = pois.mu_sd_DK();
 
             for (Index k = 0; k < K; ++k) {
                 const Index s = K * ii + k;
-                cf_null_mu.col(s) = cf_null_mu_i.col(k);
-                cf_null_mu_sd.col(s) = cf_null_mu_sd_i.col(k);
+                cf_internal_mu.col(s) = cf_internal_mu_i.col(k);
+                cf_internal_mu_sd.col(s) = cf_internal_mu_sd_i.col(k);
             }
 
-            const Mat resid_null_mu_i = pois.residual_mu_DK();
-            const Mat resid_null_mu_sd_i = pois.residual_mu_sd_DK();
+            const Mat resid_internal_mu_i = pois.residual_mu_DK();
+            const Mat resid_internal_mu_sd_i = pois.residual_mu_sd_DK();
 
             for (Index k = 0; k < K; ++k) {
                 const Index s = K * ii + k;
-                resid_null_mu.col(s) = resid_null_mu_i.col(k);
-                resid_null_mu_sd.col(s) = resid_null_mu_sd_i.col(k);
+                resid_internal_mu.col(s) = resid_internal_mu_i.col(k);
+                resid_internal_mu_sd.col(s) = resid_internal_mu_sd_i.col(k);
             }
         }
 
@@ -832,14 +817,15 @@ cfa_col(const OPTIONS &options)
 
     write_data_file(options.out + ".cf_mu.gz", cf_mu);
     write_data_file(options.out + ".cf_mu_sd.gz", cf_mu_sd);
-    write_data_file(options.out + ".cf_null_mu.gz", cf_null_mu);
-    write_data_file(options.out + ".cf_null_mu_sd.gz", cf_null_mu_sd);
+    write_data_file(options.out + ".cf_internal_mu.gz", cf_internal_mu);
+    write_data_file(options.out + ".cf_internal_mu_sd.gz", cf_internal_mu_sd);
     write_data_file(options.out + ".obs_mu.gz", obs_mu);
     write_data_file(options.out + ".obs_mu_sd.gz", obs_mu_sd);
     write_data_file(options.out + ".resid_mu.gz", resid_mu);
     write_data_file(options.out + ".resid_mu_sd.gz", resid_mu_sd);
-    write_data_file(options.out + ".resid_null_mu.gz", resid_null_mu);
-    write_data_file(options.out + ".resid_null_mu_sd.gz", resid_null_mu_sd);
+    write_data_file(options.out + ".resid_internal_mu.gz", resid_internal_mu);
+    write_data_file(options.out + ".resid_internal_mu_sd.gz",
+                    resid_internal_mu_sd);
 
     return EXIT_SUCCESS;
 }
@@ -853,47 +839,47 @@ parse_cfa_options(const int argc,     //
     const char *_usage =
         "\n"
         "[Arguments]\n"
-        "--mtx (-m)              : data MTX file (M x N)\n"
-        "--data (-m)             : data MTX file (M x N)\n"
-        "--col (-c)              : data column file (N x 1)\n"
-        "--annot (-a)            : annotation/clustering assignment (N x 2)\n"
-        "--annot_prob (-A)       : annotation/clustering probability (N x K)\n"
-        "--ind (-i)              : N x 1 sample to individual (n)\n"
-        "--trt (-t)              : N x 1 sample to case-control membership/probability\n"
-        "--lab (-l)              : K x 1 annotation label name (e.g., cell type) \n"
-        "--out (-o)              : Output file header\n"
+        "--mtx (-m)                  : data MTX file (M x N)\n"
+        "--data (-m)                 : data MTX file (M x N)\n"
+        "--col (-c)                  : data column file (N x 1)\n"
+        "--annot (-a)                : annotation/clustering assignment (N x 2)\n"
+        "--annot_prob (-A)           : annotation/clustering probability (N x K)\n"
+        "--ind (-i)                  : N x 1 sample to individual (n)\n"
+        "--trt (-t)                  : N x 1 sample to case-control membership/probability\n"
+        "--lab (-l)                  : K x 1 annotation label name (e.g., cell type) \n"
+        "--out (-o)                  : Output file header\n"
         "\n"
         "[Options]\n"
         "\n"
-        "--col_norm (-C)         : Column normalization (default: 10000)\n"
-        "--normalize (-z)        : Normalize columns (default: false) \n"
+        "--col_norm (-C)             : Column normalization (default: 10000)\n"
         "\n"
-        "--discretize (-D)       : Use discretized annotation matrix (default: true)\n"
-        "--probabilistic (-P)    : Use expected annotation matrix (default: false)\n"
+        "--discretize (-D)           : Use discretized annotation matrix (default: true)\n"
+        "--probabilistic (-P)        : Use expected annotation matrix (default: false)\n"
         "\n"
-        "--gamma_a0              : prior for gamma distribution(a0,b0) (default: 1)\n"
-        "--gamma_b0              : prior for gamma distribution(a0,b0) (default: 1)\n"
+        "--gamma_a0                  : prior for gamma distribution(a0,b0) (default: 1)\n"
+        "--gamma_b0                  : prior for gamma distribution(a0,b0) (default: 1)\n"
         "\n"
         "[Matching options]\n"
         "\n"
-        "--knn (-k)              : k nearest neighbours (default: 1)\n"
-        "--bilink (-b)           : # of bidirectional links (default: 5)\n"
-        "--nlist (-n)            : # nearest neighbor lists (default: 5)\n"
+        "--knn (-k)                  : k nearest neighbours (default: 1)\n"
+        "--bilink (-b)               : # of bidirectional links (default: 5)\n"
+        "--nlist (-n)                : # nearest neighbor lists (default: 5)\n"
         "\n"
-        "--rank (-r)             : # of SVD factors (default: rank = 50)\n"
-        "--lu_iter (-u)          : # of LU iterations (default: iter = 5)\n"
-        "--row_weight (-w)       : Feature re-weighting (default: none)\n"
+        "--rank (-r)                 : # of SVD factors (default: rank = 50)\n"
+        "--lu_iter (-u)              : # of LU iterations (default: iter = 5)\n"
+        "--row_weight (-w)           : Feature re-weighting (default: none)\n"
         "\n"
-        "--log_scale (-L)        : Data in a log-scale (default: false)\n"
-        "--raw_scale (-R)        : Data in a raw-scale (default: true)\n"
+        "--log_scale (-L)            : Data in a log-scale (default: false)\n"
+        "--raw_scale (-R)            : Data in a raw-scale (default: true)\n"
         "\n"
         "[Output]\n"
         "\n"
-        "${out}.obs_mu.gz        : (M x n) observed matrix\n"
-        "${out}.cf_mu.gz         : (M x n) confounding factors matrix\n"
-        "${out}.resid_mu.gz      : (M x n) after adjusting confounders in different batches\n"
-        "${out}.resid_null_mu.gz : (M x n) after adjusting confounders in the same batch\n"
-        "${out}.mu_col.gz        : (n x 1) column names\n"
+        "${out}.obs_mu.gz            : (M x n) observed matrix\n"
+        "${out}.cf_mu.gz             : (M x n) confounding factors matrix\n"
+        "${out}.cf_internal_mu.gz    : (M x n) confounding factors matrix (internally-controlled)\n"
+        "${out}.resid_mu.gz          : (M x n) after adjusting confounders in different batches\n"
+        "${out}.resid_internal_mu.gz : (M x n) after adjusting confounders (internally-controlled)\n"
+        "${out}.mu_col.gz            : (n x 1) column names\n"
         "\n"
         "[Details for kNN graph]\n"
         "\n"
@@ -949,7 +935,6 @@ parse_cfa_options(const int argc,     //
         { "knn", required_argument, nullptr, 'k' },        //
         { "bilink", required_argument, nullptr, 'b' },     //
         { "nlist", required_argument, nullptr, 'n' },      //
-        { "normalize", no_argument, nullptr, 'z' },        //
         { "a0", required_argument, nullptr, '0' },         //
         { "b0", required_argument, nullptr, '1' },         //
         { "gamma_a0", required_argument, nullptr, '0' },   //
@@ -1042,10 +1027,6 @@ parse_cfa_options(const int argc,     //
 
         case 'n':
             options.nlist = std::stoi(optarg);
-            break;
-
-        case 'z':
-            options.normalize = true;
             break;
 
         case '0':
