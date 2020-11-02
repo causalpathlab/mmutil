@@ -647,8 +647,10 @@ cfa_col(const OPTIONS &options)
                     const Index _cell_i = cells_i.at(k);  // global index
                     const Index ti = trt_map.at(_cell_i); // treatment
                                                           //
-                    if (_cell_j == _cell_i)               // skip the same cell
+                    if (_cell_j == _cell_i) {             // Skip the same cell
+                        pq.pop();                         // Let's move on
                         continue;                         //
+                    }
 
                     if (ti == tj) {
 
