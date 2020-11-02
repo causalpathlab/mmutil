@@ -328,6 +328,7 @@ if(!file.exists(mtx.file)) {
 		--lab example/simulation/confounder/exp2.lab.gz \
 		--ind example/simulation/confounder/exp2.ind.gz \
 		--trt_ind example/simulation/confounder/exp2.trt.gz \
+		--log_scale --knn 10 \
  		--out example/simulation/confounder/cfa_exp2
 
 ```
@@ -354,15 +355,19 @@ se.r = .fread(r.hdr %&% ".resid_mu_sd.gz") %>% as.matrix
 mu.r0 = .fread(r.hdr %&% ".resid_null_mu.gz") %>% as.matrix
 se.r0 = .fread(r.hdr %&% ".resid_null_mu_sd.gz") %>% as.matrix
 
-g = causal.genes[1]
+g = causal.genes[3]
 
-g = 713
+## g = 713
+
+g = 123
 
 o = order(label)
 plot(mu.obs[g, o], log="y", col="gray20", cex=.2)
 points(mu.cf[g, o], col="gray", cex=.2)
 points(mu.r[g, o], col=3, pch=19)
 points(mu.r0[g, o], col=4, pch="+")
+
+
 
 par(mfrow=c(1,2))
 plot(mu.r[g, label ==1], mu.r0[g, label == 1]); abline(a=0, b=1, col=2)

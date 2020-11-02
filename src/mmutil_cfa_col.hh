@@ -372,18 +372,26 @@ cfa_col(const OPTIONS &options)
     // case-control-like treatment membership //
     ////////////////////////////////////////////
 
-    Mat Ptrt;
-    CHECK(read_data_file(options.trt_ind_file, Ptrt));
-    TLOG("Read treatment probability file: " << options.trt_ind_file);
+    std::vector<std::string> trt_membership;
+    trt_membership.reserve(Nsample);
 
-    ASSERT(Ptrt.rows() == Nsample,
-           "Check the treatment probability file:"
-               << Ptrt.rows() << " vs. expected N = " << Nsample);
+    std::vector<std::string> trt_id_name; //
+    std::vector<Index> trt_map;           // map: col -> trt index
 
-    ASSERT(Ptrt.cols() == 1, "Currently only support one treatment condition");
+    CHECK(read_vector_file(options.trt_ind_file, trt_membership));
 
-    ASSERT(Ptrt.maxCoeff() <= 1 && Ptrt.minCoeff() >= 0,
-           "Needs the probability vector");
+    ASSERT(trt_membership.size() == Z.rows(),
+           "size(Treatment) != row(Z) " << trt_membership.size() << " vs. "
+                                        << Z.rows());
+
+    std::tie(trt_map, trt_id_name, std::ignore) =
+        make_indexed_vector<std::string, Index>(trt_membership);
+
+    auto trt_index_set = make_index_vec_vec(trt_map);
+    const Index Ntrt = trt_index_set.size();
+    TLOG("Identified " << Ntrt << " treatment conditions");
+
+    ASSERT(Ntrt > 1, "Must have more than one treatment conditions");
 
     //////////////////////////////
     // Indexing all the columns //
@@ -584,11 +592,6 @@ cfa_col(const OPTIONS &options)
     const std::size_t knn_each = options.knn;
     const std::size_t knn_max = knn_each * (Nind - 1);
 
-    std::vector<Scalar> dist(knn_max), nn_weights(knn_max);
-    std::vector<Index> neigh(knn_max);
-    Vec w_ptrt_between(knn_max);
-    Vec w_ptrt_within(knn_max);
-
     /// Read counterfactually-matched blocks
     /// @param ind_i individual i [0, Nind)
     /// @returns (y0_within, z0_within, y0_between, z0_between)
@@ -604,15 +607,19 @@ cfa_col(const OPTIONS &options)
         y0_between.setZero();
         z0_between.setZero();
 
-        w_ptrt_between.setZero();
-        w_ptrt_within.setZero();
-
+#pragma omp parallel for
         for (Index jth = 0; jth < n_j; ++jth) {    // For each cell j
             const Index _cell_j = cells_j.at(jth); //
+            const Index tj = trt_map.at(_cell_j);  // Trt group for this cell j
             const Index jj = indv.at(_cell_j);     // Individual for this cell j
-            Index deg = 0;                         // # of neighbours
 
-            const Scalar ptrt_j = Ptrt(_cell_j, 0); // Pr{W(j) == 1}
+            Index within_deg = 0;  // # of neighbours
+            Index between_deg = 0; // # of neighbours
+
+            std::vector<Scalar> within_dist(knn_max), within_weights(knn_max);
+            std::vector<Index> within_neigh(knn_max);
+            std::vector<Scalar> between_dist(knn_max), between_weights(knn_max);
+            std::vector<Index> between_neigh(knn_max);
 
             for (Index ii = 0; ii < Nind; ++ii) { // Pick cells from the other
                 if (ii == jj)                     // individuals
@@ -628,61 +635,69 @@ cfa_col(const OPTIONS &options)
                     alg.searchKnn((void *)(mass + rank * _cell_j), nquery);
 
                 while (!pq.empty()) {
-                    float d = 0;                         // distance
-                    std::size_t k;                       // local index
-                    std::tie(d, k) = pq.top();           //
-                    const Index _cell_i = cells_i.at(k); // global index
+                    float d = 0;                          // distance
+                    std::size_t k;                        // local index
+                    std::tie(d, k) = pq.top();            //
+                    const Index _cell_i = cells_i.at(k);  // global index
+                    const Index ti = trt_map.at(_cell_i); // treatment
 
-                    const Scalar ptrt_i = Ptrt(_cell_i, 0);
+                    if (ti == tj) {
+                        within_dist[within_deg] = d;
+                        within_neigh[within_deg] = _cell_i;
+                        ++within_deg;
 
-                    const Scalar ptrt_between =
-                        (1. - ptrt_i) * (ptrt_j) + (1. - ptrt_j) * (ptrt_i);
+                    } else {
 
-                    const Scalar ptrt_within = 1. - ptrt_between;
-
-                    w_ptrt_between(deg) = ptrt_between;
-                    w_ptrt_within(deg) = ptrt_within;
-
-                    dist[deg] = d;
-                    neigh[deg] = _cell_i;
-                    ++deg;
-
+                        between_dist[between_deg] = d;
+                        between_neigh[between_deg] = _cell_i;
+                        ++between_deg;
+                    }
                     pq.pop();
                 }
             }
 
             // BBKNN-inspired, Kernelized weights
-            normalize_weights(deg, dist, nn_weights);
+            normalize_weights(within_deg, within_dist, within_weights);
+            normalize_weights(between_deg, between_dist, between_weights);
 
             // take care of the leftover (if it exists)
-            for (Index k = deg; k < knn_max; ++k) {
-                dist[k] = 0;
-                nn_weights[k] = 0;
-                if (deg > 0)
-                    neigh[k] = neigh[deg - 1];
+            for (Index k = within_deg; k < knn_max; ++k) {
+                within_dist[k] = 0;
+                within_weights[k] = 0;
+                if (within_deg > 0)
+                    within_neigh[k] = within_neigh[within_deg - 1];
+            }
+
+            for (Index k = between_deg; k < knn_max; ++k) {
+                between_dist[k] = 0;
+                between_weights[k] = 0;
+                if (between_deg > 0)
+                    between_neigh[k] = between_neigh[between_deg - 1];
             }
 
             // Take the weighted average of matched data points
-            Mat y0 = read_y_block(neigh);      // D x n
-            Mat z0 = read_z_block(neigh);      // K x n
-            Vec w0 = eigen_vector(nn_weights); // n x 1
-            Vec w_between = w0.cwiseProduct(w_ptrt_between);
-            Vec w_within = w0.cwiseProduct(w_ptrt_within);
+            {
+                Mat _y0 = read_y_block(within_neigh);  // D x n
+                Mat _z0 = read_z_block(within_neigh);  // K x n
+                Vec w0 = eigen_vector(within_weights); // n x 1
+                const Scalar denom = w0.sum();         // must be > 0
+                y0_within.col(jth) = _y0 * w0 / denom;
+                z0_within.col(jth) = _z0 * w0 / denom;
+                const Scalar _z = z0_within.col(jth).sum(); // normalize
+                z0_within.col(jth) /= _z;                   // to 1
+            }
 
-            const Scalar denom_between = w_between.sum();
-            const Scalar denom_within = w_within.sum();
+            {
+                Mat _y0 = read_y_block(between_neigh);  // D x n
+                Mat _z0 = read_z_block(between_neigh);  // K x n
+                Vec w0 = eigen_vector(between_weights); // n x 1
+                const Scalar denom = w0.sum();          // must be > 0
+                y0_between.col(jth) = _y0 * w0 / denom;
+                z0_between.col(jth) = _z0 * w0 / denom;
 
-            y0_between.col(jth) = y0 * w_between / denom_between;
-            z0_between.col(jth) = z0 * w_between / denom_between;
-
-            y0_within.col(jth) = y0 * w_within / denom_within;
-            z0_within.col(jth) = z0 * w_within / denom_within;
-
-            const Scalar _z_between = z0_between.col(jth).sum(); // normalize
-            z0_between.col(jth) /= _z_between;                   // to 1
-
-            const Scalar _z_within = z0_within.col(jth).sum(); // normalize
-            z0_within.col(jth) /= _z_within;                   // to 1
+                const Scalar _z = z0_between.col(jth).sum(); // normalize
+                z0_between.col(jth) /= _z;                   // to 1
+            }
         }
 
         return std::make_tuple(y0_within, z0_within, y0_between, z0_between);

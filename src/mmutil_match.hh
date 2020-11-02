@@ -458,9 +458,9 @@ normalize_weights(const Index deg_i,
     for (Index iter = 0; iter < max_iter; ++iter) {
         Scalar _lam = lambda;
         if (fval < 0.) {
-            _lam = lambda * 2.;
+            _lam = lambda * 1.1;
         } else {
-            _lam = lambda * 0.5;
+            _lam = lambda * 0.9;
         }
         Scalar _fval = f(_lam);
         if (std::abs(_fval) > std::abs(fval)) {
