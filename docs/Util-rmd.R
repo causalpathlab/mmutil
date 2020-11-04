@@ -155,6 +155,8 @@ match.2by2 <- function(p1, p2, p3, p4) {
     list(g1, g2, g3, g4)
 }
 
+################################################################
+#' @param mat
 row.order <- function(mat) {
     require(cba)
     require(proxy)
@@ -170,26 +172,38 @@ row.order <- function(mat) {
     return(o.out$order)
 }
 
-col.order <- function(pair.tab, row.order) {
+#' @param pair.ta
+#' @param .ro
+#' @param ret.tab
+col.order <- function(pair.tab, .ro, ret.tab = FALSE) {
 
     M = pair.tab %>%
         select(row, col, weight) %>%
-        mutate(row = factor(row, row.order)) %>%
+        mutate(row = factor(row, .ro)) %>%
         tidyr::spread(key = col, value = weight, fill = 0)
 
     co = order(apply(M[, -1], 2, which.max), decreasing = TRUE)
-
-    return(colnames(M)[-1][co])
+    .co = colnames(M)[-1][co]
+    if(ret.tab) {
+        ret = pair.tab %>%
+            mutate(row = factor(row, .ro)) %>% 
+            mutate(col = factor(col, .co))
+    } else {
+        ret = .co
+    }
+    return(ret)
 }
 
-order.pair <- function(pair.tab) {
+#' @param pair.tab
+#' @param ret.tab
+order.pair <- function(pair.tab, ret.tab=FALSE) {
 
     require(tidyr)
     require(dplyr)
+    
+    .tab = pair.tab %>% select(row, col, weight)
 
-    pair.tab = pair.tab %>% select(row, col, weight)
-
-    M = pair.tab %>% tidyr::spread(key = col, value = weight, fill = 0)
+    M = .tab %>% tidyr::spread(key = col, value = weight, fill = 0)
     rr = M[, 1] %>% unlist(use.names = FALSE)
     cc = colnames(M)[-1] %>% unlist(use.names = FALSE)
 
@@ -202,7 +216,15 @@ order.pair <- function(pair.tab) {
     ## co = row.order(t(M %>% dplyr::select(-row) %>% as.matrix()))
     ## log.msg('Sort the columns: %d', length(co))
 
-    list(rows = rr[ro], cols = cc[co], M = M)
+    if(ret.tab){
+        ret = pair.tab %>%
+            mutate(row = factor(row, rr[ro])) %>%
+            mutate(col = factor(col, cc[co]))
+    } else {
+        ret = list(rows = rr[ro], cols = cc[co], M = M)
+    }
+
+    return(ret)
 }
 
 ################################################################
@@ -227,49 +249,64 @@ read.geneset <- function(ensg) {
 #' Read gene ontology and coding genes
 read.ontology <- function() {
 
-    ensembl = biomaRt::useMart(biomart='ENSEMBL_MART_ENSEMBL',
-                               host='useast.ensembl.org',
-                               path='/biomart/martservice', dataset='hsapiens_gene_ensembl')
+    .temp.file <- ".ensembl.ontology.rdata"
 
-    ensembl.hs = biomaRt::useDataset('hsapiens_gene_ensembl',mart=ensembl)
+    if(file.exists(.temp.file)) {
+        load(.temp.file)
 
-    .attr = c('ensembl_gene_id',
-              'hgnc_symbol',
-              'transcription_start_site',
-              'transcript_start',
-              'transcript_end',
-              'description',
-              'percentage_gene_gc_content')
+    } else {
 
-    .temp = biomaRt::getBM(attributes=.attr,
-                           filters='biotype',
-                           values=c('protein_coding'),
-                           mart=ensembl.hs)
+        ensembl = biomaRt::useMart(biomart='ENSEMBL_MART_ENSEMBL',
+                                   host='useast.ensembl.org',
+                                   path='/biomart/martservice', dataset='hsapiens_gene_ensembl')
 
-    genes.desc = .temp %>%
-        select(hgnc_symbol, description) %>%
-        unique()
+        ensembl.hs = biomaRt::useDataset('hsapiens_gene_ensembl',mart=ensembl)
 
-    coding.genes = .temp %>%
-        group_by(ensembl_gene_id) %>%
-        summarize(hgnc_symbol = paste(unique(hgnc_symbol), collapse='|'),
-                  transcription_start_site = mean(transcription_start_site),
-                  transcript_start = min(transcript_start),
-                  transcript_end = max(transcript_end)) %>%
-        ungroup()
+        .attr = c('ensembl_gene_id',
+                  'hgnc_symbol',
+                  'chromosome_name',
+                  'transcription_start_site',
+                  'transcript_start',
+                  'transcript_end',
+                  'description',
+                  'percentage_gene_gc_content')
 
-    ensg.tot = unique(coding.genes$ensembl_gene_id)
-    go.attr = c('ensembl_gene_id', 'go_id',
-                'name_1006', 'namespace_1003')
+        .temp = biomaRt::getBM(attributes=.attr,
+                               filters='biotype',
+                               values=c('protein_coding'),
+                               mart=ensembl.hs)
 
-    genes.go = biomaRt::getBM(filters = 'ensembl_gene_id',
-                              values = ensg.tot,
-                              attributes = go.attr,
-                              mart = ensembl.hs)
+        genes.desc = .temp %>%
+            select(hgnc_symbol, description) %>%
+            unique()
 
-    list(coding = coding.genes,
-         go = genes.go,
-         desc = genes.desc)
+        .temp <- as.data.table(.temp)
+
+        coding.genes = .temp[,
+                             .(hgnc_symbol = paste(unique(hgnc_symbol), collapse='|'),
+                               transcription_start_site = mean(transcription_start_site),
+                               transcript_start = min(transcript_start),
+                               transcript_end = max(transcript_end)),
+                             by = .(chromosome_name, ensembl_gene_id)]
+
+        ensg.tot = unique(coding.genes$ensembl_gene_id)
+        go.attr = c('ensembl_gene_id', 'go_id',
+                    'name_1006', 'namespace_1003')
+
+        genes.go = biomaRt::getBM(filters = 'ensembl_gene_id',
+                                  values = ensg.tot,
+                                  attributes = go.attr,
+                                  mart = ensembl.hs)
+        .ensembl.ontology <- 
+            list(coding = coding.genes,
+                 go = genes.go,
+                 desc = genes.desc)
+
+
+        save(.ensembl.ontology, file=.temp.file)
+    }
+
+    return(.ensembl.ontology)
 }
 
 ################################################################

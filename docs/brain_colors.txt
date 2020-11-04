@@ -27,12 +27,17 @@ in_neuronal	inhibitory in neuronal	#389D34
 glial	glial cells	#FFFF00
 neuronal	neuronal cells	#009900
 Ast	astrocytes	#A8CEE1
+Astro	astrocytes	#A8CEE1
 Ex	excitatory neurons	#BDE29C
 Inh	inhibitory neurons	#389D34
 In	inhibitory neurons	#389D34
 Mic	microglia	#F89C9B
+Microglia	microglia	#F89C9B
+Oligo	oligodendrocytes	#E01F25
 Oli	oligodendrocytes	#E01F25
 Opc	oligodendrocyte progenitor cells	#FBBC74
+OPC	oligodendrocyte progenitor cells	#FBBC74
 Per	pericytes / endothelial cells	#FD7C21
 Eap	pericytes / endothelial cells	#FD7C21
 End	endothelial cells	#FD7C21
+Endo	endothelial cells	#FD7C21
