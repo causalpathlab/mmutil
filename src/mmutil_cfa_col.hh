@@ -10,6 +10,7 @@
 #include "mmutil_match.hh"
 #include "utils/progress.hh"
 #include "mmutil_pois.hh"
+#include "mmutil_glm.hh"
 
 #ifndef MMUTIL_CFA_COL_HH_
 #define MMUTIL_CFA_COL_HH_
@@ -46,6 +47,10 @@ struct cfa_options_t {
         gamma_a0 = 1;
         gamma_b0 = 1;
 
+        glm_pseudo = 1e-2;
+        glm_iter = 100;
+        glm_reg = 1e-2;
+
         discretize = true;
     }
 
@@ -78,193 +83,19 @@ struct cfa_options_t {
     Index em_iter;
     Scalar em_tol;
 
-    // For Bayesian calibration and Wald stat
-    // Scalar wald_reg;
+    // Poisson Gamma parameters
     Scalar gamma_a0;
     Scalar gamma_b0;
+
+    // Poisson GLM parameters
+    Scalar glm_pseudo;
+    Index glm_iter;
+    Index glm_reg;
 
     bool verbose;
 
     // pois
     bool discretize;
-};
-
-///////////////////////////////////////////////
-// Estimate sequencing depth given mu matrix //
-///////////////////////////////////////////////
-
-struct cfa_depth_finder_t {
-
-    explicit cfa_depth_finder_t(const Mat &_mu,
-                                const Mat &_zz,
-                                const std::vector<Index> &_indv,
-                                const Scalar a0,
-                                const Scalar b0)
-        : Mu(_mu)
-        , Z(_zz)
-        , indv(_indv)
-        , D(Mu.rows())
-        , K(Z.cols())
-        , Nsample(Z.rows())
-        , opt_op(a0, b0)
-    {
-        max_row = 0;
-        max_col = 0;
-        max_elem = 0;
-    }
-
-    void set_file(BGZF *_fp) { fp = _fp; }
-
-    void eval_after_header(const Index r, const Index c, const Index e)
-    {
-        std::tie(max_row, max_col, max_elem) = std::make_tuple(r, c, e);
-        num_vec.resize(max_col, 1);
-        denom_vec.resize(max_col, 1);
-        num_vec.setZero();
-        denom_vec.setZero();
-    }
-
-    void eval(const Index row, const Index col, const Scalar weight)
-    {
-
-        if (row < max_row && col < max_col) {
-
-            const Index ii = indv.at(col);
-            Scalar num = 0., denom = 0.;
-
-            num += weight;
-
-            for (Index k = 0; k < K; ++k) { // [ii * K, (ii+1)*K)
-                const Index j = ii * K + k;
-                const Scalar z_k = Z(col, k);
-                denom += Mu(row, j) * z_k;
-            }
-
-            num_vec(col) += num;
-            denom_vec(col) += denom;
-        }
-#ifdef DEBUG
-        else {
-            TLOG("[" << row << ", " << col << ", " << weight << "]");
-            TLOG(max_row << " x " << max_col);
-        }
-#endif
-    }
-
-    void eval_end_of_file() { }
-
-    Vec estimate_depth() { return num_vec.binaryExpr(denom_vec, opt_op); }
-
-    const Mat &Mu;                  // D x (K * Nind)
-    const Mat &Z;                   // Nsample x K
-    const std::vector<Index> &indv; // Nsample x 1
-    const Index D;
-    const Index K;
-    const Index Nsample;
-
-private:
-    BGZF *fp;
-
-    Index max_row;
-    Index max_col;
-    Index max_elem;
-
-    Vec num_vec;
-    Vec denom_vec;
-
-private:
-    poisson_t::rate_opt_op_t opt_op;
-};
-
-////////////////////////////////
-// Adjust confounding factors //
-////////////////////////////////
-
-struct cfa_normalizer_t {
-
-    explicit cfa_normalizer_t(const Mat &_mu,
-                              const Mat &_zz,
-                              const Vec &_rho,
-                              const std::vector<Index> &_indv,
-                              const std::string _outfile)
-        : Mu(_mu)
-        , Z(_zz)
-        , rho(_rho)
-        , indv(_indv)
-        , D(Mu.rows())
-        , K(Z.cols())
-        , Nsample(Z.rows())
-        , outfile(_outfile)
-    {
-        ASSERT(Z.rows() == indv.size(),
-               "Needs the annotation and membership for each column");
-    }
-
-    void set_file(BGZF *_fp) { fp = _fp; }
-
-    void eval_after_header(const Index r, const Index c, const Index e)
-    {
-        std::tie(max_row, max_col, max_elem) = std::make_tuple(r, c, e);
-        // confirm that the sizes are compatible
-        ASSERT(D == r, "dimensionality should match");
-        ASSERT(Nsample == c, "sample size should match");
-        ofs.open(outfile.c_str(), std::ios::out);
-        ofs << "%%MatrixMarket matrix coordinate integer general" << std::endl;
-        ofs << max_row << FS << max_col << FS << max_elem << std::endl;
-        elem_check = 0;
-    }
-
-    void eval(const Index row, const Index col, const Scalar weight)
-    {
-        const Index ii = indv.at(col);
-
-        Scalar denom = 0.;
-
-        for (Index k = 0; k < K; ++k) { // [ii * K, (ii+1)*K)
-            const Index j = ii * K + k;
-            const Scalar z_k = Z(col, k);
-            denom += Mu(row, j) * z_k;
-        }
-
-        // weight <- weight / denom;
-        if (row < max_row && col < max_col) {
-            const Index i = row + 1; // fix zero-based to one-based
-            const Index j = col + 1; // fix zero-based to one-based
-
-            if (denom > 0. && rho(col) > 0.) {
-                const Scalar new_weight = weight / denom / rho(col);
-                ofs << i << FS << j << FS << new_weight << std::endl;
-            } else {
-                ofs << i << FS << j << FS << weight << std::endl;
-            }
-            elem_check++;
-        }
-    }
-
-    void eval_end_of_file()
-    {
-        ofs.close();
-        ASSERT(max_elem == elem_check, "Failed to write all the elements");
-    }
-
-    const Mat &Mu;                  // D x (K * Nind)
-    const Mat &Z;                   // Nsample x K
-    const Vec &rho;                 // Nsample x 1
-    const std::vector<Index> &indv; // Nsample x 1
-    const Index D;
-    const Index K;
-    const Index Nsample;
-
-    const std::string outfile;
-
-private:
-    obgzf_stream ofs;
-    BGZF *fp;
-    Index max_row;
-    Index max_col;
-    Index max_elem;
-    Index elem_check;
-    static constexpr char FS = ' ';
 };
 
 template <typename OPTIONS>
@@ -503,22 +334,6 @@ cfa_col(const OPTIONS &options)
     ///////////////////////////////////////////////////////
     using vs_type = hnswlib::InnerProductSpace;
 
-    // std::vector<std::shared_ptr<hnswlib::InnerProductSpace>> vs_vec_trt;
-    // std::vector<std::shared_ptr<KnnAlg>> knn_lookup_trt;
-
-    // TLOG("Constructing spectral dictionary for matching");
-
-    // for (Index tt = 0; tt < Ntrt; ++tt) {
-    //     const Index n_tot = trt_index_set[tt].size();
-
-    //     vs_vec_trt.emplace_back(std::make_shared<vs_type>(rank));
-
-    //     vs_type &VS = *vs_vec_trt[tt].get();
-    //     knn_lookup_trt.emplace_back(
-    //         std::make_shared<KnnAlg>(&VS, n_tot, param_bilink,
-    //         param_nnlist));
-    // }
-
     //////////////////////////////////////////////
     // construct dictionary for each individual //
     //////////////////////////////////////////////
@@ -588,20 +403,28 @@ cfa_col(const OPTIONS &options)
     ///////////////////////////
 
     const std::size_t knn_each = options.knn;
-    const std::size_t knn_max = knn_each * Nind;
 
-    /// Read counterfactually-matched blocks
+    const Index glm_reg = options.glm_reg;
+    const Index glm_iter = options.glm_iter;
+    const Scalar glm_pseudo = options.glm_pseudo;
+
+    auto glm_feature = [&glm_pseudo](const Scalar &x) -> Scalar {
+        return fasterlog(x + glm_pseudo);
+    };
+
+    /// Construct counterfactually-matched blocks
     /// @param ind_i individual i [0, Nind)
-    /// @returns (y0_within, y0_between)
+    /// @returns (y0_internal, y0_counterfactual)
     /// D x n_i and K x n_i
-    auto read_cf_block = [&](const std::vector<Index> &cells_j) {
+    auto construct_cf_block = [&](const std::vector<Index> &cells_j) {
         float *mass = V.data();
         const Index n_j = cells_j.size();
 
-        Mat y0_within(D, n_j);
-        Mat y0_between(D, n_j);
-        y0_within.setZero();
-        y0_between.setZero();
+        Mat y = read_y_block(cells_j);
+        Mat y0_internal(D, n_j);
+        Mat y0_counterfactual(D, n_j);
+        y0_internal.setZero();
+        y0_counterfactual.setZero();
 
 #pragma omp parallel for
         for (Index jth = 0; jth < n_j; ++jth) {    // For each cell j
@@ -610,18 +433,16 @@ cfa_col(const OPTIONS &options)
             const Index jj = indv.at(_cell_j);     // Individual for this cell j
             const std::size_t n_j = cells_j.size(); // number of cells
 
-            Index within_deg = 0;  // # of neighbours
-            Index between_deg = 0; // # of neighbours
-
-            std::vector<Scalar> within_dist(knn_max), within_weights(knn_max);
-            std::vector<Index> within_neigh(knn_max);
-
-            std::vector<Scalar> between_dist(knn_max), between_weights(knn_max);
-            std::vector<Index> between_neigh(knn_max);
+            // Index internal_deg = 0;       // # of neighbours
+            // Index counterfactual_deg = 0; // # of neighbours
+            // std::vector<Scalar> internal_dist;
+            // std::vector<Scalar> counterfactual_dist;
+            std::vector<Index> internal_neigh;
+            std::vector<Index> counterfactual_neigh;
 
 #ifdef CPYTHON
             if (PyErr_CheckSignals() != 0) {
-                ELOG("Interrupted while working on kNN");
+                ELOG("Interrupted while working on kNN: j = " << jth);
                 std::exit(1);
             }
 #endif
@@ -629,12 +450,12 @@ cfa_col(const OPTIONS &options)
             for (Index ii = 0; ii < Nind; ++ii) {
 
                 const std::vector<Index> &cells_i = indv_index_set.at(ii);
-                KnnAlg &alg = *knn_lookup_indv[ii].get();
+                KnnAlg &alg_ii = *knn_lookup_indv[ii].get();
                 const std::size_t n_i = cells_i.size();
                 const std::size_t nquery = std::min(knn_each, n_i);
 
                 auto pq =
-                    alg.searchKnn((void *)(mass + rank * _cell_j), nquery);
+                    alg_ii.searchKnn((void *)(mass + rank * _cell_j), nquery);
 
                 while (!pq.empty()) {
                     float d = 0;                          // distance
@@ -642,64 +463,54 @@ cfa_col(const OPTIONS &options)
                     std::tie(d, k) = pq.top();            //
                     const Index _cell_i = cells_i.at(k);  // global index
                     const Index ti = trt_map.at(_cell_i); // treatment
-                                                          //
-                    if (_cell_j == _cell_i) {             // Skip the same cell
-                        pq.pop();                         // Let's move on
-                        continue;                         //
+
+                    if (_cell_j == _cell_i) { // Skip the same cell
+                        pq.pop();             // Let's move on
+                        continue;             //
                     }
 
+                    // internal
                     if (ti == tj) {
+                        // internal_dist.emplace_back(d);
+                        internal_neigh.emplace_back(_cell_i);
+                        // ++internal_deg;
+                    }
 
-                        within_dist[within_deg] = d;
-                        within_neigh[within_deg] = _cell_i;
-                        ++within_deg;
-
-                    } else {
-
-                        between_dist[between_deg] = d;
-                        between_neigh[between_deg] = _cell_i;
-                        ++between_deg;
+                    if (ti != tj) {
+                        // counterfactual_dist.emplace_back(d);
+                        counterfactual_neigh.emplace_back(_cell_i);
+                        // ++counterfactual_deg;
                     }
                     pq.pop();
                 }
             }
 
-            // BBKNN-inspired, Kernelized weights
-            normalize_weights(within_deg, within_dist, within_weights);
-            normalize_weights(between_deg, between_dist, between_weights);
+            // std::vector<Scalar> counterfactual_weights(counterfactual_deg);
+            // std::vector<Scalar> internal_weights(internal_deg);
 
-            // take care of the leftover (if it exists)
-            for (Index k = within_deg; k < knn_max; ++k) {
-                within_dist[k] = 0;
-                within_weights[k] = 0;
-                if (within_deg > 0)
-                    within_neigh[k] = within_neigh[within_deg - 1];
-            }
+            ////////////////////////////////////////////////////////
+            // Find optimal weights for counterfactual imputation //
+            ////////////////////////////////////////////////////////
 
-            for (Index k = between_deg; k < knn_max; ++k) {
-                between_dist[k] = 0;
-                between_weights[k] = 0;
-                if (between_deg > 0)
-                    between_neigh[k] = between_neigh[between_deg - 1];
-            }
+            Mat yy = y.col(jth);
 
-            // Take the weighted average of matched data points
             {
-                Mat _y0 = read_y_block(within_neigh);  // D x n
-                Vec w0 = eigen_vector(within_weights); // n x 1
-                const Scalar denom = w0.sum();         // must be > 0
-                y0_within.col(jth) = _y0 * w0 / denom;
+                Mat xx =
+                    read_y_block(counterfactual_neigh).unaryExpr(glm_feature);
+
+                y0_counterfactual.col(jth) =
+                    predict_poisson_glm(xx, yy, glm_iter, glm_reg);
             }
 
             {
-                Mat _y0 = read_y_block(between_neigh);  // D x n
-                Vec w0 = eigen_vector(between_weights); // n x 1
-                const Scalar denom = w0.sum();          // must be > 0
-                y0_between.col(jth) = _y0 * w0 / denom;
+                Mat xx = read_y_block(internal_neigh).unaryExpr(glm_feature);
+
+                y0_internal.col(jth) =
+                    predict_poisson_glm(xx, yy, glm_iter, glm_reg);
             }
         }
 
-        return std::make_tuple(y0_within, y0_between);
+        return std::make_tuple(y0_internal, y0_counterfactual);
     };
 
     const Scalar a0 = options.gamma_a0, b0 = options.gamma_b0;
@@ -731,14 +542,14 @@ cfa_col(const OPTIONS &options)
         }
 #endif
 
-        Mat y0_within, y0_between;
+        Mat y0_internal, y0_counterfactual;
 
         const std::vector<Index> &cells_i = indv_index_set.at(ii);
 
         TLOG("Creating imputed data by kNN matching,     ind="
              << ii << ", #cells=" << cells_i.size());
 
-        std::tie(y0_within, y0_between) = read_cf_block(cells_i);
+        std::tie(y0_internal, y0_counterfactual) = construct_cf_block(cells_i);
 
         Mat y = read_y_block(cells_i); // D x N
         Mat z = read_z_block(cells_i); // K x N
@@ -746,7 +557,7 @@ cfa_col(const OPTIONS &options)
         TLOG("Estimating model parameters on the sample, ind=" << ii);
 
         {
-            poisson_t pois(y, z, y0_between, z, a0, b0);
+            poisson_t pois(y, z, y0_counterfactual, z, a0, b0);
             pois.optimize();
 
             const Mat cf_mu_i = pois.mu_DK();
@@ -774,7 +585,7 @@ cfa_col(const OPTIONS &options)
         }
 
         {
-            poisson_t pois(y, z, y0_within, z, a0, b0);
+            poisson_t pois(y, z, y0_internal, z, a0, b0);
             pois.optimize();
 
             const Mat cf_internal_mu_i = pois.mu_DK();
@@ -858,6 +669,9 @@ parse_cfa_options(const int argc,     //
         "\n"
         "--gamma_a0                  : prior for gamma distribution(a0,b0) (default: 1)\n"
         "--gamma_b0                  : prior for gamma distribution(a0,b0) (default: 1)\n"
+        "--glm_pseudo                : pseudocount for GLM features (default: 1e-2)\n"
+        "--glm_reg                   : Regularization parameter for GLM fitting (default: 1e-2)\n"
+        "--glm_iter                  : Maximum number of iterations for GLM fitting (default: 100)\n"
         "\n"
         "[Matching options]\n"
         "\n"
@@ -909,7 +723,7 @@ parse_cfa_options(const int argc,     //
         "\n";
 
     const char *const short_opts =
-        "m:c:a:A:i:l:t:o:LRS:r:u:w:g:G:BDPC:k:b:n:hzv0:1:";
+        "m:c:a:A:i:l:t:o:LRS:r:u:w:g:G:BDPC:k:b:n:hzv0:1:p:e:g:";
 
     const option long_opts[] = {
         { "mtx", required_argument, nullptr, 'm' },        //
@@ -939,6 +753,9 @@ parse_cfa_options(const int argc,     //
         { "b0", required_argument, nullptr, '1' },         //
         { "gamma_a0", required_argument, nullptr, '0' },   //
         { "gamma_a1", required_argument, nullptr, '1' },   //
+        { "glm_pseudo", required_argument, nullptr, 'p' }, //
+        { "glm_iter", required_argument, nullptr, 'e' },   //
+        { "glm_reg", required_argument, nullptr, 'g' },    //
         { "verbose", no_argument, nullptr, 'v' },          //
         { nullptr, no_argument, nullptr, 0 }
     };
@@ -1029,6 +846,18 @@ parse_cfa_options(const int argc,     //
             options.nlist = std::stoi(optarg);
             break;
 
+        case 'p':
+            options.glm_pseudo = std::stof(optarg);
+            break;
+
+        case 'e':
+            options.glm_iter = std::stoi(optarg);
+            break;
+
+        case 'g':
+            options.glm_reg = std::stof(optarg);
+            break;
+
         case '0':
             options.gamma_a0 = std::stof(optarg);
             break;
@@ -1061,5 +890,183 @@ parse_cfa_options(const int argc,     //
 
     return EXIT_SUCCESS;
 }
+
+///////////////////////////////////////////////
+// Estimate sequencing depth given mu matrix //
+///////////////////////////////////////////////
+
+struct cfa_depth_finder_t {
+
+    explicit cfa_depth_finder_t(const Mat &_mu,
+                                const Mat &_zz,
+                                const std::vector<Index> &_indv,
+                                const Scalar a0,
+                                const Scalar b0)
+        : Mu(_mu)
+        , Z(_zz)
+        , indv(_indv)
+        , D(Mu.rows())
+        , K(Z.cols())
+        , Nsample(Z.rows())
+        , opt_op(a0, b0)
+    {
+        max_row = 0;
+        max_col = 0;
+        max_elem = 0;
+    }
+
+    void set_file(BGZF *_fp) { fp = _fp; }
+
+    void eval_after_header(const Index r, const Index c, const Index e)
+    {
+        std::tie(max_row, max_col, max_elem) = std::make_tuple(r, c, e);
+        num_vec.resize(max_col, 1);
+        denom_vec.resize(max_col, 1);
+        num_vec.setZero();
+        denom_vec.setZero();
+    }
+
+    void eval(const Index row, const Index col, const Scalar weight)
+    {
+
+        if (row < max_row && col < max_col) {
+
+            const Index ii = indv.at(col);
+            Scalar num = 0., denom = 0.;
+
+            num += weight;
+
+            for (Index k = 0; k < K; ++k) { // [ii * K, (ii+1)*K)
+                const Index j = ii * K + k;
+                const Scalar z_k = Z(col, k);
+                denom += Mu(row, j) * z_k;
+            }
+
+            num_vec(col) += num;
+            denom_vec(col) += denom;
+        }
+#ifdef DEBUG
+        else {
+            TLOG("[" << row << ", " << col << ", " << weight << "]");
+            TLOG(max_row << " x " << max_col);
+        }
+#endif
+    }
+
+    void eval_end_of_file() { }
+
+    Vec estimate_depth() { return num_vec.binaryExpr(denom_vec, opt_op); }
+
+    const Mat &Mu;                  // D x (K * Nind)
+    const Mat &Z;                   // Nsample x K
+    const std::vector<Index> &indv; // Nsample x 1
+    const Index D;
+    const Index K;
+    const Index Nsample;
+
+private:
+    BGZF *fp;
+
+    Index max_row;
+    Index max_col;
+    Index max_elem;
+
+    Vec num_vec;
+    Vec denom_vec;
+
+private:
+    poisson_t::rate_opt_op_t opt_op;
+};
+
+////////////////////////////////
+// Adjust confounding factors //
+////////////////////////////////
+
+struct cfa_normalizer_t {
+
+    explicit cfa_normalizer_t(const Mat &_mu,
+                              const Mat &_zz,
+                              const Vec &_rho,
+                              const std::vector<Index> &_indv,
+                              const std::string _outfile)
+        : Mu(_mu)
+        , Z(_zz)
+        , rho(_rho)
+        , indv(_indv)
+        , D(Mu.rows())
+        , K(Z.cols())
+        , Nsample(Z.rows())
+        , outfile(_outfile)
+    {
+        ASSERT(Z.rows() == indv.size(),
+               "Needs the annotation and membership for each column");
+    }
+
+    void set_file(BGZF *_fp) { fp = _fp; }
+
+    void eval_after_header(const Index r, const Index c, const Index e)
+    {
+        std::tie(max_row, max_col, max_elem) = std::make_tuple(r, c, e);
+        // confirm that the sizes are compatible
+        ASSERT(D == r, "dimensionality should match");
+        ASSERT(Nsample == c, "sample size should match");
+        ofs.open(outfile.c_str(), std::ios::out);
+        ofs << "%%MatrixMarket matrix coordinate integer general" << std::endl;
+        ofs << max_row << FS << max_col << FS << max_elem << std::endl;
+        elem_check = 0;
+    }
+
+    void eval(const Index row, const Index col, const Scalar weight)
+    {
+        const Index ii = indv.at(col);
+
+        Scalar denom = 0.;
+
+        for (Index k = 0; k < K; ++k) { // [ii * K, (ii+1)*K)
+            const Index j = ii * K + k;
+            const Scalar z_k = Z(col, k);
+            denom += Mu(row, j) * z_k;
+        }
+
+        // weight <- weight / denom;
+        if (row < max_row && col < max_col) {
+            const Index i = row + 1; // fix zero-based to one-based
+            const Index j = col + 1; // fix zero-based to one-based
+
+            if (denom > 0. && rho(col) > 0.) {
+                const Scalar new_weight = weight / denom / rho(col);
+                ofs << i << FS << j << FS << new_weight << std::endl;
+            } else {
+                ofs << i << FS << j << FS << weight << std::endl;
+            }
+            elem_check++;
+        }
+    }
+
+    void eval_end_of_file()
+    {
+        ofs.close();
+        ASSERT(max_elem == elem_check, "Failed to write all the elements");
+    }
+
+    const Mat &Mu;                  // D x (K * Nind)
+    const Mat &Z;                   // Nsample x K
+    const Vec &rho;                 // Nsample x 1
+    const std::vector<Index> &indv; // Nsample x 1
+    const Index D;
+    const Index K;
+    const Index Nsample;
+
+    const std::string outfile;
+
+private:
+    obgzf_stream ofs;
+    BGZF *fp;
+    Index max_row;
+    Index max_col;
+    Index max_elem;
+    Index elem_check;
+    static constexpr char FS = ' ';
+};
 
 #endif

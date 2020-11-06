@@ -284,15 +284,15 @@ dir.create(dirname(exp.hdr), recursive=TRUE, showWarnings=FALSE)
 temp.file = exp.hdr %&% ".rdata"
 if(!file.exists(temp.file)) {
   .glm = simulate.glm(nind = 100,
-                      ncovar = 5,
-                      ngenes = 1000,
+                      ncovar = 3,
+                      ngenes = 2000,
                       ncausal = 10,
                       confounded = FALSE)
 
   .data = simulate.data(xx = .glm$x,
                         x.beta = .glm$beta,
-                        pve.1 = .2,
-                        pve.c = .5,
+                        pve.1 = .3,
+                        pve.c = .1,
                         ncell.ind = 100)
   save(.glm, .data, file=temp.file)
 } else {
@@ -328,7 +328,7 @@ if(!file.exists(mtx.file)) {
 		--lab example/simulation/confounder/exp2.lab.gz \
 		--ind example/simulation/confounder/exp2.ind.gz \
 		--trt_ind example/simulation/confounder/exp2.trt.gz \
-		--log_scale --knn 10 \
+		--knn 3 --rank 50 \
  		--out example/simulation/confounder/cfa_exp2
 
 ```
@@ -343,6 +343,8 @@ r.hdr = gsub("exp", "cfa_exp", exp.hdr)
 causal.genes = .glm$causal
 label = .glm$x[, 1]
 
+.cols = .fread(r.hdr %&% ".mu_cols.gz")
+
 mu.obs = .fread(r.hdr %&% ".obs_mu.gz") %>% as.matrix
 se.obs = .fread(r.hdr %&% ".obs_mu_sd.gz") %>% as.matrix
 
@@ -352,21 +354,36 @@ se.cf = .fread(r.hdr %&% ".cf_mu_sd.gz") %>% as.matrix
 mu.r = .fread(r.hdr %&% ".resid_mu.gz") %>% as.matrix
 se.r = .fread(r.hdr %&% ".resid_mu_sd.gz") %>% as.matrix
 
-mu.r0 = .fread(r.hdr %&% ".resid_null_mu.gz") %>% as.matrix
-se.r0 = .fread(r.hdr %&% ".resid_null_mu_sd.gz") %>% as.matrix
+mu.r0 = .fread(r.hdr %&% ".resid_internal_mu.gz") %>% as.matrix
+se.r0 = .fread(r.hdr %&% ".resid_internal_mu_sd.gz") %>% as.matrix
 
-g = causal.genes[3]
+g = causal.genes[2]
 
-## g = 713
+g = causal.genes[4]
 
+g = causal.genes[5]
+
+g = causal.genes[7]
+
+g = 713
 g = 123
+g = 11
+g = 8
+g = 1
 
 o = order(label)
-plot(mu.obs[g, o], log="y", col="gray20", cex=.2)
-points(mu.cf[g, o], col="gray", cex=.2)
-points(mu.r[g, o], col=3, pch=19)
+
+plot(mu.r[g, o], col=3, pch=19, log="y", main = g %in% causal.genes)
+abline(h = 1, col = 2)
 points(mu.r0[g, o], col=4, pch="+")
 
+plot(mu.r[g, o], col=3, pch=19, main = g %in% causal.genes)
+abline(h = 1, col = 2)
+points(mu.r0[g, o], col=4, pch="+")
+
+
+
+TODO
 
 
 par(mfrow=c(1,2))

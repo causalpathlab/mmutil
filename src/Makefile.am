@@ -72,7 +72,7 @@ mmutil_simulate_SOURCES = mmutil_simulate.cc mmutil_simulate.hh $(common)
 # counterfactual analysis #
 ###########################
 
-mmutil_cfa_col_SOURCES = mmutil_cfa_col.cc mmutil_pois.hh mmutil_cfa_col.hh mmutil_match.hh $(common)
+mmutil_cfa_col_SOURCES = mmutil_cfa_col.cc mmutil_pois.hh mmutil_cfa_col.hh mmutil_match.hh mmutil_glm.hh $(common)
 
 mmutil_diff_SOURCES = mmutil_diff.cc mmutil_pois.hh mmutil_diff.hh $(common)
 
