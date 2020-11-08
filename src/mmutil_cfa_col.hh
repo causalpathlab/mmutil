@@ -98,248 +98,270 @@ struct cfa_options_t {
     bool discretize;
 };
 
-template <typename OPTIONS>
-int
-cfa_col(const OPTIONS &options)
-{
+struct cfa_data_t {
 
-    using namespace mmutil::io;
-    using namespace mmutil::index;
+    using vs_type = hnswlib::InnerProductSpace;
 
-    const std::string mtx_file = options.mtx_file;
-    const std::string idx_file = options.mtx_file + ".index";
-    const std::string annot_prob_file = options.annot_prob_file;
-    const std::string annot_file = options.annot_file;
-    const std::string col_file = options.col_file;
-    const std::string ind_file = options.ind_file;
-    const std::string annot_name_file = options.annot_name_file;
-    const std::string row_weight_file = options.row_weight_file;
-    const std::string output = options.out;
+    explicit cfa_data_t(const cfa_options_t &options)
+        : mtx_file(options.mtx_file)
+        , idx_file(options.mtx_file + ".index")
+        , annot_prob_file(options.annot_prob_file)
+        , annot_file(options.annot_file)
+        , col_file(options.col_file)
+        , ind_file(options.ind_file)
+        , trt_file(options.trt_ind_file)
+        , annot_name_file(options.annot_name_file)
+        , row_weight_file(options.row_weight_file)
+        , output(options.out)
+        , glm_feature(options.glm_pseudo)
+        , glm_reg(options.glm_reg)
+        , glm_iter(options.glm_iter)
+        , knn(options.knn)
+        , param_bilink(options.bilink)
+        , param_nnlist(options.nlist)
+    {
+        CHECK(init());
+        TLOG("Training SVD for spectral matching ...");
+        run_svd(options);
 
-    //////////////////
-    // column names //
-    //////////////////
-
-    std::vector<std::string> cols;
-    CHECK(read_vector_file(col_file, cols));
-    const Index Nsample = cols.size();
-
-    /////////////////
-    // label names //
-    /////////////////
-
-    std::vector<std::string> annot_name;
-    CHECK(read_vector_file(annot_name_file, annot_name));
-    auto lab_position = make_position_dict<std::string, Index>(annot_name);
-    const Index K = annot_name.size();
-
-    ///////////////////////
-    // latent annotation //
-    ///////////////////////
-
-    TLOG("Reading latent annotations");
-
-    Mat Z;
-
-    if (annot_file.size() > 0) {
-        Z.resize(Nsample, K);
-        Z.setZero();
-
-        std::unordered_map<std::string, std::string> annot_dict;
-        CHECK(read_dict_file(annot_file, annot_dict));
-        for (Index j = 0; j < cols.size(); ++j) {
-            const std::string &s = cols.at(j);
-            if (annot_dict.count(s) > 0) {
-                const std::string &t = annot_dict.at(s);
-                if (lab_position.count(t) > 0) {
-                    const Index k = lab_position.at(t);
-                    Z(j, k) = 1.;
-                }
-            }
+        if (param_bilink >= rank) {
+            WLOG("Shrink M value: " << param_bilink << " vs. " << rank);
+            param_bilink = rank - 1;
         }
-    } else if (annot_prob_file.size() > 0) {
-        CHECK(read_data_file(annot_prob_file, Z));
-    } else {
-        return EXIT_FAILURE;
+
+        if (param_bilink < 2) {
+            WLOG("too small M value");
+            param_bilink = 2;
+        }
+
+        if (param_nnlist <= knn) {
+            WLOG("too small N value");
+            param_nnlist = knn + 1;
+        }
+
+        // build_dictionary_by_individual();
+        build_dictionary_by_treatment();
+        TLOG("Successfully loaded necessary data in the memory");
     }
 
-    ASSERT(cols.size() == Z.rows(),
-           "column and annotation matrix should match");
+public:
+    struct glm_feature_op_t {
+        explicit glm_feature_op_t(const Scalar pseudo)
+            : glm_pseudo(pseudo)
+        {
+        }
+        Scalar operator()(const Scalar &x) const
+        {
+            return fasterlog(x + glm_pseudo);
+        }
+        const Scalar glm_pseudo;
+    };
 
-    ASSERT(annot_name.size() == Z.cols(),
-           "Need the same number of label names for the columns of Z");
+private:
+    int init();
 
-    TLOG("Latent membership matrix: " << Z.rows() << " x " << Z.cols());
+    int run_svd(const cfa_options_t &options);
 
-    ///////////////////////////
-    // individual membership //
-    ///////////////////////////
+    void build_dictionary_by_individual();
 
-    std::vector<std::string> indv_membership;
-    indv_membership.reserve(Z.rows());
-    CHECK(read_vector_file(ind_file, indv_membership));
+    void build_dictionary_by_treatment();
 
-    ASSERT(indv_membership.size() == Nsample,
-           "Check the individual membership file: "
-               << indv_membership.size() << " vs. expected N = " << Nsample);
+public:
+    Mat read_y_block(const std::vector<Index> &subcol);
 
-    std::vector<std::string> indv_id_name;
-    std::vector<Index> indv; // map: col -> indv index
+    Mat read_z_block(const std::vector<Index> &subcol);
 
-    std::tie(indv, indv_id_name, std::ignore) =
-        make_indexed_vector<std::string, Index>(indv_membership);
+    Mat read_cf_block(const std::vector<Index> &subcol, bool is_internal);
 
-    auto indv_index_set = make_index_vec_vec(indv);
+public:
+    const std::vector<Index> &take_cells_in(const Index ii)
+    {
+        return indv_index_set.at(ii);
+    }
 
-    const Index Nind = indv_id_name.size();
+    std::string take_ind_name(const Index ii) { return indv_id_name.at(ii); }
 
-    TLOG("Identified " << Nind << " individuals");
+    std::string take_annot_name(const Index k) { return annot_name.at(k); }
 
-    ASSERT(Z.rows() == indv.size(), "rows(Z) != rows(indv)");
-
-    ////////////////////////////////////////////
-    // case-control-like treatment membership //
-    ////////////////////////////////////////////
-
-    std::vector<std::string> trt_membership;
-    trt_membership.reserve(Nsample);
-
-    std::vector<std::string> trt_id_name; //
-    std::vector<Index> trt_map;           // map: col -> trt index
-
-    CHECK(read_vector_file(options.trt_ind_file, trt_membership));
-
-    ASSERT(trt_membership.size() == Z.rows(),
-           "size(Treatment) != row(Z) " << trt_membership.size() << " vs. "
-                                        << Z.rows());
-
-    std::tie(trt_map, trt_id_name, std::ignore) =
-        make_indexed_vector<std::string, Index>(trt_membership);
-
-    auto trt_index_set = make_index_vec_vec(trt_map);
-    const Index Ntrt = trt_index_set.size();
-    TLOG("Identified " << Ntrt << " treatment conditions");
-
-    ASSERT(Ntrt > 1, "Must have more than one treatment conditions");
-
-    //////////////////////////////
-    // Indexing all the columns //
-    //////////////////////////////
+private:
+    Index Nsample;
+    Index Nind;
+    Index Ntrt;
+    Index K;
+    Index D;
+    Mat Z;
+    Vec ww;
+    Index rank;
+    Mat V;
 
     std::vector<Index> mtx_idx_tab;
 
-    if (!file_exists(idx_file)) // if needed
-        CHECK(build_mmutil_index(mtx_file, idx_file));
+    std::vector<std::string> cols;
+    std::vector<std::string> annot_name;
 
-    CHECK(read_mmutil_index(idx_file, mtx_idx_tab));
+public:
+    Index num_annot() const { return K; }
+    Index num_ind() const { return Nind; }
+    Index num_trt() const { return Ntrt; }
+    Index num_feature() const { return D; }
 
-    CHECK(check_index_tab(mtx_file, mtx_idx_tab));
+public: // const names
+    const std::string mtx_file;
+    const std::string idx_file;
+    const std::string annot_prob_file;
+    const std::string annot_file;
+    const std::string col_file;
+    const std::string ind_file;
+    const std::string trt_file;
+    const std::string annot_name_file;
+    const std::string row_weight_file;
+    const std::string output;
 
-    mm_info_reader_t info;
-    CHECK(mmutil::bgzf::peek_bgzf_header(mtx_file, info));
-    const Index D = info.max_row;
+    const glm_feature_op_t glm_feature;
+    const Index glm_reg;
+    const Index glm_iter;
 
-    ASSERT(Nsample == info.max_col,
-           "Should have matched .mtx.gz, N = " << Nsample << " vs. "
-                                               << info.max_col);
+private:
+    std::size_t knn;
+    std::size_t param_bilink;
+    std::size_t param_nnlist;
 
-    ///////////////////////////////////
-    // weights for the rows/features //
-    ///////////////////////////////////
+private:
+    std::vector<std::string> indv_membership; // [N] -> individual
+    std::vector<std::string> indv_id_name;    //
+    std::vector<Index> indv;                  // map: col -> indv index
+    std::vector<std::vector<Index>> indv_index_set;
 
-    Vec weights;
-    if (file_exists(row_weight_file)) {
-        std::vector<Scalar> _ww;
-        CHECK(read_vector_file(row_weight_file, _ww));
-        weights = eigen_vector(_ww);
-    }
+    std::vector<std::string> trt_membership; // [N] -> treatment
+    std::vector<std::string> trt_id_name;    //
+    std::vector<Index> trt_map;              // map: col -> trt index
+    std::vector<std::vector<Index>> trt_index_set;
 
-    Vec ww(D, 1);
-    ww.setOnes();
-
-    if (weights.size() > 0) {
-        ASSERT(weights.rows() == D, "Found invalid weight vector");
-        ww = weights;
-    }
-
-    ////////////////////////////////
-    // Learn latent embedding ... //
-    ////////////////////////////////
-
-    TLOG("Training SVD for spectral matching ...");
-    svd_out_t svd = take_svd_online_em(mtx_file, idx_file, ww, options);
-    TLOG("Done SVD");
-    Mat proj = svd.U * svd.D.cwiseInverse().asDiagonal(); // feature x rank
-    TLOG("Found projection: " << proj.rows() << " x " << proj.cols());
-
-    /// Take a block of Y matrix
-    /// @param subcol cells
-    /// @returns y
-
-    auto read_y_block = [&](const std::vector<Index> &subcol) -> Mat {
-        return Mat(read_eigen_sparse_subset_col(mtx_file, mtx_idx_tab, subcol));
-    };
-
-    /// Read the annotation matrix
-    /// @param subcol cells
-    /// @returns z
-
-    auto read_z_block = [&](const std::vector<Index> &subcol) -> Mat {
-        Mat zz_prob = row_sub(Z, subcol); //
-        zz_prob.transposeInPlace();       // Z: K x N
-
-        Mat zz(zz_prob.rows(), zz_prob.cols()); // K x N
-
-        if (options.discretize) {
-            zz.setZero();
-            for (Index j = 0; j < zz_prob.cols(); ++j) {
-                Index k;
-                zz_prob.col(j).maxCoeff(&k);
-                zz(k, j) += 1.0;
-            }
-            // TLOG("Using the discretized Z: " << zz.sum());
-        } else {
-            zz = zz_prob;
-            // TLOG("Using the probabilistic Z: " << zz.sum());
-        }
-        return zz;
-    };
-
-    ////////////////////
-    // kNN parameters //
-    ////////////////////
-
-    std::size_t knn = options.knn;
-    std::size_t param_bilink = options.bilink;
-    std::size_t param_nnlist = options.nlist;
-    const Index rank = proj.cols();
-
-    if (param_bilink >= rank) {
-        WLOG("Shrink M value: " << param_bilink << " vs. " << rank);
-        param_bilink = rank - 1;
-    }
-
-    if (param_bilink < 2) {
-        WLOG("too small M value");
-        param_bilink = 2;
-    }
-
-    if (param_nnlist <= knn) {
-        WLOG("too small N value");
-        param_nnlist = knn + 1;
-    }
-
-    ///////////////////////////////////////////////////////
-    // construct dictionary for each treatment condition //
-    ///////////////////////////////////////////////////////
-    using vs_type = hnswlib::InnerProductSpace;
-
-    //////////////////////////////////////////////
-    // construct dictionary for each individual //
-    //////////////////////////////////////////////
+    std::vector<std::shared_ptr<hnswlib::InnerProductSpace>> vs_vec_trt;
+    std::vector<std::shared_ptr<KnnAlg>> knn_lookup_trt;
 
     std::vector<std::shared_ptr<hnswlib::InnerProductSpace>> vs_vec_indv;
     std::vector<std::shared_ptr<KnnAlg>> knn_lookup_indv;
+};
+
+Mat
+cfa_data_t::read_y_block(const std::vector<Index> &subcol)
+{
+    using namespace mmutil::io;
+    return Mat(read_eigen_sparse_subset_col(mtx_file, mtx_idx_tab, subcol));
+}
+
+Mat
+cfa_data_t::read_z_block(const std::vector<Index> &subcol)
+{
+    Mat zz = row_sub(Z, subcol); //
+    zz.transposeInPlace();       // Z: K x N
+    return zz;
+};
+
+Mat
+cfa_data_t::read_cf_block(const std::vector<Index> &cells_j,
+                          bool is_internal = false)
+{
+    float *mass = V.data();
+    const Index n_j = cells_j.size();
+    Mat y = read_y_block(cells_j);
+    Mat y0(D, n_j);
+
+#pragma omp parallel for
+    for (Index jth = 0; jth < n_j; ++jth) {     // For each cell j
+        const Index _cell_j = cells_j.at(jth);  //
+        const Index tj = trt_map.at(_cell_j);   // Trt group for this cell j
+        const Index jj = indv.at(_cell_j);      // Individual for this cell j
+        const std::size_t n_j = cells_j.size(); // number of cells
+
+        std::vector<Index> counterfactual_neigh;
+
+#ifdef CPYTHON
+        if (PyErr_CheckSignals() != 0) {
+            ELOG("Interrupted while working on kNN: j = " << jth);
+            std::exit(1);
+        }
+#endif
+
+        ///////////////////////////////////////////////
+        // Search neighbours in the other conditions //
+        ///////////////////////////////////////////////
+
+        for (Index ti = 0; ti < Ntrt; ++ti) {
+
+            if (!is_internal) { // counterfactual
+                if (ti == tj)   // skip the same condition
+                    continue;   //
+            } else {            // internal... more like null
+                if (ti != tj)   // skip the different condition
+                    continue;   //
+            }
+
+            const std::vector<Index> &cells_i = trt_index_set.at(ti);
+            KnnAlg &alg_ti = *knn_lookup_trt[ti].get();
+            const std::size_t n_i = cells_i.size();
+            const std::size_t nquery = std::min(knn, n_i);
+
+            auto pq = alg_ti.searchKnn((void *)(mass + rank * _cell_j), nquery);
+
+            while (!pq.empty()) {
+                float d = 0;                         // distance
+                std::size_t k;                       // local index
+                std::tie(d, k) = pq.top();           //
+                const Index _cell_i = cells_i.at(k); // global index
+                if (_cell_j != _cell_i)
+                    counterfactual_neigh.emplace_back(_cell_i);
+                pq.pop();
+            }
+        }
+
+        ////////////////////////////////////////////////////////
+        // Find optimal weights for counterfactual imputation //
+        ////////////////////////////////////////////////////////
+
+        Mat yy = y.col(jth);
+        Mat xx = read_y_block(counterfactual_neigh).unaryExpr(glm_feature);
+        y0.col(jth) = predict_poisson_glm(xx, yy, glm_iter, glm_reg);
+    }
+    return y0;
+}
+
+void
+cfa_data_t::build_dictionary_by_treatment()
+{
+
+    for (Index tt = 0; tt < Ntrt; ++tt) {
+
+        const Index n_tot = trt_index_set[tt].size();
+
+        vs_vec_trt.emplace_back(std::make_shared<vs_type>(rank));
+
+        vs_type &VS = *vs_vec_trt[tt].get();
+
+        knn_lookup_trt.emplace_back(
+            std::make_shared<KnnAlg>(&VS, n_tot, param_bilink, param_nnlist));
+    }
+
+    progress_bar_t<Index> prog(Nsample, 1e2);
+
+    for (Index tt = 0; tt < Ntrt; ++tt) {
+        const Index n_tot = trt_index_set[tt].size(); // # cells
+        KnnAlg &alg = *knn_lookup_trt[tt].get();      // lookup
+        float *mass = V.data();                       // raw data
+
+        for (Index i = 0; i < n_tot; ++i) {
+            const Index cell_j = trt_index_set.at(tt).at(i);
+            alg.addPoint((void *)(mass + rank * cell_j), i);
+            prog.update();
+            prog(std::cerr);
+        }
+    }
+}
+
+void
+cfa_data_t::build_dictionary_by_individual()
+{
 
     for (Index ii = 0; ii < Nind; ++ii) {
         const Index n_tot = indv_index_set[ii].size();
@@ -350,11 +372,36 @@ cfa_col(const OPTIONS &options)
             std::make_shared<KnnAlg>(&VS, n_tot, param_bilink, param_nnlist));
     }
 
-    /////////////////////
-    // add data points //
-    /////////////////////
+    progress_bar_t<Index> prog(Nsample, 1e2);
 
-    Mat V(rank, Nsample);
+    for (Index ii = 0; ii < Nind; ++ii) {
+        const Index n_tot = indv_index_set[ii].size(); // # cells
+        KnnAlg &alg = *knn_lookup_indv[ii].get();      // lookup
+        float *mass = V.data();                        // raw data
+
+        for (Index i = 0; i < n_tot; ++i) {
+            const Index cell_j = indv_index_set.at(ii).at(i);
+            alg.addPoint((void *)(mass + rank * cell_j), i);
+            prog.update();
+            prog(std::cerr);
+        }
+    }
+}
+
+int
+cfa_data_t::run_svd(const cfa_options_t &options)
+{
+    ////////////////////////////////
+    // Learn latent embedding ... //
+    ////////////////////////////////
+    svd_out_t svd = take_svd_online_em(mtx_file, idx_file, ww, options);
+    TLOG("Done SVD");
+    Mat proj = svd.U * svd.D.cwiseInverse().asDiagonal(); // feature x rank
+    TLOG("Found projection: " << proj.rows() << " x " << proj.cols());
+
+    rank = proj.cols();
+
+    V.resize(rank, Nsample);
 
     const Index block_size = options.block_size;
 
@@ -381,157 +428,187 @@ cfa_col(const OPTIONS &options)
         }
     }
 
-    TLOG("Updating each individual's dictionary");
+    return EXIT_SUCCESS;
+}
 
-    progress_bar_t<Index> prog(Nsample, 1e2);
+int
+cfa_data_t::init()
+{
 
-    for (Index ii = 0; ii < Nind; ++ii) {
-        const Index n_tot = indv_index_set[ii].size(); // # cells
-        KnnAlg &alg = *knn_lookup_indv[ii].get();      // lookup
-        float *mass = V.data();                        // raw data
+    using namespace mmutil::io;
+    using namespace mmutil::index;
 
-        for (Index i = 0; i < n_tot; ++i) {
-            const Index cell_j = indv_index_set.at(ii).at(i);
-            alg.addPoint((void *)(mass + rank * cell_j), i);
-            prog.update();
-            prog(std::cerr);
+    //////////////////
+    // column names //
+    //////////////////
+
+    CHECK(read_vector_file(col_file, cols));
+    Nsample = cols.size();
+
+    //////////////////////////////
+    // Indexing all the columns //
+    //////////////////////////////
+
+    if (!file_exists(idx_file)) // if needed
+        CHECK(build_mmutil_index(mtx_file, idx_file));
+
+    CHECK(read_mmutil_index(idx_file, mtx_idx_tab));
+
+    CHECK(check_index_tab(mtx_file, mtx_idx_tab));
+
+    mm_info_reader_t info;
+    CHECK(mmutil::bgzf::peek_bgzf_header(mtx_file, info));
+    D = info.max_row;
+
+    ASSERT(Nsample == info.max_col,
+           "Should have matched .mtx.gz, N = " << Nsample << " vs. "
+                                               << info.max_col);
+
+    /////////////////
+    // label names //
+    /////////////////
+
+    CHECK(read_vector_file(annot_name_file, annot_name));
+    auto lab_position = make_position_dict<std::string, Index>(annot_name);
+    K = annot_name.size();
+
+    ///////////////////////
+    // latent annotation //
+    ///////////////////////
+
+    TLOG("Reading latent annotations");
+
+    if (annot_file.size() > 0) {
+        Z.resize(Nsample, K);
+        Z.setZero();
+
+        std::unordered_map<std::string, std::string> annot_dict;
+        CHECK(read_dict_file(annot_file, annot_dict));
+        for (Index j = 0; j < cols.size(); ++j) {
+            const std::string &s = cols.at(j);
+            if (annot_dict.count(s) > 0) {
+                const std::string &t = annot_dict.at(s);
+                if (lab_position.count(t) > 0) {
+                    const Index k = lab_position.at(t);
+                    Z(j, k) = 1.;
+                }
+            }
         }
+    } else if (annot_prob_file.size() > 0) {
+        CHECK(read_data_file(annot_prob_file, Z));
+    } else {
+        ELOG("Unable to read latent annotations");
+        return EXIT_FAILURE;
+    }
+
+    ASSERT(cols.size() == Z.rows(),
+           "column and annotation matrix should match");
+
+    ASSERT(annot_name.size() == Z.cols(),
+           "Need the same number of label names for the columns of Z");
+
+    TLOG("Latent membership matrix: " << Z.rows() << " x " << Z.cols());
+
+    ///////////////////////////////////
+    // weights for the rows/features //
+    ///////////////////////////////////
+
+    Vec weights;
+    if (file_exists(row_weight_file)) {
+        std::vector<Scalar> _ww;
+        CHECK(read_vector_file(row_weight_file, _ww));
+        weights = eigen_vector(_ww);
+    }
+
+    ww.resize(D);
+    ww.setOnes();
+
+    if (weights.size() > 0) {
+        ASSERT(weights.rows() == D, "Found invalid weight vector");
+        ww = weights;
     }
 
     ///////////////////////////
-    // For each individual i //
+    // individual membership //
     ///////////////////////////
 
-    const std::size_t knn_each = options.knn;
+    indv_membership.reserve(Z.rows());
+    CHECK(read_vector_file(ind_file, indv_membership));
 
-    const Index glm_reg = options.glm_reg;
-    const Index glm_iter = options.glm_iter;
-    const Scalar glm_pseudo = options.glm_pseudo;
+    ASSERT(indv_membership.size() == Nsample,
+           "Check the individual membership file: "
+               << indv_membership.size() << " vs. expected N = " << Nsample);
 
-    auto glm_feature = [&glm_pseudo](const Scalar &x) -> Scalar {
-        return fasterlog(x + glm_pseudo);
-    };
+    std::tie(indv, indv_id_name, std::ignore) =
+        make_indexed_vector<std::string, Index>(indv_membership);
 
-    /// Construct counterfactually-matched blocks
-    /// @param ind_i individual i [0, Nind)
-    /// @returns (y0_internal, y0_counterfactual)
-    /// D x n_i and K x n_i
-    auto construct_cf_block = [&](const std::vector<Index> &cells_j) {
-        float *mass = V.data();
-        const Index n_j = cells_j.size();
+    indv_index_set = make_index_vec_vec(indv);
 
-        Mat y = read_y_block(cells_j);
-        Mat y0_internal(D, n_j);
-        Mat y0_counterfactual(D, n_j);
-        y0_internal.setZero();
-        y0_counterfactual.setZero();
+    Nind = indv_id_name.size();
 
-#pragma omp parallel for
-        for (Index jth = 0; jth < n_j; ++jth) {    // For each cell j
-            const Index _cell_j = cells_j.at(jth); //
-            const Index tj = trt_map.at(_cell_j);  // Trt group for this cell j
-            const Index jj = indv.at(_cell_j);     // Individual for this cell j
-            const std::size_t n_j = cells_j.size(); // number of cells
+    TLOG("Identified " << Nind << " individuals");
 
-            // Index internal_deg = 0;       // # of neighbours
-            // Index counterfactual_deg = 0; // # of neighbours
-            // std::vector<Scalar> internal_dist;
-            // std::vector<Scalar> counterfactual_dist;
-            std::vector<Index> internal_neigh;
-            std::vector<Index> counterfactual_neigh;
+    ASSERT(Z.rows() == indv.size(), "rows(Z) != rows(indv)");
 
-#ifdef CPYTHON
-            if (PyErr_CheckSignals() != 0) {
-                ELOG("Interrupted while working on kNN: j = " << jth);
-                std::exit(1);
-            }
-#endif
+    ////////////////////////////////////////////
+    // case-control-like treatment membership //
+    ////////////////////////////////////////////
 
-            for (Index ii = 0; ii < Nind; ++ii) {
+    trt_membership.reserve(Nsample);
 
-                const std::vector<Index> &cells_i = indv_index_set.at(ii);
-                KnnAlg &alg_ii = *knn_lookup_indv[ii].get();
-                const std::size_t n_i = cells_i.size();
-                const std::size_t nquery = std::min(knn_each, n_i);
+    CHECK(read_vector_file(trt_file, trt_membership));
 
-                auto pq =
-                    alg_ii.searchKnn((void *)(mass + rank * _cell_j), nquery);
+    ASSERT(trt_membership.size() == Z.rows(),
+           "size(Treatment) != row(Z) " << trt_membership.size() << " vs. "
+                                        << Z.rows());
 
-                while (!pq.empty()) {
-                    float d = 0;                          // distance
-                    std::size_t k;                        // local index
-                    std::tie(d, k) = pq.top();            //
-                    const Index _cell_i = cells_i.at(k);  // global index
-                    const Index ti = trt_map.at(_cell_i); // treatment
+    std::tie(trt_map, trt_id_name, std::ignore) =
+        make_indexed_vector<std::string, Index>(trt_membership);
 
-                    if (_cell_j == _cell_i) { // Skip the same cell
-                        pq.pop();             // Let's move on
-                        continue;             //
-                    }
+    trt_index_set = make_index_vec_vec(trt_map);
+    Ntrt = trt_index_set.size();
+    TLOG("Identified " << Ntrt << " treatment conditions");
 
-                    // internal
-                    if (ti == tj) {
-                        // internal_dist.emplace_back(d);
-                        internal_neigh.emplace_back(_cell_i);
-                        // ++internal_deg;
-                    }
+    ASSERT(Ntrt > 1, "Must have more than one treatment conditions");
 
-                    if (ti != tj) {
-                        // counterfactual_dist.emplace_back(d);
-                        counterfactual_neigh.emplace_back(_cell_i);
-                        // ++counterfactual_deg;
-                    }
-                    pq.pop();
-                }
-            }
+    return EXIT_SUCCESS;
+}
 
-            // std::vector<Scalar> counterfactual_weights(counterfactual_deg);
-            // std::vector<Scalar> internal_weights(internal_deg);
+template <typename OPTIONS>
+int
+run_cfa_col(const OPTIONS &options)
+{
 
-            ////////////////////////////////////////////////////////
-            // Find optimal weights for counterfactual imputation //
-            ////////////////////////////////////////////////////////
-
-            Mat yy = y.col(jth);
-
-            {
-                Mat xx =
-                    read_y_block(counterfactual_neigh).unaryExpr(glm_feature);
-
-                y0_counterfactual.col(jth) =
-                    predict_poisson_glm(xx, yy, glm_iter, glm_reg);
-            }
-
-            {
-                Mat xx = read_y_block(internal_neigh).unaryExpr(glm_feature);
-
-                y0_internal.col(jth) =
-                    predict_poisson_glm(xx, yy, glm_iter, glm_reg);
-            }
-        }
-
-        return std::make_tuple(y0_internal, y0_counterfactual);
-    };
+    cfa_data_t data(options);
 
     const Scalar a0 = options.gamma_a0, b0 = options.gamma_b0;
+
+    const Index K = data.num_annot();
+    const Index Nind = data.num_ind();
+    const Index D = data.num_feature();
+    const Index Ntrt = data.num_trt();
+
+    ASSERT_RET(Nind > 1, "Must have at least two individuals");
+    ASSERT_RET(Ntrt > 1, "Must have at least two treatment conditions");
 
     std::vector<std::string> mu_col_names;
     mu_col_names.reserve(K * Nind);
 
     Mat obs_mu(D, K * Nind);
     Mat obs_mu_sd(D, K * Nind);
-
     Mat cf_mu(D, K * Nind);
     Mat cf_mu_sd(D, K * Nind);
-    Mat cf_internal_mu(D, K * Nind);
-    Mat cf_internal_mu_sd(D, K * Nind);
-
     Mat resid_mu(D, K * Nind);
     Mat resid_mu_sd(D, K * Nind);
+    Mat ln_resid_mu(D, K * Nind);
+    Mat ln_resid_mu_sd(D, K * Nind);
+
+    Mat cf_internal_mu(D, K * Nind);
+    Mat cf_internal_mu_sd(D, K * Nind);
     Mat resid_internal_mu(D, K * Nind);
     Mat resid_internal_mu_sd(D, K * Nind);
-
-    const Scalar eps = 1e-4;
+    Mat ln_resid_internal_mu(D, K * Nind);
+    Mat ln_resid_internal_mu_sd(D, K * Nind);
 
     for (Index ii = 0; ii < Nind; ++ii) {
 
@@ -542,22 +619,21 @@ cfa_col(const OPTIONS &options)
         }
 #endif
 
-        Mat y0_internal, y0_counterfactual;
+        const std::vector<Index> &cells_i = data.take_cells_in(ii);
 
-        const std::vector<Index> &cells_i = indv_index_set.at(ii);
+        TLOG("Creating imputed data by kNN matching[ ind="
+             << ii << ", #cells=" << cells_i.size() << "]");
 
-        TLOG("Creating imputed data by kNN matching,     ind="
-             << ii << ", #cells=" << cells_i.size());
+        Mat y = data.read_y_block(cells_i);                  // D x N
+        Mat z = data.read_z_block(cells_i);                  // K x N
+        Mat y0 = data.read_cf_block(cells_i, false);         // D x N
+        Mat y0_internal = data.read_cf_block(cells_i, true); // D x N
 
-        std::tie(y0_internal, y0_counterfactual) = construct_cf_block(cells_i);
-
-        Mat y = read_y_block(cells_i); // D x N
-        Mat z = read_z_block(cells_i); // K x N
-
-        TLOG("Estimating model parameters on the sample, ind=" << ii);
+        TLOG("Estimating the model parameters      [ ind="
+             << ii << ", #cells=" << cells_i.size() << "]");
 
         {
-            poisson_t pois(y, z, y0_counterfactual, z, a0, b0);
+            poisson_t pois(y, z, y0, z, a0, b0);
             pois.optimize();
 
             const Mat cf_mu_i = pois.mu_DK();
@@ -569,7 +645,7 @@ cfa_col(const OPTIONS &options)
                 cf_mu_sd.col(s) = cf_mu_sd_i.col(k);
 
                 const std::string c =
-                    indv_id_name.at(ii) + "_" + annot_name.at(k);
+                    data.take_ind_name(ii) + "_" + data.take_annot_name(k);
 
                 mu_col_names.emplace_back(c);
             }
@@ -577,10 +653,15 @@ cfa_col(const OPTIONS &options)
             const Mat resid_mu_i = pois.residual_mu_DK();
             const Mat resid_mu_sd_i = pois.residual_mu_sd_DK();
 
+            const Mat ln_resid_mu_i = pois.ln_residual_mu_DK();
+            const Mat ln_resid_mu_sd_i = pois.ln_residual_mu_sd_DK();
+
             for (Index k = 0; k < K; ++k) {
                 const Index s = K * ii + k;
                 resid_mu.col(s) = resid_mu_i.col(k);
                 resid_mu_sd.col(s) = resid_mu_sd_i.col(k);
+                ln_resid_mu.col(s) = ln_resid_mu_i.col(k);
+                ln_resid_mu_sd.col(s) = ln_resid_mu_sd_i.col(k);
             }
         }
 
@@ -600,10 +681,16 @@ cfa_col(const OPTIONS &options)
             const Mat resid_internal_mu_i = pois.residual_mu_DK();
             const Mat resid_internal_mu_sd_i = pois.residual_mu_sd_DK();
 
+            const Mat ln_resid_internal_mu_i = pois.ln_residual_mu_DK();
+            const Mat ln_resid_internal_mu_sd_i = pois.ln_residual_mu_sd_DK();
+
             for (Index k = 0; k < K; ++k) {
                 const Index s = K * ii + k;
                 resid_internal_mu.col(s) = resid_internal_mu_i.col(k);
                 resid_internal_mu_sd.col(s) = resid_internal_mu_sd_i.col(k);
+                ln_resid_internal_mu.col(s) = ln_resid_internal_mu_i.col(k);
+                ln_resid_internal_mu_sd.col(s) =
+                    ln_resid_internal_mu_sd_i.col(k);
             }
         }
 
@@ -628,15 +715,29 @@ cfa_col(const OPTIONS &options)
 
     write_data_file(options.out + ".cf_mu.gz", cf_mu);
     write_data_file(options.out + ".cf_mu_sd.gz", cf_mu_sd);
-    write_data_file(options.out + ".cf_internal_mu.gz", cf_internal_mu);
-    write_data_file(options.out + ".cf_internal_mu_sd.gz", cf_internal_mu_sd);
+
     write_data_file(options.out + ".obs_mu.gz", obs_mu);
     write_data_file(options.out + ".obs_mu_sd.gz", obs_mu_sd);
+
     write_data_file(options.out + ".resid_mu.gz", resid_mu);
     write_data_file(options.out + ".resid_mu_sd.gz", resid_mu_sd);
+
+    write_data_file(options.out + ".ln_resid_mu.gz", ln_resid_mu);
+    write_data_file(options.out + ".ln_resid_mu_sd.gz", ln_resid_mu_sd);
+
+    write_data_file(options.out + ".cf_internal_mu.gz", cf_internal_mu);
+    write_data_file(options.out + ".cf_internal_mu_sd.gz", cf_internal_mu_sd);
+
     write_data_file(options.out + ".resid_internal_mu.gz", resid_internal_mu);
+
     write_data_file(options.out + ".resid_internal_mu_sd.gz",
                     resid_internal_mu_sd);
+
+    write_data_file(options.out + ".ln_resid_internal_mu.gz",
+                    ln_resid_internal_mu);
+
+    write_data_file(options.out + ".ln_resid_internal_mu_sd.gz",
+                    ln_resid_internal_mu_sd);
 
     return EXIT_SUCCESS;
 }
@@ -975,7 +1076,7 @@ private:
     Vec denom_vec;
 
 private:
-    poisson_t::rate_opt_op_t opt_op;
+    poisson_t::rate_op_t opt_op;
 };
 
 ////////////////////////////////

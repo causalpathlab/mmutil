@@ -8,7 +8,7 @@ main(const int argc, const char *argv[])
     CHECK(parse_cfa_options(argc, argv, options));
 
     TLOG("CFA (Counter-Factual Adjustment)...")
-    CHECK(cfa_col(options));
+    CHECK(run_cfa_col(options));
     TLOG("Done");
 
     return EXIT_SUCCESS;

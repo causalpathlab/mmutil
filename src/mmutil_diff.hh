@@ -256,7 +256,7 @@ test_diff(const OPTIONS &options)
     Mat lambda_null_out(Nfeature * K, 1);
     lambda_null_out.setZero();
 
-    poisson_t::rate_opt_op_t rate_op(a0, b0);
+    poisson_t::rate_op_t rate_op(a0, b0);
 
     for (Index k = 0; k < K; ++k) {
 

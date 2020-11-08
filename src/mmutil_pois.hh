@@ -19,9 +19,10 @@ struct poisson_t {
         , N(yy.cols())
         , K(zz.rows())
         , eval_cf(false)
-        , rate_opt_op(a0, b0)
-        , rate_sd_opt_op(a0, b0)
-        , rate_opt_ln_op(a0, b0)
+        , rate_op(a0, b0)
+        , rate_sd_op(a0, b0)
+        , rate_ln_op(a0, b0)
+        , rate_sd_ln_op(a0)
         , ent_op(a0, b0)
         , mu(K, D)
         , rho(N, 1)
@@ -69,9 +70,10 @@ struct poisson_t {
         , N(yy.cols())
         , K(zz.rows())
         , eval_cf(true)
-        , rate_opt_op(a0, b0)
-        , rate_sd_opt_op(a0, b0)
-        , rate_opt_ln_op(a0, b0)
+        , rate_op(a0, b0)
+        , rate_sd_op(a0, b0)
+        , rate_ln_op(a0, b0)
+        , rate_sd_ln_op(a0)
         , ent_op(a0, b0)
         , mu(K, D)
         , rho(N, 1)
@@ -89,7 +91,6 @@ struct poisson_t {
         , denomN(N, 1)
         , onesD(D, 1)
     {
-
         // TLOG("Creating a model for " << D << " x " << N << " data");
 
         onesD.setOnes();
@@ -148,16 +149,13 @@ public:
         return ret;
     }
 
-    inline Scalar optimize(const Scalar tol = 1e-4)
+    inline Scalar optimize(const Index maxIter = 100, const Scalar tol = 1e-4)
     {
-
         const Scalar denom = static_cast<Scalar>(D * N);
 
         solve_mu();
         solve_rho();
         Scalar score = elbo() / denom;
-
-        const Index maxIter = 100;
 
         for (Index iter = 0; iter < maxIter; ++iter) {
             solve_mu();
@@ -179,13 +177,43 @@ public:
 
     inline Mat ln_mu_DK() const { return ln_mu.transpose(); }
 
+    inline Mat ln_mu_sd_DK() const
+    {
+        Mat ret = ZY.unaryExpr(rate_sd_ln_op);
+        ret.transposeInPlace();
+        return ret;
+    }
+
     inline Mat mu_sd_DK() const
     {
         Mat ret(K, D);
 
         for (Index g = 0; g < D; ++g) {
-            ret.col(g) = ZY.col(g).binaryExpr(denomK, rate_sd_opt_op);
+            ret.col(g) = ZY.col(g).binaryExpr(denomK, rate_sd_op);
         }
+        ret.transposeInPlace();
+        return ret;
+    }
+
+    inline Mat ln_residual_mu_DK() const
+    {
+        Mat _zy = zz * yy.transpose(); // K x D
+        Mat _denomK = zz * rho;        // K x 1
+
+        Mat ret(K, D);
+        for (Index g = 0; g < D; ++g) {
+            ret.col(g) = _zy.col(g).binaryExpr(_denomK.cwiseProduct(mu.col(g)),
+                                               rate_ln_op);
+        }
+
+        ret.transposeInPlace();
+        return ret;
+    }
+
+    inline Mat ln_residual_mu_sd_DK() const
+    {
+        Mat _zy = zz * yy.transpose(); // K x D
+        Mat ret = _zy.unaryExpr(rate_sd_ln_op);
         ret.transposeInPlace();
         return ret;
     }
@@ -197,8 +225,8 @@ public:
 
         Mat ret(K, D);
         for (Index g = 0; g < D; ++g) {
-            ret.col(g) = _zy.col(g).binaryExpr(_denomK.cwiseProduct(mu.col(g)),
-                                               rate_opt_op);
+            ret.col(g) =
+                _zy.col(g).binaryExpr(_denomK.cwiseProduct(mu.col(g)), rate_op);
         }
 
         ret.transposeInPlace();
@@ -213,7 +241,7 @@ public:
         Mat ret(K, D);
         for (Index g = 0; g < D; ++g) {
             ret.col(g) = _zy.col(g).binaryExpr(_denomK.cwiseProduct(mu.col(g)),
-                                               rate_sd_opt_op);
+                                               rate_sd_op);
         }
 
         ret.transposeInPlace();
@@ -234,8 +262,8 @@ private:
         }
 
         for (Index g = 0; g < D; ++g) {
-            mu.col(g) = ZY.col(g).binaryExpr(denomK, rate_opt_op);
-            ln_mu.col(g) = ZY.col(g).binaryExpr(denomK, rate_opt_ln_op);
+            mu.col(g) = ZY.col(g).binaryExpr(denomK, rate_op);
+            ln_mu.col(g) = ZY.col(g).binaryExpr(denomK, rate_ln_op);
             ent_mu.col(g) = ZY.col(g).binaryExpr(denomK, ent_op);
         }
     }
@@ -244,22 +272,23 @@ private:
     {
         // observed model
         denomN = zz.transpose() * mu * onesD;
-        rho = Ytot.binaryExpr(denomN, rate_opt_op);
-        ln_rho = Ytot.binaryExpr(denomN, rate_opt_ln_op);
+        rho = Ytot.binaryExpr(denomN, rate_op);
+        ln_rho = Ytot.binaryExpr(denomN, rate_ln_op);
         ent_rho = Ytot.binaryExpr(denomN, ent_op);
 
         // counterfactual model
         if (eval_cf) {
             denomN = zz_cf.transpose() * mu * onesD;
-            rho_cf = Ytot_cf.binaryExpr(denomN, rate_opt_op);
-            ln_rho_cf = Ytot_cf.binaryExpr(denomN, rate_opt_ln_op);
+            rho_cf = Ytot_cf.binaryExpr(denomN, rate_op);
+            ln_rho_cf = Ytot_cf.binaryExpr(denomN, rate_ln_op);
             ent_rho_cf = Ytot_cf.binaryExpr(denomN, ent_op);
         }
     }
 
 public:
-    struct rate_opt_op_t {
-        explicit rate_opt_op_t(const Scalar _a0, const Scalar _b0)
+    // a/b
+    struct rate_op_t {
+        explicit rate_op_t(const Scalar _a0, const Scalar _b0)
             : a0(_a0)
             , b0(_b0)
         {
@@ -271,8 +300,9 @@ public:
         const Scalar a0, b0;
     };
 
-    struct rate_sd_opt_op_t {
-        explicit rate_sd_opt_op_t(const Scalar _a0, const Scalar _b0)
+    // sqrt(a) / b
+    struct rate_sd_op_t {
+        explicit rate_sd_op_t(const Scalar _a0, const Scalar _b0)
             : a0(_a0)
             , b0(_b0)
         {
@@ -284,8 +314,8 @@ public:
         const Scalar a0, b0;
     };
 
-    struct rate_opt_ln_op_t {
-        explicit rate_opt_ln_op_t(const Scalar _a0, const Scalar _b0)
+    struct rate_ln_op_t {
+        explicit rate_ln_op_t(const Scalar _a0, const Scalar _b0)
             : a0(_a0)
             , b0(_b0)
         {
@@ -295,6 +325,22 @@ public:
             return fasterdigamma(a + a0) - fasterlog(b + b0);
         }
         const Scalar a0, b0;
+    };
+
+    // Delta method
+    // sqrt V[ln(mu)] = sqrt (V[mu] / mu)
+    //                = 1/sqrt(a)
+    struct rate_sd_ln_op_t {
+        explicit rate_sd_ln_op_t(const Scalar _a0)
+            : a0(_a0)
+        {
+        }
+        Scalar operator()(const Scalar &a) const
+        {
+            return one / std::sqrt(a + a0);
+        }
+        const Scalar a0;
+        static constexpr Scalar one = 1.0;
     };
 
     struct ent_op_t {
@@ -317,9 +363,10 @@ public:
     };
 
 private:
-    rate_opt_op_t rate_opt_op;
-    rate_sd_opt_op_t rate_sd_opt_op;
-    rate_opt_ln_op_t rate_opt_ln_op;
+    rate_op_t rate_op;
+    rate_sd_op_t rate_sd_op;
+    rate_ln_op_t rate_ln_op;
+    rate_sd_ln_op_t rate_sd_ln_op;
     ent_op_t ent_op;
 
 private:
