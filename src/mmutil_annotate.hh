@@ -509,7 +509,9 @@ run_annotation(const annotation_options_t &options)
     };
 
     auto greedy_initialization = [&]() {
-        // Traverse for each block
+
+    // Traverse for each block
+#pragma omp parallel for
         for (Index lb = 0; lb < N; lb += batch_size) {
             const Index ub = std::min(N, batch_size + lb);
 
@@ -536,7 +538,7 @@ run_annotation(const annotation_options_t &options)
             }
 
             if (options.verbose) {
-                std::cerr << nsize.transpose() << "\r" << std::flush;
+	      std::cerr << nsize.transpose() << std::endl;
             }
         }
 
@@ -581,6 +583,7 @@ run_annotation(const annotation_options_t &options)
             }
 #endif
 
+#pragma omp parallel for
             for (Index lb = 0; lb < N; lb += batch_size) {     // batch
                 const Index ub = std::min(N, batch_size + lb); //
 
@@ -615,10 +618,12 @@ run_annotation(const annotation_options_t &options)
                         membership[i] = k_now;
                     }
 
-                    if (options.verbose) {
-                        std::cerr << nsize.transpose() << "\r" << std::flush;
-                    }
                 } // end of data iteration
+
+                if (options.verbose) {
+                    std::cerr << nsize.transpose() << std::endl;
+                }
+
                 annot.update_param(Stat, Stat_anti, nsize);
             } // end of batch iteration
 
