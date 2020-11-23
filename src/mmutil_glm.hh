@@ -98,12 +98,18 @@ inline Mat
 predict_poisson_glm(const Mat xx,
                     const Mat y,
                     const Index max_iter,
-                    const Scalar reg)
+                    const Scalar reg,
+                    const bool intercept = true)
 {
-    const Mat beta = fit_poisson_glm(xx, y, max_iter, reg);
     poisson_invlink_t invlink;
-    Mat ret = (xx * beta).unaryExpr(invlink);
-    return ret;
+    if (intercept) {
+        const Mat xx_1 = hcat(Mat::Ones(xx.rows(), 1), xx);
+        const Mat beta = fit_poisson_glm(xx_1, y, max_iter, reg);
+        return (xx * beta).unaryExpr(invlink);
+    } else {
+        const Mat beta = fit_poisson_glm(xx, y, max_iter, reg);
+        return (xx * beta).unaryExpr(invlink);
+    }
 }
 
 #endif

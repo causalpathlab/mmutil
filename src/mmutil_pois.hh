@@ -76,15 +76,22 @@ struct poisson_t {
         , rate_sd_ln_op(a0)
         , ent_op(a0, b0)
         , mu(K, D)
+        , mu_resid(K, D)
         , rho(N, 1)
         , rho_cf(N, 1)
+        , rho_resid(N, 1)
         , ln_mu(K, D)
+        , ln_mu_resid(K, D)
         , ln_rho(N, 1)
         , ln_rho_cf(N, 1)
+        , ln_rho_resid(N, 1)
         , ent_mu(K, D)
+        , ent_mu_resid(K, D)
         , ent_rho(N, 1)
         , ent_rho_cf(N, 1)
+        , ent_rho_resid(N, 1)
         , ZY(K, D)
+        , ZY_resid(K, D)
         , Ytot(N, 1)
         , Ytot_cf(N, 1)
         , denomK(K, 1)
@@ -128,7 +135,8 @@ struct poisson_t {
     const bool eval_cf;
 
 public:
-    inline Scalar elbo() const
+
+    inline Scalar elbo()
     {
         Scalar ret = 0.;
         // log-likelihood
@@ -173,18 +181,18 @@ public:
         return score;
     }
 
-    inline Mat mu_DK() const { return mu.transpose(); }
+    inline Mat mu_DK() { return mu.transpose(); }
 
-    inline Mat ln_mu_DK() const { return ln_mu.transpose(); }
+    inline Mat ln_mu_DK() { return ln_mu.transpose(); }
 
-    inline Mat ln_mu_sd_DK() const
+    inline Mat ln_mu_sd_DK()
     {
         Mat ret = ZY.unaryExpr(rate_sd_ln_op);
         ret.transposeInPlace();
         return ret;
     }
 
-    inline Mat mu_sd_DK() const
+    inline Mat mu_sd_DK()
     {
         Mat ret(K, D);
 
@@ -195,62 +203,81 @@ public:
         return ret;
     }
 
-    inline Mat ln_residual_mu_DK() const
+public:
+    inline Scalar elbo_resid()
     {
-        Mat _zy = zz * yy.transpose(); // K x D
-        Mat _denomK = zz * rho;        // K x 1
+        Scalar ret = 0.;
+        // log-likelihood
+        ret += ln_mu.cwiseProduct(ZY_resid).sum();
+        ret += ln_mu_resid.cwiseProduct(ZY_resid).sum();
+        ret += ln_rho_resid.cwiseProduct(Ytot).sum();
+        ret -= ((mu_resid.cwiseProduct(mu)).transpose() * zz * rho_resid).sum();
 
+        // entropy
+        ret += ent_mu_resid.sum();
+        ret += ent_rho_resid.sum();
+
+        return ret;
+    }
+
+    inline Scalar residual_optimize(const Index maxIter = 100,
+                                    const Scalar tol = 1e-4)
+    {
+        const Scalar denom = static_cast<Scalar>(D * N);
+
+        rho_resid = rho;
+        ln_rho_resid = ln_rho;
+
+        solve_mu_resid();
+        solve_rho_resid();
+        Scalar score = elbo_resid() / denom;
+
+        for (Index iter = 0; iter < maxIter; ++iter) {
+            solve_mu_resid();
+            solve_rho_resid();
+            Scalar _score = elbo_resid() / denom;
+            Scalar diff = (score - _score) / (std::abs(score) + tol);
+
+            if (diff < tol) {
+                break;
+            }
+
+            score = _score;
+        }
+
+        return score;
+    }
+
+    inline Mat residual_mu_DK() { return mu_resid.transpose(); }
+
+    inline Mat residual_mu_sd_DK()
+    {
         Mat ret(K, D);
+        ZY_resid = zz * yy.transpose(); // K x D
+        denomK = zz * rho_resid;
+
         for (Index g = 0; g < D; ++g) {
-            ret.col(g) = _zy.col(g).binaryExpr(_denomK.cwiseProduct(mu.col(g)),
-                                               rate_ln_op);
+            mu_resid.col(g) =
+                ZY_resid.col(g).binaryExpr(denomK.cwiseProduct(mu.col(g)),
+                                           rate_sd_op);
         }
 
         ret.transposeInPlace();
         return ret;
     }
 
-    inline Mat ln_residual_mu_sd_DK() const
+    inline Mat ln_residual_mu_DK() { return ln_mu_resid.transpose(); }
+
+    inline Mat ln_residual_mu_sd_DK()
     {
-        Mat _zy = zz * yy.transpose(); // K x D
-        Mat ret = _zy.unaryExpr(rate_sd_ln_op);
+        Mat ret = ZY_resid.unaryExpr(rate_sd_ln_op);
         ret.transposeInPlace();
         return ret;
     }
 
-    inline Mat residual_mu_DK() const
-    {
-        Mat _zy = zz * yy.transpose(); // K x D
-        Mat _denomK = zz * rho;        // K x 1
+    inline Mat rho_N() { return rho; }
 
-        Mat ret(K, D);
-        for (Index g = 0; g < D; ++g) {
-            ret.col(g) =
-                _zy.col(g).binaryExpr(_denomK.cwiseProduct(mu.col(g)), rate_op);
-        }
-
-        ret.transposeInPlace();
-        return ret;
-    }
-
-    inline Mat residual_mu_sd_DK() const
-    {
-        Mat _zy = zz * yy.transpose(); // K x D
-        Mat _denomK = zz * rho;        // K x 1
-
-        Mat ret(K, D);
-        for (Index g = 0; g < D; ++g) {
-            ret.col(g) = _zy.col(g).binaryExpr(_denomK.cwiseProduct(mu.col(g)),
-                                               rate_sd_op);
-        }
-
-        ret.transposeInPlace();
-        return ret;
-    }
-
-    inline Mat rho_N() const { return rho; }
-
-    inline Mat rho_cf_N() const { return rho_cf; }
+    inline Mat rho_cf_N() { return rho_cf; }
 
 private:
     inline void solve_mu()
@@ -283,6 +310,35 @@ private:
             ln_rho_cf = Ytot_cf.binaryExpr(denomN, rate_ln_op);
             ent_rho_cf = Ytot_cf.binaryExpr(denomN, ent_op);
         }
+    }
+
+private:
+    inline void solve_mu_resid()
+    {
+        ZY_resid = zz * yy.transpose(); // K x D
+        denomK = zz * rho_resid;
+
+        for (Index g = 0; g < D; ++g) {
+            mu_resid.col(g) =
+                ZY_resid.col(g).binaryExpr(denomK.cwiseProduct(mu.col(g)),
+                                           rate_op);
+
+            ln_mu_resid.col(g) =
+                ZY_resid.col(g).binaryExpr(denomK.cwiseProduct(mu.col(g)),
+                                           rate_ln_op);
+
+            ent_mu_resid.col(g) =
+                ZY_resid.col(g).binaryExpr(denomK.cwiseProduct(mu.col(g)),
+                                           ent_op);
+        }
+    }
+
+    inline void solve_rho_resid()
+    {
+        denomN = zz.transpose() * (mu.cwiseProduct(mu_resid)) * onesD;
+        rho_resid = Ytot.binaryExpr(denomN, rate_op);
+        ln_rho_resid = Ytot.binaryExpr(denomN, rate_ln_op);
+        ent_rho_resid = Ytot.binaryExpr(denomN, ent_op);
     }
 
 public:
@@ -371,20 +427,27 @@ private:
 
 private:
     Mat mu;
+    Mat mu_resid;
     Mat rho;
     Mat rho_cf;
+    Mat rho_resid;
 
     Mat ln_mu;
+    Mat ln_mu_resid;
     Mat ln_rho;
     Mat ln_rho_cf;
+    Mat ln_rho_resid;
 
     Mat ent_mu;
+    Mat ent_mu_resid;
     Mat ent_rho;
     Mat ent_rho_cf;
+    Mat ent_rho_resid;
 
-    Mat ZY;      // combined
-    Mat Ytot;    // observed
-    Mat Ytot_cf; // counterfactual
+    Mat ZY;       // combined
+    Mat ZY_resid; // combined (for residual calculation)
+    Mat Ytot;     // observed
+    Mat Ytot_cf;  // counterfactual
 
     Mat denomK;
     Mat denomN;

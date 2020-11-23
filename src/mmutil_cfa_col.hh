@@ -31,7 +31,7 @@ struct cfa_options_t {
         tau = 1.0;   // Laplacian regularization
         rank = 10;   // SVD rank
         lu_iter = 5; // randomized SVD
-        knn = 1;     // k-nearest neighbours
+        knn = 10;    // k-nearest neighbours
         bilink = 5;  // 2 ~ 100 (bi-directional link per element)
         nlist = 5;   // knn ~ N (nearest neighbour)
 
@@ -47,7 +47,7 @@ struct cfa_options_t {
         gamma_a0 = 1;
         gamma_b0 = 1;
 
-        glm_pseudo = 1e-2;
+        glm_pseudo = 1.0;
         glm_iter = 100;
         glm_reg = 1e-2;
 
@@ -123,6 +123,7 @@ struct cfa_data_t {
         CHECK(init());
         TLOG("Training SVD for spectral matching ...");
         run_svd(options);
+        TLOG("Done SVD");
 
         if (param_bilink >= rank) {
             WLOG("Shrink M value: " << param_bilink << " vs. " << rank);
@@ -322,6 +323,12 @@ cfa_data_t::read_cf_block(const std::vector<Index> &cells_j,
 
         Mat yy = y.col(jth);
         Mat xx = read_y_block(counterfactual_neigh).unaryExpr(glm_feature);
+
+        // Do we need to normalize?
+        // Mat _y0 = predict_poisson_glm(xx, yy, glm_iter, glm_reg);
+        // normalize_columns(_y0);
+        // Scalar _ynorm = yy.norm();
+
         y0.col(jth) = predict_poisson_glm(xx, yy, glm_iter, glm_reg);
     }
     return y0;
@@ -350,12 +357,14 @@ cfa_data_t::build_dictionary_by_treatment()
         KnnAlg &alg = *knn_lookup_trt[tt].get();      // lookup
         float *mass = V.data();                       // raw data
 
+#pragma omp parallel for
         for (Index i = 0; i < n_tot; ++i) {
             const Index cell_j = trt_index_set.at(tt).at(i);
             alg.addPoint((void *)(mass + rank * cell_j), i);
-            prog.update();
-            prog(std::cerr);
+            // prog.update();
+            // prog(std::cerr);
         }
+        TLOG("Built a lookup for the treatment : " << tt);
     }
 }
 
@@ -379,12 +388,14 @@ cfa_data_t::build_dictionary_by_individual()
         KnnAlg &alg = *knn_lookup_indv[ii].get();      // lookup
         float *mass = V.data();                        // raw data
 
+#pragma omp parallel for
         for (Index i = 0; i < n_tot; ++i) {
             const Index cell_j = indv_index_set.at(ii).at(i);
             alg.addPoint((void *)(mass + rank * cell_j), i);
-            prog.update();
-            prog(std::cerr);
+            // prog.update();
+            // prog(std::cerr);
         }
+        TLOG("Built a lookup for the individual : " << ii);
     }
 }
 
@@ -650,6 +661,8 @@ run_cfa_col(const OPTIONS &options)
                 mu_col_names.emplace_back(c);
             }
 
+            pois.residual_optimize();
+
             const Mat resid_mu_i = pois.residual_mu_DK();
             const Mat resid_mu_sd_i = pois.residual_mu_sd_DK();
 
@@ -770,13 +783,13 @@ parse_cfa_options(const int argc,     //
         "\n"
         "--gamma_a0                  : prior for gamma distribution(a0,b0) (default: 1)\n"
         "--gamma_b0                  : prior for gamma distribution(a0,b0) (default: 1)\n"
-        "--glm_pseudo                : pseudocount for GLM features (default: 1e-2)\n"
+        "--glm_pseudo                : pseudocount for GLM features (default: 1)\n"
         "--glm_reg                   : Regularization parameter for GLM fitting (default: 1e-2)\n"
         "--glm_iter                  : Maximum number of iterations for GLM fitting (default: 100)\n"
         "\n"
         "[Matching options]\n"
         "\n"
-        "--knn (-k)                  : k nearest neighbours (default: 1)\n"
+        "--knn (-k)                  : k nearest neighbours (default: 10)\n"
         "--bilink (-b)               : # of bidirectional links (default: 5)\n"
         "--nlist (-n)                : # nearest neighbor lists (default: 5)\n"
         "\n"

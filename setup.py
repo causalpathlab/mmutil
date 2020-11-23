@@ -11,13 +11,20 @@ _inc_dirs = [
 
 _compile_args = [
     '--std=c++14',
+    '-fpermissive',
     '-O3',
     '-DNDEBUG',
     '-DCPYTHON',
     '-DNPY_NO_DEPRECATED_API',
     '-Wno-sign-compare',
     '-Wno-maybe-uninitialized',
-    '-Wno-unused-variable'
+    '-Wno-unused-variable',
+    '-fopenmp',
+    '-msse2'
+]
+
+_link_args = [
+    '-fopenmp',
 ]
 
 mmutil_module = Extension(
@@ -30,6 +37,7 @@ mmutil_module = Extension(
              'src/ext/tabix/kstring.c'],
     language='c++',
     extra_compile_args=_compile_args,
+    extra_link_args=_link_args
 )
 
 with open("README.md", "r") as fh:

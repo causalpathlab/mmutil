@@ -183,8 +183,6 @@ struct annotation_options_t {
         em_tol = 1e-4;
         kappa_max = 100.;
 
-        balance_marker_size = false;
-        unconstrained_update = false;
         output_count_matrix = false;
 
         verbose = false;
@@ -209,8 +207,6 @@ struct annotation_options_t {
 
     Scalar em_tol;
 
-    bool balance_marker_size;
-    bool unconstrained_update;
     bool output_count_matrix;
 
     bool verbose;
@@ -418,6 +414,7 @@ run_annotation(const annotation_options_t &options)
         Mat xx = Mat(x);
         if (do_norm)
             normalize_columns(xx);
+
         return xx;
     };
 
@@ -509,37 +506,92 @@ run_annotation(const annotation_options_t &options)
     };
 
     auto greedy_initialization = [&]() {
-
-    // Traverse for each block
 #pragma omp parallel for
         for (Index lb = 0; lb < N; lb += batch_size) {
             const Index ub = std::min(N, batch_size + lb);
 
             Mat xx = take_batch_data(lb, ub);
 
+            DS sampler_k(K); // sample discrete from log-mass
+            Vec sj(K);
+
             for (Index j = 0; j < xx.cols(); ++j) {
+
                 const Index i = j + lb;
                 if (taboo.count(i) > 0)
                     continue;
                 xj = xx.col(j);
                 Index argmax = 0;
-                const Vec &_score = annot.log_score(xj);
-                _score.maxCoeff(&argmax);
-                score_init += _score(argmax);
+                sj = annot.log_score(xj);
+                const Index k = sampler_k(sj);
+                score_init += sj(k);
 
                 if (xj.sum() > 0) {
-                    nsize(argmax) += 1.0;
-                    Stat.col(argmax) += xj.cwiseProduct(L.col(argmax));
-                    Stat_anti.col(argmax) += xj.cwiseProduct(L0.col(argmax));
-                    membership[i] = argmax;
+                    nsize(k) += 1.0;
+                    Stat.col(k) += xj.cwiseProduct(L.col(k));
+                    Stat_anti.col(k) += xj.cwiseProduct(L0.col(k));
+                    membership[i] = k;
                 } else {
                     taboo.insert(i);
                 }
             }
 
             if (options.verbose) {
-	      std::cerr << nsize.transpose() << std::endl;
+                std::cerr << std::setw(10) << lb;
+                for (Index k = 0; k < K; ++k) {
+                    std::cerr << " [" << labels[k] << "] " << std::setw(10)
+                              << nsize(k);
+                }
+                std::cerr << "\r" << std::flush;
             }
+        }
+
+        score_init /= static_cast<Scalar>(N);
+        annot.update_param(Stat, Stat_anti, nsize);
+    };
+
+    auto randomized_initialization = [&]() {
+#pragma omp parallel for
+        for (Index lb = 0; lb < N; lb += batch_size) {
+            const Index ub = std::min(N, batch_size + lb);
+
+            Mat xx = take_batch_data(lb, ub);
+
+            DS sampler_k(K); // sample discrete from log-mass
+            Vec sj(K);       //
+            Vec sj0(K);      // just null score
+            sj0.setZero();   //
+
+            for (Index j = 0; j < xx.cols(); ++j) {
+                const Index i = j + lb;
+                if (taboo.count(i) > 0)
+                    continue;
+                xj = xx.col(j);
+                sj = annot.log_score(xj);
+
+                const Index k = sampler_k(sj0);
+                // const Index k = sampler_k(sj);
+                score_init += sj(k);
+
+                if (xj.sum() > 0) {
+                    nsize(k) += 1.0;
+                    Stat.col(k) += xj.cwiseProduct(L.col(k));
+                    Stat_anti.col(k) += xj.cwiseProduct(L0.col(k));
+                    membership[i] = k;
+                } else {
+                    taboo.insert(i);
+                }
+            }
+
+            if (options.verbose) {
+                std::cerr << std::setw(10) << lb;
+                for (Index k = 0; k < K; ++k) {
+                    std::cerr << " [" << labels[k] << "] " << std::setw(10)
+                              << nsize(k);
+                }
+                std::cerr << "\r" << std::flush;
+            }
+
         }
 
         score_init /= static_cast<Scalar>(N);
@@ -569,9 +621,7 @@ run_annotation(const annotation_options_t &options)
     std::vector<Scalar> em_score_out;
 
     auto monte_carlo_update = [&]() {
-        DS sampler_k(K); // sample discrete from log-mass
         Scalar score = score_init;
-        Vec sj(K); // type x 1 score vector
 
         for (Index iter = 0; iter < max_em_iter; ++iter) {
             score = 0;
@@ -586,6 +636,9 @@ run_annotation(const annotation_options_t &options)
 #pragma omp parallel for
             for (Index lb = 0; lb < N; lb += batch_size) {     // batch
                 const Index ub = std::min(N, batch_size + lb); //
+
+                DS sampler_k(K); // sample discrete from log-mass
+                Vec sj(K);       // type x 1 score vector
 
                 Mat xx = take_batch_data(lb, ub, true);
 
@@ -621,11 +674,17 @@ run_annotation(const annotation_options_t &options)
                 } // end of data iteration
 
                 if (options.verbose) {
-                    std::cerr << nsize.transpose() << std::endl;
+                    std::cerr << std::setw(10) << lb;
+                    for (Index k = 0; k < K; ++k) {
+                        std::cerr << " [" << labels[k] << "] " << std::setw(10)
+                                  << nsize(k);
+                    }
+                    std::cerr << "\r" << std::flush;
                 }
 
-                annot.update_param(Stat, Stat_anti, nsize);
             } // end of batch iteration
+
+            annot.update_param(Stat, Stat_anti, nsize);
 
             score = score / static_cast<Scalar>(N);
             score_trace(iter) = score;
@@ -645,6 +704,10 @@ run_annotation(const annotation_options_t &options)
             }
         } // end of EM iteration
     };
+
+    // TLOG("Start randomized initialization");
+    // randomized_initialization();
+    // TLOG("Finished randomized initialization");
 
     TLOG("Start greedy initialization");
     greedy_initialization();

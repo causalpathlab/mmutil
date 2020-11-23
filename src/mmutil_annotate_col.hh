@@ -38,7 +38,6 @@ parse_annotation_options(const int argc,     //
         "--em_tol (-t)          : EM convergence criterion (default: 1e-4)\n"
         "\n"
         "--verbose (-v)         : Set verbose (default: false)\n"
-        "--balance_markers (-b) : Balance maker size (default: false)\n"
         "--output_mtx_file (-O) : Write a count matrix of the markers (default: false)\n"
         "\n";
 
@@ -61,10 +60,6 @@ parse_annotation_options(const int argc,     //
           { "em_iter", required_argument, nullptr, 'i' },        //
           { "em_tol", required_argument, nullptr, 't' },         //
           { "help", no_argument, nullptr, 'h' },                 //
-          { "balance_marker", no_argument, nullptr, 'b' },       //
-          { "balance_markers", no_argument, nullptr, 'b' },      //
-          { "unconstrained_update", no_argument, nullptr, 'd' }, //
-          { "unconstrained", no_argument, nullptr, 'd' },        //
           { "output_mtx_file", no_argument, nullptr, 'O' },      //
           { "verbose", no_argument, nullptr, 'v' },              //
           { nullptr, no_argument, nullptr, 0 } };
@@ -129,12 +124,6 @@ parse_annotation_options(const int argc,     //
             break;
         case 'v': // -v or --verbose
             options.verbose = true;
-            break;
-        case 'b': // -k or --balance_marker
-            options.balance_marker_size = true;
-            break;
-        case 'd':
-            options.unconstrained_update = true;
             break;
         case 'K':
             options.kappa_max = std::stof(optarg);

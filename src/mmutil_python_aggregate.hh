@@ -20,7 +20,8 @@ const char *_aggregate_desc =
     "\n"
     "sum        : (M x n) Sum matrix\n"
     "mean       : (M x n) Mean matrix\n"
-    "sd         : (M x n) SD matrix\n"
+    "mu         : (M x n) Depth-adjusted mean matrix\n"
+    "mu_sd      : (M x n) SD of the mu matrix\n"
     "cols       : (n x 1) Column names\n"
     "\n";
 
@@ -111,6 +112,20 @@ mmutil_aggregate(PyObject *self, PyObject *args, PyObject *keywords)
         Py_CHECK(read_data_file(options.out + ".mean.gz", _mean));
         PyObject *Mean = make_np_array(_mean);
         PyDict_SetItem(ret, PyUnicode_FromString("mean"), Mean);
+    }
+
+    {
+        Mat _mu;
+        Py_CHECK(read_data_file(options.out + ".mu.gz", _mu));
+        PyObject *Mu = make_np_array(_mu);
+        PyDict_SetItem(ret, PyUnicode_FromString("mu"), Mu);
+    }
+
+    {
+        Mat _mu_sd;
+        Py_CHECK(read_data_file(options.out + ".mu_sd.gz", _mu_sd));
+        PyObject *Mu_Sd = make_np_array(_mu_sd);
+        PyDict_SetItem(ret, PyUnicode_FromString("mu_sd"), Mu_Sd);
     }
 
     {
