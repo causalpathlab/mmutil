@@ -24,14 +24,14 @@ std_argsort(const Vec &data)
 /**
  * vector -> map: name -> position index
  */
-template <typename S, typename I>
-std::unordered_map<S, I>
+template <typename S, typename IDX>
+std::unordered_map<S, IDX>
 make_position_dict(const std::vector<S> &name_vec)
 {
 
-    std::unordered_map<S, I> name_to_id;
+    std::unordered_map<S, IDX> name_to_id;
 
-    for (I i = 0; i < name_vec.size(); ++i) {
+    for (IDX i = 0; i < name_vec.size(); ++i) {
         const S &j = name_vec.at(i);
         name_to_id[j] = i;
     }
@@ -39,20 +39,20 @@ make_position_dict(const std::vector<S> &name_vec)
     return name_to_id;
 }
 
-template <typename S, typename I>
-std::tuple<std::vector<I>, std::vector<S>, std::unordered_map<S, I>>
+template <typename S, typename IDX>
+std::tuple<std::vector<IDX>, std::vector<S>, std::unordered_map<S, IDX>>
 make_indexed_vector(const std::vector<S> &name_vec)
 {
 
-    std::unordered_map<S, I> name_to_id;
+    std::unordered_map<S, IDX> name_to_id;
     std::vector<S> id_to_name;
-    std::vector<I> id_vec;
+    std::vector<IDX> id_vec;
     id_vec.reserve(name_vec.size());
 
-    for (I i = 0; i < name_vec.size(); ++i) {
+    for (IDX i = 0; i < name_vec.size(); ++i) {
         const S &ii = name_vec.at(i);
         if (name_to_id.count(ii) == 0) {
-            const I j = name_to_id.size();
+            const IDX j = name_to_id.size();
             name_to_id[ii] = j;
             id_to_name.push_back(ii);
         }
@@ -62,18 +62,18 @@ make_indexed_vector(const std::vector<S> &name_vec)
     return std::make_tuple(id_vec, id_to_name, name_to_id);
 }
 
-template <typename I>
-std::vector<std::vector<I>>
-make_index_vec_vec(const std::vector<I> &_id)
+template <typename IDX>
+std::vector<std::vector<IDX>>
+make_index_vec_vec(const std::vector<IDX> &_id)
 {
-    using vec_ivec = std::vector<std::vector<I>>;
+    using vec_ivec = std::vector<std::vector<IDX>>;
 
-    const I nn = *std::max_element(_id.begin(), _id.end()) + 1;
+    const IDX nn = *std::max_element(_id.begin(), _id.end()) + 1;
 
-    vec_ivec ret(nn, std::vector<I>{});
+    vec_ivec ret(nn, std::vector<IDX>{});
 
-    for (I i = 0; i < _id.size(); ++i) {
-        const I k = _id.at(i);
+    for (IDX i = 0; i < _id.size(); ++i) {
+        const IDX k = _id.at(i);
         ret[k].push_back(i);
     }
     return ret;

@@ -135,7 +135,6 @@ struct poisson_t {
     const bool eval_cf;
 
 public:
-
     inline Scalar elbo()
     {
         Scalar ret = 0.;
@@ -225,16 +224,17 @@ public:
     {
         const Scalar denom = static_cast<Scalar>(D * N);
 
-        rho_resid = rho;
-        ln_rho_resid = ln_rho;
+        ZY_resid = zz * yy.transpose(); // K x D
 
-        solve_mu_resid();
-        solve_rho_resid();
+        rho_resid.setConstant(a0 / b0); //  rho;
+        solve_mu_resid();               //
+
         Scalar score = elbo_resid() / denom;
 
         for (Index iter = 0; iter < maxIter; ++iter) {
+            solve_rho_resid(); //
             solve_mu_resid();
-            solve_rho_resid();
+
             Scalar _score = elbo_resid() / denom;
             Scalar diff = (score - _score) / (std::abs(score) + tol);
 
@@ -315,7 +315,6 @@ private:
 private:
     inline void solve_mu_resid()
     {
-        ZY_resid = zz * yy.transpose(); // K x D
         denomK = zz * rho_resid;
 
         for (Index g = 0; g < D; ++g) {

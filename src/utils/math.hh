@@ -58,9 +58,9 @@ _log_sum_exp(const T log_a, const T log_b)
 // modified Bessel of the first kind //
 ///////////////////////////////////////
 
-template <typename I, typename F>
+template <typename IDX, typename F>
 inline F
-_log_bessel_i(const I p, const F x)
+_log_bessel_i(const IDX p, const F x)
 {
 
     // We compute log Bessel function by the log-sum-exp trick

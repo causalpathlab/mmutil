@@ -549,7 +549,7 @@ struct running_stat_t {
         n += 1.0;
     }
 
-    const T &mean()
+    const T mean()
     {
         if (n > 0) {
             Mean = Cum / n;
@@ -557,7 +557,7 @@ struct running_stat_t {
         return Mean;
     }
 
-    const T &var()
+    const T var()
     {
         if (n > 1.) {
             Mean = Cum / n;

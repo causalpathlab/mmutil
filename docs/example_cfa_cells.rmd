@@ -39,47 +39,65 @@ mkdir -p example/cfa
 		--row data/brain_2018-05-03/features.tsv.gz \
 		--col data/brain_2018-05-03/barcodes.tsv.gz \
 		--ann PsychENCODE.marker \
-		--batch_size 1000 \
+		--batch_size 1000 --log_scale \
 		--out example/cfa/psych
 ```
 
 ### 1. Extract cells with underlying phenotypes are annotated 
 
 ```{r identify_phenotyped_cells}
-meta.dt <- fread("data/brain_2018-05-03/filtered_column_metadata.txt.gz")
-pheno.dt <- fread("data/brain_2018-05-03/phenotypes.csv")
-model.file <- "example/cfa/pheno_model.rdata"
+meta.dt <- fread("data/brain_2018-05-03/filtered_column_metadata.txt.gz", header=TRUE)
+pheno.dt <- fread("data/brain_2018-05-03/phenotypes.csv", header=TRUE, na.strings = "-9")
+clin.dt <- fread("data/brain_2018-05-03/ROSMAP_clinical.csv", header=TRUE)
+annot.dt <- .fread("example/cfa/psych.annot.gz",
+                   col.names = c("TAG", "celltype", "prob", "ln.prob"))
 
-##########################################
-## Propensity for pathological AD model ##
-##########################################
-
-if(file.exists(model.file)) {
-    load(model.file)
-} else {
-    dir.create("example/cfa/", recursive = TRUE, showWarnings = FALSE)
-    annot.dt <- .fread("example/cfa/psych.annot.gz")
-    colnames(annot.dt) <- c("TAG", "celltype", "prob", "ln.prob")
-
-    train.data <- pheno.dt[abs(pathoAD) <= 1 &
-                           np_sqrt != -9 &
-                           nft_sqrt != -9]
-
-    prop.model <- glm(pathoAD ~ np_sqrt + nft_sqrt,
-                      data = train.data,
-                      family="binomial")
-
-    save(list=c("prop.model"), file=model.file)
+.age.code <- function(x) {
+    if(nchar(x) == 0) return(NA)
+    if(x == "90+") return(2);
+    if(as.numeric(x) > 80) return(1);
+    return(0)
 }
+
+.apoe.code <- function(x) {
+    if(is.na(x)) return(NA) 
+    if(x == 44) return(2)
+    if(x %in% c(24, 34)) return(1)
+    return(0) 
+}
+
+clin.dt[, age.death := sapply(age_death, .age.code)]
+clin.dt[, apoe.e4 := sapply(apoe_genotype, .apoe.code)]
+
+pheno.dt <- pheno.dt %>%
+    select(projid, pmAD, pathoAD, np_sqrt, nft_sqrt)
+
+pheno.dt <- pheno.dt %>% 
+    left_join(clin.dt, by = "projid")
 
 ################################################
 ## these are cells with annotated individuals ##
 ################################################
 
+meta.pheno.dt <- annot.dt %>%
+    left_join(meta.dt) %>%
+    left_join(pheno.dt) %>%
+    filter(!is.na(pathoAD))
+
 .tag.file <- "example/cfa/input.tags.gz"
+
 if(!file.exists(.tag.file)) {
-    meta.pheno.dt <- merge(meta.dt, pheno.dt)[np_sqrt != -9 & nft_sqrt != -9][]
-    .fwrite(meta.pheno.dt[, .(TAG)], .tag.file)
+
+    ## make sure that we use the cells with matching annotations
+    .mathys <- c("Ast", "End", "Ex", "In", "Mic", "Oli", "Opc", "Per")
+    .encode <- c("Astro", "Endo", "Ex", "In", "Microglia", "Oligo", "OPC", "Per")
+
+    .out.dt <- meta.pheno.dt %>% 
+        mutate(ct.mathys = factor(broad.cell.type, .mathys, .encode)) %>%
+        mutate(ct.mathys = as.character(ct.mathys)) %>%
+        filter(ct.mathys == celltype)
+
+    .fwrite(.out.dt[, .(TAG)], .tag.file)
 }
 ```
 
@@ -109,15 +127,15 @@ if(!file.exists(.tag.file)) {
 .lab.file <- .hdr %&% ".lab.gz"
 
 if(any(!file.exists(.trt.file, .annot.file, .ind.file, .lab.file))) {
+
     cols.dt <- .fread("example/cfa/input.cols.gz") %>% 
         (function(x){ colnames(x)=c("TAG"); x }) %>% 
         left_join(meta.pheno.dt) %>%
         left_join(annot.dt)
 
-    xx = cols.dt[, .(np_sqrt, nft_sqrt)]
-
-    y.pheno <- data.table(y = predict(prop.model, xx)) %>%
-        mutate(y = if_else(y > 0, "AD", "HC"))
+    y.pheno <- cols.dt %>%
+        mutate(y = if_else(pathoAD > 0, "AD", "HC")) %>%
+        select(y)
 
     ind.dt <- cols.dt[, .(projid)] %>%
         mutate(y = unlist(y.pheno)) %>%
@@ -150,22 +168,22 @@ if(any(!file.exists(.trt.file, .annot.file, .ind.file, .lab.file))) {
 
 # CF-adjusted aggregate statistics
 [ -f example/cfa/output.resid_mu.gz ] || \
-	../src/mmutil_cfa_col \
+	OMP_NUM_THREADS=8 ../src/mmutil_cfa_col \
 		--mtx example/cfa/input.mtx.gz \
 		--col example/cfa/input.cols.gz \
 		--annot example/cfa/input.annot.gz \
 		--trt example/cfa/input.trt.gz \
 		--lab example/cfa/input.lab.gz \
 		--ind example/cfa/input.ind.gz \
-		--knn 10 --rank 30 --bilink 100 --log_scale --normalize \
+		--a0 1 --b0 1 --glm_pseudo 1 \
+		--knn 30 --rank 30 --log_scale --nboot 100 \
 		--out example/cfa/output
-
 ```
 
 
 
 
-```{r helper_functions_to_organize_results, include=FALSE}
+```{r helper_functions_to_organize_results}
 #' @param data.file E.g., "example/cfa/output.resid_mu.gz"
 #' @param .name E.g., "resid.mu"
 #' @param col.file E.g., "example/cfa/output.mu_cols.gz"
@@ -175,25 +193,25 @@ if(any(!file.exists(.trt.file, .annot.file, .ind.file, .lab.file))) {
                        col.file,
                        row.file = "example/cfa/input.rows.gz") {
 
-    .rows <- .fread(row.file)
+    .rows <- .fread(row.file) %>% unlist
     .cols <- .fread(col.file) %>% unlist
 
-    .fread(data.file) %>%
-        (function(x) { colnames(x)=.cols; x}) %>%
-        (function(x) { x[, gene := unlist(.rows)][] }) %>%
-        gather(key="col", value="val", -gene) %>%
-        (function(x) { colnames(x)=c("gene","col",.name); x}) %>%
-        as.data.table
+    .ret <- .fread(data.file, col.names = .cols, colClasses="double")
+    .ret[, gene := .rows]
+
+    melt.data.table(.ret, id.vars = "gene",
+                           variable.name = "col",
+                           value.name = .name)
 }
 
 #' @param .hdr E.g., "example/cfa/output"
-.read.stat.all <- function(.hdr, tot.cutoff = 50, ...) {
+.read.stat.all <- function(.hdr, ...) {
 
     .col.file <- .hdr %&% ".mu_cols.gz"
     .col.sep <- c("projid", "disease", "celltype")
 
-    .dt1 <- .read.stat(.hdr %&% ".resid_mu.gz", "mu", .col.file, ...)
-    .dt2 <- .read.stat(.hdr %&% ".resid_mu_sd.gz", "mu.sd", .col.file, ...)
+    .dt1 <- .read.stat(.hdr %&% ".boot_ln_mu.gz", "ln.mu", .col.file, ...)
+    .dt2 <- .read.stat(.hdr %&% ".boot_sd_ln_mu.gz", "ln.mu.sd", .col.file, ...)
 
     .dt3 <- .read.stat(.hdr %&% ".obs_mu.gz", "obs.mu", .col.file, ...)
     .dt4 <- .read.stat(.hdr %&% ".cf_mu.gz", "cf.mu", .col.file, ...)
@@ -201,56 +219,19 @@ if(any(!file.exists(.trt.file, .annot.file, .ind.file, .lab.file))) {
     .dt5 <- .read.stat(.hdr %&% ".sum.gz", "tot", .col.file, ...)
     .dt6 <- .read.stat(.hdr %&% ".mean.gz", "avg", .col.file, ...)
 
+    .dt7 <- .read.stat(.hdr %&% ".boot_ln_internal_mu.gz", "ln.mu.intern", .col.file, ...)
+    .dt8 <- .read.stat(.hdr %&% ".boot_sd_ln_internal_mu.gz", "ln.mu.intern.sd", .col.file, ...)
+
     ret <- .dt1 %>%
         merge(.dt2, by=c("gene", "col")) %>%
         merge(.dt3, by=c("gene", "col")) %>%
         merge(.dt4, by=c("gene", "col")) %>%
         merge(.dt5, by=c("gene", "col")) %>%
-        merge(.dt6, by=c("gene", "col"))
+        merge(.dt6, by=c("gene", "col")) %>% 
+        merge(.dt7, by=c("gene", "col")) %>% 
+        merge(.dt8, by=c("gene", "col"))
 
     ret[, c("projid", "disease", "celltype") := tstrsplit(col, "_", fixed=TRUE)]
-
-    #############################################
-    ## align AD and HC effects in the same way ##
-    #############################################
-
-    ret[disease == "HC", mu := 1/mu]               # flip the directional effect for HC
-    ret[, a := (mu/mu.sd)^2]   # gamma(a,b)
-    ret[, b := mu/mu.sd/mu.sd] # gamma(a,b)
-
-    ####################################
-    ## log-transformation of gamma rv ##
-    ####################################
-
-    ## Delta method: sd[g(mu)] = |g'(mu)| * sd(mu)
-    ret[, ln.mu := log(mu)]
-    ret[, ln.mu.sd := mu.sd / abs(mu)]
-
-    ## ln(mu) Wald test
-    ret[, z := ln.mu/ln.mu.sd]
-    ret[tot >= tot.cutoff, pv.z := 2 * pnorm(abs(z), lower.tail=FALSE)]
-
-    return(ret)
-}
-
-.take.average <- function(.dt, .cond = c("AD"), tot.cutoff = 50) {
-
-    ret <- .dt[disease %in% .cond,
-               .(a = sum(a),
-                 b = sum(b),
-                 tot = sum(tot)),
-               by = .(gene, celltype)]
-
-    ret[, mu := a/b]
-    ret[, mu.sd := sqrt(a)/b]
-
-    ## Delta method: sd[g(mu)] = |g'(mu)| * sd(mu)
-    ret[, ln.mu := log(mu)]
-    ret[, ln.mu.sd := mu.sd / abs(mu)]
-
-    ## ln(mu) Wald test
-    ret[, z := ln.mu/ln.mu.sd]
-    ret[tot >= tot.cutoff, pv.z := 2 * pnorm(abs(z), lower.tail=FALSE)]
 
     return(ret)
 }
@@ -263,18 +244,26 @@ MIN.TOT.CUTOFF <- 50
 ```{r read_statistics_compute_pvalues}
 .data.file <- "example/cfa/stat_tab.rdata"
 if(!file.exists(.data.file)) {
-    stat.tab <- .read.stat.all("example/cfa/output", tot.cutoff = MIN.TOT.CUTOFF)
+    stat.tab <- .read.stat.all("example/cfa/output")
     save(stat.tab, file = .data.file)
 } else {
     load(.data.file)
 }
-
-stat.avg.tab <- .take.average(stat.tab, "AD", tot.cutoff = MIN.TOT.CUTOFF)
 ```
+
+
+```{r}
+
+
+
+```
+
+
 
 ### First, show confounders and genes associated with the confounding effects
 
 ```{r helper_functions_for_gene_assoc, include = FALSE}
+## Join with phenotype information
 match.row.with.pheno <- function(.mat) {
     tibble(r = rownames(.mat)) %>% 
         separate("r", c("projid","disease","celltype"), sep="[_]") %>%
@@ -290,7 +279,7 @@ test.gene.association <- function(.ln.mat) {
     .take.gene.assoc <- function(ct,
                                  .ln.mat,
                                  .row.df,
-                                 .pheno = c("age_death", "msex", "pathoAD")){
+                                 .pheno = c("age.death", "msex", "braaksc", "apoe.e4")){
 
         ct.idx <- .row.df %>% filter(celltype == ct) %>%
             select(i) %>% unlist
@@ -363,7 +352,7 @@ plt <-
                           labels = function(x) num.sci(10^(-x)))
 
 .file <- fig.dir %&% "/Fig_Confounding_Genes.pdf"
-.gg.save(filename = .file, plot = plt, width=5, height=5)
+##.gg.save(filename = .file, plot = plt, width=5, height=5)
 print(plt)
 ```
 
@@ -372,7 +361,7 @@ cat("[PDF](" %&% .file %&% ")")
 ```
 
 
-```{r fig_confounding_effects_tsne, fig.width=6, fig.height=4}
+```{r fig_confounding_effects_tsne, fig.width=4, fig.height=6}
 .row.df <- match.row.with.pheno(.ln.mat)
 
 .tsne <- Rtsne::Rtsne(.ln.mat, n_threads=16)
@@ -381,19 +370,17 @@ colnames(.tsne$Y) <- "tSNE" %&% 1:ncol(.tsne$Y)
 .tsne.dt <- cbind(.row.df, .tsne$Y) %>% as.data.table
 
 p1 <- .gg.plot(.tsne.dt, aes(x=tSNE1, y=tSNE2)) +
-    theme(legend.position=c(1,1), legend.justification = c(1,1)) +
     geom_point(aes(fill=celltype), alpha=.8, stroke=.2, size=1.25, pch=21) +
     scale_fill_brewer("", palette = "Paired")
 
 p2 <- .gg.plot(.tsne.dt %>% arrange(desc(disease)), aes(x=tSNE1, y=tSNE2)) +
-    theme(legend.position=c(1,1), legend.justification = c(1,1)) +
     geom_point(aes(fill=disease), alpha=.5, stroke=.2, size=1.25, pch=21) +
     scale_fill_manual("", values=c("#FF9999","#FFFFFF"))
 
-plt <- p1 | p2
+plt <- p1 / p2
 
 .file <- fig.dir %&% "/Fig_Confounding_tSNE.pdf"
-.gg.save(filename = .file, plot = plt, width=6, height=4)
+.gg.save(filename = .file, plot = plt, width=4, height=6)
 print(plt)
 ```
 
@@ -571,13 +558,13 @@ plot.local.view <- function(g, stat.tab, tot.cutoff = 1) {
         theme(legend.justification = c(1,1)) +
         xlab(length(.projid) %&% " individuals in each cell type") +
         ylab("Fold change to the matched control") +
-        geom_hline(yintercept=0, col="gray20", lty=2, size=.2) +
-        facet_grid(.~celltype) +
+#        geom_hline(yintercept=0, col="gray20", lty=2, size=.2) +
+        facet_wrap(~celltype, scales="free", nrow = 1) +
         geom_linerange(size=.1) +
         geom_point(stroke=.5) +
         scale_size_continuous(range=c(0, 2.5), labels=function(x) exp(x)-1, guide=FALSE) +
-        scale_y_continuous(labels=.lab.fn) +
         scale_colour_manual(values=.hex.value, guide=FALSE) +
+        scale_y_continuous(labels=.lab.fn) +
         scale_shape_manual("", values=c(19, 21))
 }
 ```

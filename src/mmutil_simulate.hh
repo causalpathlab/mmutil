@@ -188,6 +188,7 @@ simulate_mtx_matrix(const OPTIONS &options)
     auto _sample_ind = [&rng, &unif_ind](const Index) -> Index {
         return unif_ind(rng);
     };
+
     std::vector<Index> indv;
     indv.resize(Nsample);
     std::transform(std::begin(indv),

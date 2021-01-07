@@ -102,13 +102,15 @@ predict_poisson_glm(const Mat xx,
                     const bool intercept = true)
 {
     poisson_invlink_t invlink;
+    Mat xx_std = standardize(xx);
+
     if (intercept) {
-        const Mat xx_1 = hcat(Mat::Ones(xx.rows(), 1), xx);
+        const Mat xx_1 = hcat(xx_std, Mat::Ones(xx.rows(), 1));
         const Mat beta = fit_poisson_glm(xx_1, y, max_iter, reg);
-        return (xx * beta).unaryExpr(invlink);
+        return (xx_1 * beta).unaryExpr(invlink);
     } else {
-        const Mat beta = fit_poisson_glm(xx, y, max_iter, reg);
-        return (xx * beta).unaryExpr(invlink);
+        const Mat beta = fit_poisson_glm(xx_std, y, max_iter, reg);
+        return (xx_std * beta).unaryExpr(invlink);
     }
 }
 

@@ -80,9 +80,9 @@ copy_selected_rows(const std::string mtx_file,
 
     TLOG("Finished copying submatrix data");
 
-    std::string idx_file = output_mtx_file + ".index";
-    CHK_ERR_RET(mmutil::index::build_mmutil_index(output_mtx_file, idx_file),
-                "Failed to construct an index file: " << idx_file);
+    // std::string idx_file = output_mtx_file + ".index";
+    // CHK_ERR_RET(mmutil::index::build_mmutil_index(output_mtx_file, idx_file),
+    //             "Failed to construct an index file: " << idx_file);
 
     TLOG("Done");
     return EXIT_SUCCESS;
@@ -182,9 +182,9 @@ copy_selected_columns(const std::string mtx_file,
     // CHK_ERR_RET(mmutil::bgzf::convert_bgzip(output_mtx_file),
     //             "Failed to bgzip " << output_mtx_file);
 
-    std::string idx_file = output_mtx_file + ".index";
-    CHK_ERR_RET(mmutil::index::build_mmutil_index(output_mtx_file, idx_file),
-                "Failed to construct an index file: " << idx_file);
+    // std::string idx_file = output_mtx_file + ".index";
+    // CHK_ERR_RET(mmutil::index::build_mmutil_index(output_mtx_file, idx_file),
+    //             "Failed to construct an index file: " << idx_file);
 
     TLOG("Done");
     return EXIT_SUCCESS;

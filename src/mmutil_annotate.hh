@@ -123,7 +123,7 @@ struct annotation_model_t {
         // where
         // I(v,x) = boost::math::cyl_bessel_i(v,x)
         //
-        // ln C ~ (d/2 - 1) ln(kappa) - ln I(v, k)
+        // ln C ~ (d/2 - 1) ln(kappa) - ln I(d/2, k)
         //
 
         const Scalar eps = 1e-8;
@@ -506,7 +506,7 @@ run_annotation(const annotation_options_t &options)
     };
 
     auto greedy_initialization = [&]() {
-#pragma omp parallel for
+      // #pragma omp parallel for
         for (Index lb = 0; lb < N; lb += batch_size) {
             const Index ub = std::min(N, batch_size + lb);
 
@@ -551,7 +551,7 @@ run_annotation(const annotation_options_t &options)
     };
 
     auto randomized_initialization = [&]() {
-#pragma omp parallel for
+      // #pragma omp parallel for
         for (Index lb = 0; lb < N; lb += batch_size) {
             const Index ub = std::min(N, batch_size + lb);
 
@@ -633,7 +633,7 @@ run_annotation(const annotation_options_t &options)
             }
 #endif
 
-#pragma omp parallel for
+	    // #pragma omp parallel for
             for (Index lb = 0; lb < N; lb += batch_size) {     // batch
                 const Index ub = std::min(N, batch_size + lb); //
 

@@ -254,7 +254,8 @@ aggregate_col(const OPTIONS &options)
     CHECK(read_vector_file(ind_file, indv_membership));
 
     ASSERT(indv_membership.size() == Z.rows(),
-           "Individual membership file mismatches with Z");
+           "Individual membership file mismatches with Z: "
+               << indv_membership.size() << " vs. " << Z.rows());
 
     std::vector<std::string> indv_id_name;
     std::vector<Index> indv; // map: col -> indv index
