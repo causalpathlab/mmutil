@@ -54,6 +54,7 @@ struct cfa_options_t {
         discretize = true;
 
         nboot = 100;
+        nthreads = 8;
     }
 
     std::string mtx_file;
@@ -99,6 +100,7 @@ struct cfa_options_t {
     bool discretize;
 
     Index nboot;
+    Index nthreads;
 };
 
 struct cfa_data_t {
@@ -122,6 +124,7 @@ struct cfa_data_t {
         , knn(options.knn)
         , param_bilink(options.bilink)
         , param_nnlist(options.nlist)
+        , num_threads(options.nthreads)
     {
         CHECK(init());
         TLOG("Training SVD for spectral matching ...");
@@ -229,6 +232,7 @@ private:
     std::size_t knn;
     std::size_t param_bilink;
     std::size_t param_nnlist;
+    Index num_threads;
 
 private:
     std::vector<std::string> indv_membership; // [N] -> individual
@@ -272,7 +276,7 @@ cfa_data_t::read_cf_block(const std::vector<Index> &cells_j,
     Mat y = read_y_block(cells_j);
     Mat y0(D, n_j);
 
-    omp_set_num_threads(8);
+    omp_set_num_threads(num_threads);
 #pragma omp parallel for
     for (Index jth = 0; jth < n_j; ++jth) {     // For each cell j
         const Index _cell_j = cells_j.at(jth);  //
@@ -355,7 +359,7 @@ cfa_data_t::build_dictionary_by_treatment()
         KnnAlg &alg = *knn_lookup_trt[tt].get();      // lookup
         float *mass = V.data();                       // raw data
 
-    omp_set_num_threads(8);
+        omp_set_num_threads(num_threads);
 #pragma omp parallel for
         for (Index i = 0; i < n_tot; ++i) {
             const Index cell_j = trt_index_set.at(tt).at(i);
@@ -387,7 +391,7 @@ cfa_data_t::build_dictionary_by_individual()
         KnnAlg &alg = *knn_lookup_indv[ii].get();      // lookup
         float *mass = V.data();                        // raw data
 
-    omp_set_num_threads(8);
+        omp_set_num_threads(num_threads);
 #pragma omp parallel for
         for (Index i = 0; i < n_tot; ++i) {
             const Index cell_j = indv_index_set.at(ii).at(i);
@@ -716,7 +720,7 @@ run_cfa_col(const OPTIONS &options)
                  << ii << ", #bootstrap=" << options.nboot << "]");
         }
 
-    omp_set_num_threads(8);
+        omp_set_num_threads(options.nthreads);
 #pragma omp parallel for
         for (Index bb = 0; bb < options.nboot; ++bb) {
 
@@ -940,6 +944,7 @@ parse_cfa_options(const int argc,     //
         "--raw_scale (-R)            : Data in a raw-scale (default: true)\n"
         "\n"
         "--nboot (-B)                : # of bootstrap (default: 100)\n"
+        "--nthreads (-T)             : # of threads (default: 8)\n"
         "\n"
         "[Output]\n"
         "\n"
@@ -980,7 +985,7 @@ parse_cfa_options(const int argc,     //
         "\n";
 
     const char *const short_opts =
-        "m:c:a:A:i:l:t:o:LRS:r:u:w:g:G:BDPC:k:B:b:n:hzv0:1:p:e:g:";
+        "m:c:a:A:i:l:t:o:LRS:r:u:w:g:G:BDPC:k:B:T:b:n:hzv0:1:p:e:g:";
 
     const option long_opts[] = {
         { "mtx", required_argument, nullptr, 'm' },        //
@@ -1017,6 +1022,7 @@ parse_cfa_options(const int argc,     //
         { "nboot", required_argument, nullptr, 'B' },      //
         { "num_boot", required_argument, nullptr, 'B' },   //
         { "bootstrap", required_argument, nullptr, 'B' },  //
+        { "nthreads", required_argument, nullptr, 'T' },   //
         { nullptr, no_argument, nullptr, 0 }
     };
 
@@ -1100,6 +1106,10 @@ parse_cfa_options(const int argc,     //
 
         case 'B':
             options.nboot = std::stoi(optarg);
+            break;
+
+        case 'T':
+            options.nthreads = std::stoi(optarg);
             break;
 
         case 'b':
