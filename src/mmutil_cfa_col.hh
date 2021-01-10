@@ -272,6 +272,7 @@ cfa_data_t::read_cf_block(const std::vector<Index> &cells_j,
     Mat y = read_y_block(cells_j);
     Mat y0(D, n_j);
 
+    omp_set_num_threads(8);
 #pragma omp parallel for
     for (Index jth = 0; jth < n_j; ++jth) {     // For each cell j
         const Index _cell_j = cells_j.at(jth);  //
@@ -354,6 +355,7 @@ cfa_data_t::build_dictionary_by_treatment()
         KnnAlg &alg = *knn_lookup_trt[tt].get();      // lookup
         float *mass = V.data();                       // raw data
 
+    omp_set_num_threads(8);
 #pragma omp parallel for
         for (Index i = 0; i < n_tot; ++i) {
             const Index cell_j = trt_index_set.at(tt).at(i);
@@ -385,6 +387,7 @@ cfa_data_t::build_dictionary_by_individual()
         KnnAlg &alg = *knn_lookup_indv[ii].get();      // lookup
         float *mass = V.data();                        // raw data
 
+    omp_set_num_threads(8);
 #pragma omp parallel for
         for (Index i = 0; i < n_tot; ++i) {
             const Index cell_j = indv_index_set.at(ii).at(i);
@@ -654,9 +657,9 @@ run_cfa_col(const OPTIONS &options)
         TLOG("Creating imputed data by kNN matching [ind="
              << ii << ", #cells=" << cells_i.size() << "]");
 
-        Mat y = data.read_y_block(cells_i);                // D x N
-        Mat z = data.read_z_block(cells_i);                // K x N
-        Mat y0 = data.read_cf_block(cells_i, false);       // D x N
+        Mat y = data.read_y_block(cells_i);          // D x N
+        Mat z = data.read_z_block(cells_i);          // K x N
+        Mat y0 = data.read_cf_block(cells_i, false); // D x N
         // Mat y0_intern = data.read_cf_block(cells_i, true); // D x N
 
         TLOG("Estimating the model parameters       [ind="
@@ -713,6 +716,7 @@ run_cfa_col(const OPTIONS &options)
                  << ii << ", #bootstrap=" << options.nboot << "]");
         }
 
+    omp_set_num_threads(8);
 #pragma omp parallel for
         for (Index bb = 0; bb < options.nboot; ++bb) {
 
@@ -782,42 +786,44 @@ run_cfa_col(const OPTIONS &options)
         // bootstrapping... on the internally-controlled //
         ///////////////////////////////////////////////////
 
-//         if (options.nboot > 0) {
-//             _resid_intern_mu_boot_i.reset();
-//             _ln_resid_intern_mu_boot_i.reset();
-//             TLOG("Bootstrapping the model (internal)    [ind="
-//                  << ii << ", #bootstrap=" << options.nboot << "]");
-//         }
-// #pragma omp parallel for
-//         for (Index bb = 0; bb < options.nboot; ++bb) {
-//             Mat Yboot(y.rows(), y.cols());
-//             Mat Zboot(z.rows(), z.cols());
-//             Mat Y0boot(y0_intern.rows(), y0_intern.cols());
-//             for (Index j = 0; j < cells_i.size(); ++j) {
-//                 const Index r = rboot(rng);
-//                 Yboot.col(j) = y.col(r);
-//                 Zboot.col(j) = z.col(r);
-//                 Y0boot.col(j) = y0_intern.col(r);
-//             }
-//             poisson_t pois(Yboot, Zboot, Y0boot, Zboot, a0, b0);
-//             pois.optimize();
-//             pois.residual_optimize();
-//             _resid_intern_mu_boot_i(pois.residual_mu_DK());
-//             _ln_resid_intern_mu_boot_i(pois.ln_residual_mu_DK());
-//         }
-//         if (options.nboot > 0) {
-//             Mat _mean = _resid_intern_mu_boot_i.mean();
-//             Mat _sd = _resid_intern_mu_boot_i.var().cwiseSqrt();
-//             Mat _ln_mean = _ln_resid_intern_mu_boot_i.mean();
-//             Mat _ln_sd = _ln_resid_intern_mu_boot_i.var().cwiseSqrt();
-//             for (Index k = 0; k < K; ++k) {
-//                 const Index s = storage_index(k);
-//                 boot_mean_resid_intern_mu.col(s) = _mean.col(k);
-//                 boot_mean_ln_resid_intern_mu.col(s) = _ln_mean.col(k);
-//                 boot_sd_resid_intern_mu.col(s) = _sd.col(k);
-//                 boot_sd_ln_resid_intern_mu.col(s) = _ln_sd.col(k);
-//             }
-//         }
+        //         if (options.nboot > 0) {
+        //             _resid_intern_mu_boot_i.reset();
+        //             _ln_resid_intern_mu_boot_i.reset();
+        //             TLOG("Bootstrapping the model (internal)    [ind="
+        //                  << ii << ", #bootstrap=" << options.nboot << "]");
+        //         }
+        // #pragma omp parallel for
+        //         for (Index bb = 0; bb < options.nboot; ++bb) {
+        //             Mat Yboot(y.rows(), y.cols());
+        //             Mat Zboot(z.rows(), z.cols());
+        //             Mat Y0boot(y0_intern.rows(), y0_intern.cols());
+        //             for (Index j = 0; j < cells_i.size(); ++j) {
+        //                 const Index r = rboot(rng);
+        //                 Yboot.col(j) = y.col(r);
+        //                 Zboot.col(j) = z.col(r);
+        //                 Y0boot.col(j) = y0_intern.col(r);
+        //             }
+        //             poisson_t pois(Yboot, Zboot, Y0boot, Zboot, a0, b0);
+        //             pois.optimize();
+        //             pois.residual_optimize();
+        //             _resid_intern_mu_boot_i(pois.residual_mu_DK());
+        //             _ln_resid_intern_mu_boot_i(pois.ln_residual_mu_DK());
+        //         }
+        //         if (options.nboot > 0) {
+        //             Mat _mean = _resid_intern_mu_boot_i.mean();
+        //             Mat _sd = _resid_intern_mu_boot_i.var().cwiseSqrt();
+        //             Mat _ln_mean = _ln_resid_intern_mu_boot_i.mean();
+        //             Mat _ln_sd =
+        //             _ln_resid_intern_mu_boot_i.var().cwiseSqrt(); for (Index
+        //             k = 0; k < K; ++k) {
+        //                 const Index s = storage_index(k);
+        //                 boot_mean_resid_intern_mu.col(s) = _mean.col(k);
+        //                 boot_mean_ln_resid_intern_mu.col(s) =
+        //                 _ln_mean.col(k); boot_sd_resid_intern_mu.col(s) =
+        //                 _sd.col(k); boot_sd_ln_resid_intern_mu.col(s) =
+        //                 _ln_sd.col(k);
+        //             }
+        //         }
 
         {
             ////////////////////////////
