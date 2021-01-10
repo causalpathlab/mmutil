@@ -613,21 +613,21 @@ run_cfa_col(const OPTIONS &options)
     Mat resid_mu_sd(D, K * Nind);
     Mat ln_resid_mu(D, K * Nind);
 
-    Mat cf_intern_mu(D, K * Nind);
-    Mat cf_intern_mu_sd(D, K * Nind);
-    Mat resid_intern_mu(D, K * Nind);
-    Mat resid_intern_mu_sd(D, K * Nind);
-    Mat ln_resid_intern_mu(D, K * Nind);
+    // Mat cf_intern_mu(D, K * Nind);
+    // Mat cf_intern_mu_sd(D, K * Nind);
+    // Mat resid_intern_mu(D, K * Nind);
+    // Mat resid_intern_mu_sd(D, K * Nind);
+    // Mat ln_resid_intern_mu(D, K * Nind);
 
     Mat boot_mean_resid_mu(D, K * Nind);
     Mat boot_sd_resid_mu(D, K * Nind);
     Mat boot_mean_ln_resid_mu(D, K * Nind);
     Mat boot_sd_ln_resid_mu(D, K * Nind);
 
-    Mat boot_mean_resid_intern_mu(D, K * Nind);
-    Mat boot_sd_resid_intern_mu(D, K * Nind);
-    Mat boot_mean_ln_resid_intern_mu(D, K * Nind);
-    Mat boot_sd_ln_resid_intern_mu(D, K * Nind);
+    // Mat boot_mean_resid_intern_mu(D, K * Nind);
+    // Mat boot_sd_resid_intern_mu(D, K * Nind);
+    // Mat boot_mean_ln_resid_intern_mu(D, K * Nind);
+    // Mat boot_sd_ln_resid_intern_mu(D, K * Nind);
 
     std::random_device rd;
     std::mt19937 rng(rd());
@@ -635,8 +635,8 @@ run_cfa_col(const OPTIONS &options)
     running_stat_t<Mat> _resid_mu_boot_i(D, K);
     running_stat_t<Mat> _ln_resid_mu_boot_i(D, K);
 
-    running_stat_t<Mat> _resid_intern_mu_boot_i(D, K);
-    running_stat_t<Mat> _ln_resid_intern_mu_boot_i(D, K);
+    // running_stat_t<Mat> _resid_intern_mu_boot_i(D, K);
+    // running_stat_t<Mat> _ln_resid_intern_mu_boot_i(D, K);
 
     for (Index ii = 0; ii < Nind; ++ii) {
 
@@ -657,7 +657,7 @@ run_cfa_col(const OPTIONS &options)
         Mat y = data.read_y_block(cells_i);                // D x N
         Mat z = data.read_z_block(cells_i);                // K x N
         Mat y0 = data.read_cf_block(cells_i, false);       // D x N
-        Mat y0_intern = data.read_cf_block(cells_i, true); // D x N
+        // Mat y0_intern = data.read_cf_block(cells_i, true); // D x N
 
         TLOG("Estimating the model parameters       [ind="
              << ii << ", #cells=" << cells_i.size() << "]");
@@ -752,88 +752,72 @@ run_cfa_col(const OPTIONS &options)
             }
         }
 
-        {
-            ////////////////////////////
-            // internal control cells //
-            ////////////////////////////
-            poisson_t pois(y, z, y0_intern, z, a0, b0);
-            pois.optimize();
-
-            const Mat cf_intern_mu_i = pois.mu_DK();
-            const Mat cf_intern_mu_sd_i = pois.mu_sd_DK();
-
-            for (Index k = 0; k < K; ++k) {
-                const Index s = storage_index(k);
-                cf_intern_mu.col(s) = cf_intern_mu_i.col(k);
-                cf_intern_mu_sd.col(s) = cf_intern_mu_sd_i.col(k);
-            }
-
-            pois.residual_optimize();
-
-            const Mat resid_intern_mu_i = pois.residual_mu_DK();
-            const Mat resid_intern_mu_sd_i = pois.residual_mu_sd_DK();
-
-            const Mat ln_resid_intern_mu_i = pois.ln_residual_mu_DK();
-            const Mat ln_resid_intern_mu_sd_i = pois.ln_residual_mu_sd_DK();
-
-            for (Index k = 0; k < K; ++k) {
-                const Index s = storage_index(k);
-                resid_intern_mu.col(s) = resid_intern_mu_i.col(k);
-                resid_intern_mu_sd.col(s) = resid_intern_mu_sd_i.col(k);
-                ln_resid_intern_mu.col(s) = ln_resid_intern_mu_i.col(k);
-            }
-        }
+        // {
+        //     ////////////////////////////
+        //     // internal control cells //
+        //     ////////////////////////////
+        //     poisson_t pois(y, z, y0_intern, z, a0, b0);
+        //     pois.optimize();
+        //     const Mat cf_intern_mu_i = pois.mu_DK();
+        //     const Mat cf_intern_mu_sd_i = pois.mu_sd_DK();
+        //     for (Index k = 0; k < K; ++k) {
+        //         const Index s = storage_index(k);
+        //         cf_intern_mu.col(s) = cf_intern_mu_i.col(k);
+        //         cf_intern_mu_sd.col(s) = cf_intern_mu_sd_i.col(k);
+        //     }
+        //     pois.residual_optimize();
+        //     const Mat resid_intern_mu_i = pois.residual_mu_DK();
+        //     const Mat resid_intern_mu_sd_i = pois.residual_mu_sd_DK();
+        //     const Mat ln_resid_intern_mu_i = pois.ln_residual_mu_DK();
+        //     const Mat ln_resid_intern_mu_sd_i = pois.ln_residual_mu_sd_DK();
+        //     for (Index k = 0; k < K; ++k) {
+        //         const Index s = storage_index(k);
+        //         resid_intern_mu.col(s) = resid_intern_mu_i.col(k);
+        //         resid_intern_mu_sd.col(s) = resid_intern_mu_sd_i.col(k);
+        //         ln_resid_intern_mu.col(s) = ln_resid_intern_mu_i.col(k);
+        //     }
+        // }
 
         ///////////////////////////////////////////////////
         // bootstrapping... on the internally-controlled //
         ///////////////////////////////////////////////////
 
-        if (options.nboot > 0) {
-            _resid_intern_mu_boot_i.reset();
-            _ln_resid_intern_mu_boot_i.reset();
-
-            TLOG("Bootstrapping the model (internal)    [ind="
-                 << ii << ", #bootstrap=" << options.nboot << "]");
-        }
-
-#pragma omp parallel for
-        for (Index bb = 0; bb < options.nboot; ++bb) {
-
-            Mat Yboot(y.rows(), y.cols());
-            Mat Zboot(z.rows(), z.cols());
-            Mat Y0boot(y0_intern.rows(), y0_intern.cols());
-
-            for (Index j = 0; j < cells_i.size(); ++j) {
-                const Index r = rboot(rng);
-                Yboot.col(j) = y.col(r);
-                Zboot.col(j) = z.col(r);
-                Y0boot.col(j) = y0_intern.col(r);
-            }
-
-            poisson_t pois(Yboot, Zboot, Y0boot, Zboot, a0, b0);
-            pois.optimize();
-            pois.residual_optimize();
-
-            _resid_intern_mu_boot_i(pois.residual_mu_DK());
-            _ln_resid_intern_mu_boot_i(pois.ln_residual_mu_DK());
-        }
-
-        if (options.nboot > 0) {
-
-            Mat _mean = _resid_intern_mu_boot_i.mean();
-            Mat _sd = _resid_intern_mu_boot_i.var().cwiseSqrt();
-
-            Mat _ln_mean = _ln_resid_intern_mu_boot_i.mean();
-            Mat _ln_sd = _ln_resid_intern_mu_boot_i.var().cwiseSqrt();
-
-            for (Index k = 0; k < K; ++k) {
-                const Index s = storage_index(k);
-                boot_mean_resid_intern_mu.col(s) = _mean.col(k);
-                boot_mean_ln_resid_intern_mu.col(s) = _ln_mean.col(k);
-                boot_sd_resid_intern_mu.col(s) = _sd.col(k);
-                boot_sd_ln_resid_intern_mu.col(s) = _ln_sd.col(k);
-            }
-        }
+//         if (options.nboot > 0) {
+//             _resid_intern_mu_boot_i.reset();
+//             _ln_resid_intern_mu_boot_i.reset();
+//             TLOG("Bootstrapping the model (internal)    [ind="
+//                  << ii << ", #bootstrap=" << options.nboot << "]");
+//         }
+// #pragma omp parallel for
+//         for (Index bb = 0; bb < options.nboot; ++bb) {
+//             Mat Yboot(y.rows(), y.cols());
+//             Mat Zboot(z.rows(), z.cols());
+//             Mat Y0boot(y0_intern.rows(), y0_intern.cols());
+//             for (Index j = 0; j < cells_i.size(); ++j) {
+//                 const Index r = rboot(rng);
+//                 Yboot.col(j) = y.col(r);
+//                 Zboot.col(j) = z.col(r);
+//                 Y0boot.col(j) = y0_intern.col(r);
+//             }
+//             poisson_t pois(Yboot, Zboot, Y0boot, Zboot, a0, b0);
+//             pois.optimize();
+//             pois.residual_optimize();
+//             _resid_intern_mu_boot_i(pois.residual_mu_DK());
+//             _ln_resid_intern_mu_boot_i(pois.ln_residual_mu_DK());
+//         }
+//         if (options.nboot > 0) {
+//             Mat _mean = _resid_intern_mu_boot_i.mean();
+//             Mat _sd = _resid_intern_mu_boot_i.var().cwiseSqrt();
+//             Mat _ln_mean = _ln_resid_intern_mu_boot_i.mean();
+//             Mat _ln_sd = _ln_resid_intern_mu_boot_i.var().cwiseSqrt();
+//             for (Index k = 0; k < K; ++k) {
+//                 const Index s = storage_index(k);
+//                 boot_mean_resid_intern_mu.col(s) = _mean.col(k);
+//                 boot_mean_ln_resid_intern_mu.col(s) = _ln_mean.col(k);
+//                 boot_sd_resid_intern_mu.col(s) = _sd.col(k);
+//                 boot_sd_ln_resid_intern_mu.col(s) = _ln_sd.col(k);
+//             }
+//         }
 
         {
             ////////////////////////////
@@ -872,18 +856,17 @@ run_cfa_col(const OPTIONS &options)
     write_data_file(options.out + ".resid_mu_sd.gz", resid_mu_sd);
     write_data_file(options.out + ".ln_resid_mu.gz", ln_resid_mu);
 
-    // internal control cells
+    ////////////////////////////
+    // internal control cells //
+    ////////////////////////////
 
-    write_data_file(options.out + ".cf_internal_mu.gz", cf_intern_mu);
-    write_data_file(options.out + ".cf_internal_mu_sd.gz", cf_intern_mu_sd);
-
-    write_data_file(options.out + ".resid_internal_mu.gz", resid_intern_mu);
-
-    write_data_file(options.out + ".resid_internal_mu_sd.gz",
-                    resid_intern_mu_sd);
-
-    write_data_file(options.out + ".ln_resid_internal_mu.gz",
-                    ln_resid_intern_mu);
+    // write_data_file(options.out + ".cf_internal_mu.gz", cf_intern_mu);
+    // write_data_file(options.out + ".cf_internal_mu_sd.gz", cf_intern_mu_sd);
+    // write_data_file(options.out + ".resid_internal_mu.gz", resid_intern_mu);
+    // write_data_file(options.out + ".resid_internal_mu_sd.gz",
+    //                 resid_intern_mu_sd);
+    // write_data_file(options.out + ".ln_resid_internal_mu.gz",
+    //                 ln_resid_intern_mu);
 
     // bootstrapped results
     if (options.nboot > 0) {
@@ -892,14 +875,14 @@ run_cfa_col(const OPTIONS &options)
         write_data_file(options.out + ".boot_sd_mu.gz", boot_sd_resid_mu);
         write_data_file(options.out + ".boot_sd_ln_mu.gz", boot_sd_ln_resid_mu);
 
-        write_data_file(options.out + ".boot_internal_mu.gz",
-                        boot_mean_resid_intern_mu);
-        write_data_file(options.out + ".boot_ln_internal_mu.gz",
-                        boot_mean_ln_resid_intern_mu);
-        write_data_file(options.out + ".boot_sd_internal_mu.gz",
-                        boot_sd_resid_intern_mu);
-        write_data_file(options.out + ".boot_sd_ln_internal_mu.gz",
-                        boot_sd_ln_resid_intern_mu);
+        // write_data_file(options.out + ".boot_internal_mu.gz",
+        //                 boot_mean_resid_intern_mu);
+        // write_data_file(options.out + ".boot_ln_internal_mu.gz",
+        //                 boot_mean_ln_resid_intern_mu);
+        // write_data_file(options.out + ".boot_sd_internal_mu.gz",
+        //                 boot_sd_resid_intern_mu);
+        // write_data_file(options.out + ".boot_sd_ln_internal_mu.gz",
+        //                 boot_sd_ln_resid_intern_mu);
     }
 
     return EXIT_SUCCESS;
@@ -954,11 +937,13 @@ parse_cfa_options(const int argc,     //
         "\n"
         "[Output]\n"
         "\n"
-        "${out}.obs_mu.gz            : (M x n) observed matrix\n"
+        "${out}.ln_obs_mu.gz         : (M x n) Log Mean of observed matrix\n"
+        "${out}.obs_mu.gz            : (M x n) Mean of observed matrix\n"
+        "${out}.obs_mu_sd.gz         : (M x n) SD of observed matrix\n"
         "${out}.cf_mu.gz             : (M x n) confounding factors matrix\n"
-        "${out}.cf_internal_mu.gz    : (M x n) confounding factors matrix (internally-controlled)\n"
-        "${out}.resid_mu.gz          : (M x n) after adjusting confounders in different batches\n"
-        "${out}.resid_internal_mu.gz : (M x n) after adjusting confounders (internally-controlled)\n"
+        "${out}.resid_mu.gz          : (M x n) Mean after adjusting confounders\n"
+        "${out}.resid_mu_sd.gz       : (M x n) SD after adjusting confounders\n"
+        "${out}.ln_resid_mu.gz       : (M x n) Log Mean after adjusting confounders\n"
         "${out}.mu_col.gz            : (n x 1) column names\n"
         "\n"
         "[Details for kNN graph]\n"
