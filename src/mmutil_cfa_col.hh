@@ -53,7 +53,7 @@ struct cfa_options_t {
         verbose = false;
         discretize = true;
 
-        nboot = 100;
+        nboot = 0;
         nthreads = 8;
     }
 
@@ -124,7 +124,7 @@ struct cfa_data_t {
         , knn(options.knn)
         , param_bilink(options.bilink)
         , param_nnlist(options.nlist)
-        , num_threads(options.nthreads)
+        , n_threads(options.nthreads)
     {
         CHECK(init());
         TLOG("Training SVD for spectral matching ...");
@@ -232,7 +232,7 @@ private:
     std::size_t knn;
     std::size_t param_bilink;
     std::size_t param_nnlist;
-    Index num_threads;
+    Index n_threads;
 
 private:
     std::vector<std::string> indv_membership; // [N] -> individual
@@ -276,8 +276,8 @@ cfa_data_t::read_cf_block(const std::vector<Index> &cells_j,
     Mat y = read_y_block(cells_j);
     Mat y0(D, n_j);
 
-    omp_set_num_threads(num_threads);
-#pragma omp parallel for
+    // if(n_j
+
     for (Index jth = 0; jth < n_j; ++jth) {     // For each cell j
         const Index _cell_j = cells_j.at(jth);  //
         const Index tj = trt_map.at(_cell_j);   // Trt group for this cell j
@@ -329,9 +329,13 @@ cfa_data_t::read_cf_block(const std::vector<Index> &cells_j,
         // Find optimal weights for counterfactual imputation //
         ////////////////////////////////////////////////////////
 
-        Mat yy = y.col(jth);
-        Mat xx = read_y_block(counterfactual_neigh).unaryExpr(glm_feature);
-        y0.col(jth) = predict_poisson_glm(xx, yy, glm_iter, glm_reg, true);
+        if (counterfactual_neigh.size() > 1) {
+            Mat yy = y.col(jth);
+            Mat xx = read_y_block(counterfactual_neigh).unaryExpr(glm_feature);
+            y0.col(jth) = predict_poisson_glm(xx, yy, glm_iter, glm_reg, true);
+        } else if (counterfactual_neigh.size() == 1) {
+            y0.col(jth) = read_y_block(counterfactual_neigh).col(0);
+        }
     }
     return y0;
 }
@@ -359,8 +363,7 @@ cfa_data_t::build_dictionary_by_treatment()
         KnnAlg &alg = *knn_lookup_trt[tt].get();      // lookup
         float *mass = V.data();                       // raw data
 
-        omp_set_num_threads(num_threads);
-#pragma omp parallel for
+#pragma omp parallel for num_threads(n_threads)
         for (Index i = 0; i < n_tot; ++i) {
             const Index cell_j = trt_index_set.at(tt).at(i);
             alg.addPoint((void *)(mass + rank * cell_j), i);
@@ -391,8 +394,7 @@ cfa_data_t::build_dictionary_by_individual()
         KnnAlg &alg = *knn_lookup_indv[ii].get();      // lookup
         float *mass = V.data();                        // raw data
 
-        omp_set_num_threads(num_threads);
-#pragma omp parallel for
+#pragma omp parallel for num_threads(n_threads)
         for (Index i = 0; i < n_tot; ++i) {
             const Index cell_j = indv_index_set.at(ii).at(i);
             alg.addPoint((void *)(mass + rank * cell_j), i);
@@ -410,7 +412,8 @@ cfa_data_t::run_svd(const cfa_options_t &options)
     // Learn latent embedding ... //
     ////////////////////////////////
     svd_out_t svd = take_svd_online_em(mtx_file, idx_file, ww, options);
-    TLOG("Done SVD");
+    TLOG("Done online SVD");
+
     Mat proj = svd.U * svd.D.cwiseInverse().asDiagonal(); // feature x rank
     TLOG("Found projection: " << proj.rows() << " x " << proj.cols());
 
@@ -419,6 +422,8 @@ cfa_data_t::run_svd(const cfa_options_t &options)
     V.resize(rank, Nsample);
 
     const Index block_size = options.block_size;
+
+    TLOG("Populating projected data...");
 
     for (Index lb = 0; lb < Nsample; lb += block_size) {
         const Index ub = std::min(Nsample, block_size + lb);
@@ -441,6 +446,9 @@ cfa_data_t::run_svd(const cfa_options_t &options)
             const Index r = sub_b[j];
             V.col(r) = vv.col(j);
         }
+
+        if (options.verbose)
+            TLOG("Projected on batch [" << lb << ", " << ub << ")");
     }
 
     return EXIT_SUCCESS;
@@ -645,6 +653,9 @@ run_cfa_col(const OPTIONS &options)
     // running_stat_t<Mat> _resid_intern_mu_boot_i(D, K);
     // running_stat_t<Mat> _ln_resid_intern_mu_boot_i(D, K);
 
+    Index nind_proc = 0;
+
+#pragma omp parallel for num_threads(options.nthreads)
     for (Index ii = 0; ii < Nind; ++ii) {
 
 #ifdef CPYTHON
@@ -847,6 +858,8 @@ run_cfa_col(const OPTIONS &options)
                 obs_mu_sd.col(s) = obs_mu_sd_i.col(k);
             }
         }
+
+        TLOG("Number of individuals processed: " << (++nind_proc) << std::endl);
     }
 
     TLOG("Writing down the results ...");
@@ -943,8 +956,9 @@ parse_cfa_options(const int argc,     //
         "--log_scale (-L)            : Data in a log-scale (default: false)\n"
         "--raw_scale (-R)            : Data in a raw-scale (default: true)\n"
         "\n"
-        "--nboot (-B)                : # of bootstrap (default: 100)\n"
+        "--nboot (-B)                : # of bootstrap (default: 0)\n"
         "--nthreads (-T)             : # of threads (default: 8)\n"
+        "--em_iter (-E)              : # of EM iterations for SVD (default: 10)\n"
         "\n"
         "[Output]\n"
         "\n"
@@ -985,7 +999,7 @@ parse_cfa_options(const int argc,     //
         "\n";
 
     const char *const short_opts =
-        "m:c:a:A:i:l:t:o:LRS:r:u:w:g:G:BDPC:k:B:T:b:n:hzv0:1:p:e:g:";
+        "m:c:a:A:i:l:t:o:LRS:r:u:w:g:G:BDPC:k:B:T:E:b:n:hzv0:1:p:e:g:";
 
     const option long_opts[] = {
         { "mtx", required_argument, nullptr, 'm' },        //
@@ -1023,6 +1037,8 @@ parse_cfa_options(const int argc,     //
         { "num_boot", required_argument, nullptr, 'B' },   //
         { "bootstrap", required_argument, nullptr, 'B' },  //
         { "nthreads", required_argument, nullptr, 'T' },   //
+        { "em_iter", required_argument, nullptr, 'E' },    //
+        { "emiter", required_argument, nullptr, 'E' },     //
         { nullptr, no_argument, nullptr, 0 }
     };
 
@@ -1110,6 +1126,10 @@ parse_cfa_options(const int argc,     //
 
         case 'T':
             options.nthreads = std::stoi(optarg);
+            break;
+
+        case 'E':
+            options.em_iter = std::stoi(optarg);
             break;
 
         case 'b':

@@ -364,7 +364,8 @@ public:
         }
         Scalar operator()(const Scalar &a, const Scalar &b) const
         {
-            return std::sqrt(a + a0) / (b + b0);
+            return std::max(std::sqrt(a + a0) / (b + b0),
+                            static_cast<Scalar>(0.));
         }
         const Scalar a0, b0;
     };
@@ -392,7 +393,7 @@ public:
         }
         Scalar operator()(const Scalar &a) const
         {
-            return one / std::sqrt(a + a0);
+            return std::max(one / std::sqrt(a + a0), static_cast<Scalar>(0.));
         }
         const Scalar a0;
         static constexpr Scalar one = 1.0;
