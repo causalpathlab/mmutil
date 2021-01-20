@@ -276,8 +276,6 @@ cfa_data_t::read_cf_block(const std::vector<Index> &cells_j,
     Mat y = read_y_block(cells_j);
     Mat y0(D, n_j);
 
-    // if(n_j
-
     for (Index jth = 0; jth < n_j; ++jth) {     // For each cell j
         const Index _cell_j = cells_j.at(jth);  //
         const Index tj = trt_map.at(_cell_j);   // Trt group for this cell j
@@ -614,8 +612,8 @@ run_cfa_col(const OPTIONS &options)
     ASSERT_RET(Nind > 1, "Must have at least two individuals");
     ASSERT_RET(Ntrt > 1, "Must have at least two treatment conditions");
 
-    std::vector<std::string> mu_col_names;
-    mu_col_names.reserve(K * Nind);
+    std::vector<std::string> mu_col_names(K * Nind);
+    std::fill(mu_col_names.begin(), mu_col_names.end(), "");
 
     Mat obs_mu(D, K * Nind);
     Mat obs_mu_sd(D, K * Nind);
@@ -627,6 +625,19 @@ run_cfa_col(const OPTIONS &options)
     Mat resid_mu(D, K * Nind);
     Mat resid_mu_sd(D, K * Nind);
     Mat ln_resid_mu(D, K * Nind);
+    Mat ln_resid_mu_sd(D, K * Nind);
+
+    obs_mu.setZero();
+    obs_mu.setZero();
+    ln_obs_mu.setZero();
+
+    cf_mu.setZero();
+    cf_mu_sd.setZero();
+
+    resid_mu.setZero();
+    resid_mu_sd.setZero();
+    ln_resid_mu.setZero();
+    ln_resid_mu_sd.setZero();
 
     // Mat cf_intern_mu(D, K * Nind);
     // Mat cf_intern_mu_sd(D, K * Nind);
@@ -634,10 +645,17 @@ run_cfa_col(const OPTIONS &options)
     // Mat resid_intern_mu_sd(D, K * Nind);
     // Mat ln_resid_intern_mu(D, K * Nind);
 
-    Mat boot_mean_resid_mu(D, K * Nind);
-    Mat boot_sd_resid_mu(D, K * Nind);
-    Mat boot_mean_ln_resid_mu(D, K * Nind);
-    Mat boot_sd_ln_resid_mu(D, K * Nind);
+    Mat boot_mean_resid_mu;
+    Mat boot_sd_resid_mu;
+    Mat boot_mean_ln_resid_mu;
+    Mat boot_sd_ln_resid_mu;
+
+    if (options.nboot > 0) {
+        boot_mean_resid_mu.resize(D, K * Nind);
+        boot_sd_resid_mu.resize(D, K * Nind);
+        boot_mean_ln_resid_mu.resize(D, K * Nind);
+        boot_sd_ln_resid_mu.resize(D, K * Nind);
+    }
 
     // Mat boot_mean_resid_intern_mu(D, K * Nind);
     // Mat boot_sd_resid_intern_mu(D, K * Nind);
@@ -698,7 +716,7 @@ run_cfa_col(const OPTIONS &options)
                 const std::string c =
                     data.take_ind_name(ii) + "_" + data.take_annot_name(k);
 
-                mu_col_names.emplace_back(c);
+                mu_col_names[s] = c;
             }
 
             pois.residual_optimize();
@@ -714,6 +732,7 @@ run_cfa_col(const OPTIONS &options)
                 resid_mu.col(s) = resid_mu_i.col(k);
                 resid_mu_sd.col(s) = resid_mu_sd_i.col(k);
                 ln_resid_mu.col(s) = ln_resid_mu_i.col(k);
+                ln_resid_mu_sd.col(s) = ln_resid_mu_sd_i.col(k);
             }
         }
 
@@ -731,8 +750,6 @@ run_cfa_col(const OPTIONS &options)
                  << ii << ", #bootstrap=" << options.nboot << "]");
         }
 
-        omp_set_num_threads(options.nthreads);
-#pragma omp parallel for
         for (Index bb = 0; bb < options.nboot; ++bb) {
 
             Mat Yboot(y.rows(), y.cols());
@@ -878,6 +895,7 @@ run_cfa_col(const OPTIONS &options)
     write_data_file(options.out + ".resid_mu.gz", resid_mu);
     write_data_file(options.out + ".resid_mu_sd.gz", resid_mu_sd);
     write_data_file(options.out + ".ln_resid_mu.gz", ln_resid_mu);
+    write_data_file(options.out + ".ln_resid_mu_sd.gz", ln_resid_mu_sd);
 
     ////////////////////////////
     // internal control cells //
