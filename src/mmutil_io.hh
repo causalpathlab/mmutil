@@ -263,7 +263,7 @@ find_consecutive_blocks(const std::vector<Index> &index_tab,
             ub_mem = index_tab[ub];
         }
 
-        ret.emplace_back(memory_block_t{ lb, lb_mem, ub, ub_mem });
+        ret.emplace_back(memory_block_t { lb, lb_mem, ub, ub_mem });
     }
 
     return ret;
@@ -551,18 +551,23 @@ read_eigen_sparse_subset_col(std::string mtx_file,
     const auto blocks = find_consecutive_blocks(index_tab, subcol);
 
     _reader_t::TripletVec Tvec; // keep accumulating this
+    Tvec.clear();
     Index max_row = info.max_row;
     for (auto block : blocks) {
         _reader_t::index_map_t loc_map;
+
         for (Index j = block.lb; j < block.ub; ++j) {
-            loc_map[j] = subcol_order[j];
+            if (subcol_order.count(j) > 0)
+                loc_map[j] = subcol_order[j];
         }
+
         _reader_t reader(Tvec, loc_map);
 
         CHECK(visit_bgzf_block(mtx_file, block.lb_mem, block.ub_mem, reader));
     }
 
     SpMat X(max_row, max_col);
+    X.setZero();
     X.reserve(Tvec.size());
     X.setFromTriplets(Tvec.begin(), Tvec.end());
 

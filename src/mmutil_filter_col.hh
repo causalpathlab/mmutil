@@ -61,7 +61,7 @@ filter_col_by_nnz(const Index column_threshold,  //
 
     TLOG("Created valid column names");
 
-    const Str output_column_file = output + ".columns.gz";
+    const Str output_column_file = output + ".cols.gz";
     const Str output_full_score_file = output + ".full_scores.gz";
     const Str output_score_file = output + ".scores.gz";
     const Str output_mtx_file = output + ".mtx.gz";

@@ -54,7 +54,7 @@ mmutil_filter_col_SOURCES = mmutil_filter_col.cc mmutil_filter_col.hh $(common)
 
 mmutil_col_score_SOURCES = mmutil_col_score.cc mmutil_score.hh mmutil_filter_col.hh $(common)
 
-mmutil_select_row_SOURCES = mmutil_select_row.cc mmutil_select.hh $(common)
+mmutil_select_row_SOURCES = mmutil_select_row.cc mmutil_select.hh mmutil_filter_col.hh $(common)
 
 mmutil_select_col_SOURCES = mmutil_select_col.cc mmutil_select.hh $(common)
 

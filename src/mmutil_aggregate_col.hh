@@ -207,6 +207,10 @@ aggregate_col(const OPTIONS &options)
     auto lab_position = make_position_dict<std::string, Index>(lab_name);
     const Index K = lab_name.size();
 
+    for (auto j : lab_name) {
+        TLOG(j << " " << lab_position[j]);
+    }
+
     ///////////////////////
     // latent annotation //
     ///////////////////////
@@ -271,6 +275,8 @@ aggregate_col(const OPTIONS &options)
 
     ASSERT(Z.rows() == indv.size(), "rows(Z) != rows(indv)");
 
+    TLOG("" << std::endl << Z.transpose() * Mat::Ones(Nsample, 1));
+
     //////////////////////////////
     // Indexing all the columns //
     //////////////////////////////
@@ -290,14 +296,6 @@ aggregate_col(const OPTIONS &options)
 
     ASSERT(Nsample == info.max_col, "Should have matched .mtx.gz");
 
-    /** Take a block of Y matrix
-     * @param subcol
-     */
-    auto read_y_block = [&](std::vector<Index> &subcol) -> Mat {
-        SpMat x = read_eigen_sparse_subset_col(mtx_file, mtx_idx_tab, subcol);
-        return Mat(x);
-    };
-
     ///////////////////////////
     // For each individual i //
     ///////////////////////////
@@ -312,7 +310,8 @@ aggregate_col(const OPTIONS &options)
 
     using namespace mmutil::index;
 
-    std::vector<std::string> out_col;
+    std::vector<std::string> out_col(Nind * K);
+    std::fill(out_col.begin(), out_col.end(), "");
 
     // auto _sqrt = [](const Scalar &x) -> Scalar {
     //     return (x > 0.) ? std::sqrt(x) : 0.;
@@ -340,11 +339,13 @@ aggregate_col(const OPTIONS &options)
 
         // Y: features x columns
         const std::vector<Index> &cols_i = indv_index_set.at(i);
+
         Mat yy = read_eigen_sparse_subset_col(mtx_file, mtx_idx_tab, cols_i);
 
         if (options.normalize) {
             normalize_columns(yy);
             yy *= options.col_norm;
+            TLOG("Normalized Y")
         }
 
         const Index D = yy.rows();
@@ -367,8 +368,10 @@ aggregate_col(const OPTIONS &options)
 
         const Index y_nnz = yy.unaryExpr(is_nz).sum();
 
-        TLOG(N << " columns [" << yy.minCoeff() << ", " << yy.maxCoeff()
-               << "] NNZ= " << y_nnz);
+        Index r, c;
+        TLOG(N << " columns [" << yy.minCoeff() << ", " << yy.maxCoeff(&r, &c)
+               << "], argmax (" << r << ", " << c << ") NNZ= " << y_nnz
+               << ", Tot= " << yy.sum());
 
         Mat zz_prob = row_sub(Z, indv_index_set.at(i)); //
         zz_prob.transposeInPlace();                     // Z: K x N
@@ -380,7 +383,7 @@ aggregate_col(const OPTIONS &options)
             for (Index j = 0; j < zz_prob.cols(); ++j) {
                 Index k;
                 zz_prob.col(j).maxCoeff(&k);
-                zz(k, j) += 1.0;
+                zz(k, j) = 1.0;
             }
             TLOG("Using the discretized Z: " << zz.sum());
         } else {
@@ -398,7 +401,7 @@ aggregate_col(const OPTIONS &options)
         Vec _denom = zz * Mat::Ones(zz.cols(), 1); // K x 1
 
         for (Index k = 0; k < K; ++k) {
-            out_col.push_back(indv_name + "_" + lab_name.at(k));
+            out_col[s_obs] = indv_name + "_" + lab_name.at(k);
 
             const Scalar _denom_k = _denom(k);
 
