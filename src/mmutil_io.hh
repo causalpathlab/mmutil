@@ -557,6 +557,9 @@ read_eigen_sparse_subset_col(std::string mtx_file,
         _reader_t::index_map_t loc_map;
 
         for (Index j = block.lb; j < block.ub; ++j) {
+            //////////////////////////////////////////////////////////
+            // Caution: the blocks with discontinuous subcol vector //
+            //////////////////////////////////////////////////////////
             if (subcol_order.count(j) > 0)
                 loc_map[j] = subcol_order[j];
         }
