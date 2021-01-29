@@ -650,12 +650,14 @@ run_cfa_col(const OPTIONS &options)
     Mat resid_intern_mu(D, K * Nind);
     Mat resid_intern_mu_sd(D, K * Nind);
     Mat ln_resid_intern_mu(D, K * Nind);
+    Mat ln_resid_intern_mu_sd(D, K * Nind);
 
     cf_intern_mu.setZero();
     cf_intern_mu_sd.setZero();
     resid_intern_mu.setZero();
     resid_intern_mu_sd.setZero();
     ln_resid_intern_mu.setZero();
+    ln_resid_intern_mu_sd.setZero();
 
     Mat boot_mean_resid_mu;
     Mat boot_sd_resid_mu;
@@ -820,11 +822,13 @@ run_cfa_col(const OPTIONS &options)
             const Mat resid_intern_mu_sd_i = pois.residual_mu_sd_DK();
             const Mat ln_resid_intern_mu_i = pois.ln_residual_mu_DK();
             const Mat ln_resid_intern_mu_sd_i = pois.ln_residual_mu_sd_DK();
+
             for (Index k = 0; k < K; ++k) {
                 const Index s = storage_index(k);
                 resid_intern_mu.col(s) = resid_intern_mu_i.col(k);
                 resid_intern_mu_sd.col(s) = resid_intern_mu_sd_i.col(k);
                 ln_resid_intern_mu.col(s) = ln_resid_intern_mu_i.col(k);
+                ln_resid_intern_mu_sd.col(s) = ln_resid_intern_mu_sd_i.col(k);
             }
 
             ///////////////////////////////////////////////////
@@ -932,8 +936,12 @@ run_cfa_col(const OPTIONS &options)
         write_data_file(options.out + ".resid_internal_mu.gz", resid_intern_mu);
         write_data_file(options.out + ".resid_internal_mu_sd.gz",
                         resid_intern_mu_sd);
+
         write_data_file(options.out + ".ln_resid_internal_mu.gz",
                         ln_resid_intern_mu);
+
+        write_data_file(options.out + ".ln_resid_internal_mu_sd.gz",
+                        ln_resid_intern_mu_sd);
 
         // bootstrapped results
         if (options.nboot > 0) {
@@ -982,6 +990,8 @@ parse_cfa_options(const int argc,     //
         "--glm_reg                   : Regularization parameter for GLM fitting (default: 1e-2)\n"
         "--glm_iter                  : Maximum number of iterations for GLM fitting (default: 100)\n"
         "\n"
+        "--do_internal               : Calibration of the baseline by internal matching (default: false)\n"
+        "\n"
         "[Matching options]\n"
         "\n"
         "--knn (-k)                  : k nearest neighbours (default: 10)\n"
@@ -1004,10 +1014,11 @@ parse_cfa_options(const int argc,     //
         "${out}.ln_obs_mu.gz         : (M x n) Log Mean of observed matrix\n"
         "${out}.obs_mu.gz            : (M x n) Mean of observed matrix\n"
         "${out}.obs_mu_sd.gz         : (M x n) SD of observed matrix\n"
-        "${out}.cf_mu.gz             : (M x n) confounding factors matrix\n"
+        "${out}.cf_mu.gz             : (M x n) Confounding factors matrix\n"
         "${out}.resid_mu.gz          : (M x n) Mean after adjusting confounders\n"
         "${out}.resid_mu_sd.gz       : (M x n) SD after adjusting confounders\n"
-        "${out}.ln_resid_mu.gz       : (M x n) Log Mean after adjusting confounders\n"
+        "${out}.ln_resid_mu.gz       : (M x n) Log mean after adjusting confounders\n"
+        "${out}.ln_resid_mu_sd.gz    : (M x n) SD of the log mean after adjusting confounders\n"
         "${out}.mu_col.gz            : (n x 1) column names\n"
         "\n"
         "[Details for kNN graph]\n"
