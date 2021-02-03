@@ -49,6 +49,10 @@ struct cfa_options_t {
         glm_pseudo = 1.0;
         glm_iter = 100;
         glm_reg = 1e-4;
+        glm_sd = 1e-2;
+        glm_std = true;
+
+        impute_knn = false;
 
         verbose = false;
         discretize = true;
@@ -96,6 +100,8 @@ struct cfa_options_t {
     Scalar glm_pseudo;
     Index glm_iter;
     Index glm_reg;
+    Scalar glm_sd;
+    bool glm_std;
 
     bool verbose;
 
@@ -105,6 +111,7 @@ struct cfa_options_t {
     Index nthreads;
 
     bool do_internal;
+    bool impute_knn;
 };
 
 struct cfa_data_t {
@@ -124,8 +131,11 @@ struct cfa_data_t {
         , output(options.out)
         , glm_feature(options.glm_pseudo)
         , glm_reg(options.glm_reg)
+        , glm_sd(options.glm_sd)
+        , glm_std(options.glm_std)
         , glm_iter(options.glm_iter)
         , knn(options.knn)
+        , impute_knn(options.impute_knn)
         , param_bilink(options.bilink)
         , param_nnlist(options.nlist)
         , n_threads(options.nthreads)
@@ -230,10 +240,13 @@ public: // const names
 
     const glm_feature_op_t glm_feature;
     const Index glm_reg;
+    const Scalar glm_sd;
+    const bool glm_std;
     const Index glm_iter;
 
 private:
     std::size_t knn;
+    bool impute_knn;
     std::size_t param_bilink;
     std::size_t param_nnlist;
     Index n_threads;
@@ -295,6 +308,8 @@ cfa_data_t::read_cf_block(const std::vector<Index> &cells_j,
         }
 #endif
 
+        std::vector<Scalar> dist_neigh, weights_neigh;
+
         ///////////////////////////////////////////////
         // Search neighbours in the other conditions //
         ///////////////////////////////////////////////
@@ -314,6 +329,8 @@ cfa_data_t::read_cf_block(const std::vector<Index> &cells_j,
             const std::size_t n_i = cells_i.size();
             const std::size_t nquery = std::min(knn, n_i);
 
+            Index deg_j = 0; // # of neighbours
+
             auto pq = alg_ti.searchKnn((void *)(mass + rank * _cell_j), nquery);
 
             while (!pq.empty()) {
@@ -321,8 +338,10 @@ cfa_data_t::read_cf_block(const std::vector<Index> &cells_j,
                 std::size_t k;                       // local index
                 std::tie(d, k) = pq.top();           //
                 const Index _cell_i = cells_i.at(k); // global index
-                if (_cell_j != _cell_i)
+                if (_cell_j != _cell_i) {
                     counterfactual_neigh.emplace_back(_cell_i);
+                    dist_neigh.emplace_back(d);
+                }
                 pq.pop();
             }
         }
@@ -333,8 +352,31 @@ cfa_data_t::read_cf_block(const std::vector<Index> &cells_j,
 
         if (counterfactual_neigh.size() > 1) {
             Mat yy = y.col(jth);
-            Mat xx = read_y_block(counterfactual_neigh).unaryExpr(glm_feature);
-            y0.col(jth) = predict_poisson_glm(xx, yy, glm_iter, glm_reg, true);
+
+            if (impute_knn) {
+                Index deg_ = counterfactual_neigh.size();
+                weights_neigh.resize(deg_);
+                normalize_weights(deg_, dist_neigh, weights_neigh);
+                Vec w0_ = eigen_vector(weights_neigh);
+                Mat y0_ = read_y_block(counterfactual_neigh);
+                const Scalar denom = w0_.sum(); // must be > 0
+
+                y0.col(jth) = y0_ * w0_ / denom;
+
+            } else {
+
+                Mat xx =
+                    read_y_block(counterfactual_neigh).unaryExpr(glm_feature);
+                const bool glm_intercept = true;
+                y0.col(jth) = predict_poisson_glm(xx,
+                                                  yy,
+                                                  glm_iter,
+                                                  glm_reg,
+                                                  glm_intercept,
+                                                  glm_std,
+                                                  glm_sd);
+            }
+
         } else if (counterfactual_neigh.size() == 1) {
             y0.col(jth) = read_y_block(counterfactual_neigh).col(0);
         }
@@ -986,6 +1028,7 @@ parse_cfa_options(const int argc,     //
         "\n"
         "--gamma_a0                  : prior for gamma distribution(a0,b0) (default: 1)\n"
         "--gamma_b0                  : prior for gamma distribution(a0,b0) (default: 1)\n"
+        "--impute_knn                : impute by kNN, useful for large values (default: false)\n"
         "--glm_pseudo                : pseudocount for GLM features (default: 1)\n"
         "--glm_reg                   : Regularization parameter for GLM fitting (default: 1e-2)\n"
         "--glm_iter                  : Maximum number of iterations for GLM fitting (default: 100)\n"
@@ -1049,7 +1092,7 @@ parse_cfa_options(const int argc,     //
         "\n";
 
     const char *const short_opts =
-        "m:c:a:A:i:l:t:o:LRS:r:u:w:g:G:BDPC:k:B:T:E:b:n:hzvI0:1:p:e:g:";
+        "m:c:a:A:i:l:t:o:LRS:r:u:w:g:G:BDPC:k:B:T:E:b:n:hzvIN0:1:p:e:g:";
 
     const option long_opts[] = {
         { "mtx", required_argument, nullptr, 'm' },        //
@@ -1084,6 +1127,7 @@ parse_cfa_options(const int argc,     //
         { "glm_reg", required_argument, nullptr, 'g' },    //
         { "verbose", no_argument, nullptr, 'v' },          //
         { "do_internal", no_argument, nullptr, 'I' },      //
+        { "impute_knn", no_argument, nullptr, 'N' },       //
         { "nboot", required_argument, nullptr, 'B' },      //
         { "num_boot", required_argument, nullptr, 'B' },   //
         { "bootstrap", required_argument, nullptr, 'B' },  //
@@ -1217,6 +1261,10 @@ parse_cfa_options(const int argc,     //
 
         case 'I':
             options.do_internal = true;
+            break;
+
+        case 'N':
+            options.impute_knn = true;
             break;
 
         case 'h': // -h or --help

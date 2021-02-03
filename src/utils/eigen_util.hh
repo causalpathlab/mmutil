@@ -430,7 +430,7 @@ standardize(const Eigen::MatrixBase<Derived> &Xraw,
     // standardize
     for (Index j = 0; j < X.cols(); ++j) {
         const Scalar mu = x_mean(j);
-        const Scalar sd = x_sd(j) + EPS;
+        const Scalar sd = std::max(x_sd(j), EPS);
         auto std_op = [&mu, &sd](const Scalar &x) -> Scalar {
             const Scalar ret = static_cast<Scalar>((x - mu) / sd);
             return ret;
@@ -514,8 +514,8 @@ struct running_stat_t {
     using Index = typename T::Index;
 
     explicit running_stat_t(const Index _d1, const Index _d2)
-        : d1{ _d1 }
-        , d2{ _d2 }
+        : d1 { _d1 }
+        , d2 { _d2 }
     {
         Cum.resize(d1, d2);
         SqCum.resize(d1, d2);

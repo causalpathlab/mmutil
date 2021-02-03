@@ -46,6 +46,7 @@ fit_glm(const Mat xx, const Mat y, const Index max_iter, const Scalar reg)
 
     Mat _beta = Mat::Zero(p, 1);
     Mat _eta = xx * _beta;
+
     Mat _y(n, 1);
     Mat _w(n, 1);
     Mat _r(n, 1);
@@ -99,10 +100,13 @@ predict_poisson_glm(const Mat xx,
                     const Mat y,
                     const Index max_iter,
                     const Scalar reg,
-                    const bool intercept = true)
+                    const bool intercept = true,
+                    const bool do_std = true,
+                    const Scalar SD_MIN = 1e-2)
 {
     poisson_invlink_t invlink;
-    Mat xx_std = standardize(xx);
+
+    Mat xx_std = do_std ? standardize(xx, SD_MIN) : xx;
 
     if (intercept) {
         const Mat xx_1 = hcat(xx_std, Mat::Ones(xx.rows(), 1));
