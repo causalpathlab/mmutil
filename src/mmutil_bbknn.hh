@@ -91,29 +91,43 @@ parse_bbknn_options(const int argc, const char *argv[], OPTIONS &options)
 
     const char *_usage =
         "\n"
+        "Batch-balancing k-nearest neighbour graph. For more details see:\n"
+        "https://academic.oup.com/bioinformatics/article/36/3/964/5545955\n"
+        "\n"
+        "step 1. Build a kNN graph, neighbours distributed across batches\n"
+        "step 2. Normalize edge weights to avoid unwanted collapsing\n"
+        "step 3. Adjust SVD factors and original data accordingly\n"
+        "\n"
         "[Arguments]\n"
-        "--mtx (-m)        : data MTX file (M x N)\n"
-        "--data (-m)       : data MTX file (M x N)\n"
-        "--col (-c)        : data col file (samples)\n"
-        "--batch (-t)      : N x 1 batch assignment file (e.g., individuals) \n"
-        "--out (-o)        : Output file header\n"
+        "--mtx (-m)              : data MTX file (M x N)\n"
+        "--data (-m)             : data MTX file (M x N)\n"
+        "--col (-c)              : data col file (samples)\n"
+        "--batch (-t)            : N x 1 batch assignment file (e.g., indv.) \n"
+        "--out (-o)              : Output file header\n"
         "\n"
         "[Matching options]\n"
         "\n"
-        "--knn (-k)        : k nearest neighbours (default: 1)\n"
-        "--bilink (-b)     : # of bidirectional links (default: 5)\n"
-        "--nlist (-n)      : # nearest neighbor lists (default: 5)\n"
+        "--knn (-k)              : k nearest neighbours (default: 1)\n"
+        "--bilink (-b)           : # of bidirectional links (default: 5)\n"
+        "--nlist (-n)            : # nearest neighbor lists (default: 5)\n"
         "\n"
-        "--rank (-r)       : # of SVD factors (default: rank = 50)\n"
-        "--lu_iter (-u)    : # of LU iterations (default: iter = 5)\n"
-        "--row_weight (-w) : Feature re-weighting (default: none)\n"
-        "--col_norm (-C)   : Column normalization (default: 10000)\n"
+        "--rank (-r)             : # of SVD factors (default: rank = 50)\n"
+        "--lu_iter (-u)          : # of LU iterations (default: iter = 5)\n"
+        "--row_weight (-w)       : Feature re-weighting (default: none)\n"
+        "--col_norm (-C)         : Column normalization (default: 10000)\n"
         "\n"
-        "--log_scale (-L)  : Data in a log-scale (default: false)\n"
-        "--raw_scale (-R)  : Data in a raw-scale (default: true)\n"
+        "--log_scale (-L)        : Data in a log-scale (default: false)\n"
+        "--raw_scale (-R)        : Data in a raw-scale (default: true)\n"
         "\n"
         "[Output]\n"
-        "${out}.mtx.gz    : (N x N) adjacency matrix\n"
+        "${out}.mtx.gz           : (N x N) adjacency matrix\n"
+        "${out}.cols.gz          : (N x 1) columns\n"
+        "${out}.factors.gz       : (N x rank) factor matrix (adjusted by kNN)\n"
+        "${out}.delta_factor.gz  : (rank x batch) adjustment matrix\n"
+        "${out}.delta_feature.gz : (D x batch) adjustment matrix\n"
+        "${out}.svd_U.gz         : (N x rank) features x factor matrix (raw SVD)\n"
+        "${out}.svd_D.gz         : (rank x 1) factor loading vector (raw SVD)\n"
+        "${out}.svd_Vt.gz        : (N x rank) sample x factor matrix (raw SVD)\n"
         "\n"
         "[Details for kNN graph]\n"
         "\n"
@@ -389,7 +403,6 @@ build_bbknn(const OPTIONS &options)
                                                options.log_scale);
 
             Mat vv = proj.transpose() * xx; // rank x block_size
-            normalize_columns(vv);
 
             for (Index j = 0; j < vv.cols(); ++j) {
                 ret.col(r) = vv.col(j);
@@ -430,6 +443,7 @@ build_bbknn(const OPTIONS &options)
     std::vector<std::shared_ptr<hnswlib::InnerProductSpace>> vs_vec;
     std::vector<std::shared_ptr<KnnAlg>> knn_lookup_vec;
     Mat V(rank, Nsample);
+    Mat Vorg(rank, Nsample);
 
     for (Index bb = 0; bb < Nbatch; ++bb) {
         const Index n_tot = batch_index_set[bb].size();
@@ -449,11 +463,20 @@ build_bbknn(const OPTIONS &options)
         for (Index bb = 0; bb < Nbatch; ++bb) {
             const Index n_tot = batch_index_set[bb].size();
             KnnAlg &alg = *knn_lookup_vec[bb].get();
-            Mat dat = build_spectral_data(bb);
+
+            const auto &bset = batch_index_set.at(bb);
+
+            Mat dat = build_spectral_data(bb);  // Take the
+            for (Index i = 0; i < n_tot; ++i) { // original
+                const Index j = bset.at(i);     //
+                Vorg.col(j) = dat.col(i);       // SVD
+            }                                   // results
+
+            normalize_columns(dat);   // cosine distance
             float *mass = dat.data(); // adding data points
             for (Index i = 0; i < n_tot; ++i) {
                 alg.addPoint((void *)(mass + rank * i), i);
-                const Index j = batch_index_set.at(bb).at(i);
+                const Index j = bset.at(i);
                 V.col(j) = dat.col(i);
                 prog.update();
                 prog(std::cerr);
@@ -461,61 +484,132 @@ build_bbknn(const OPTIONS &options)
         }
     }
 
-    ///////////////////////
-    // For each column j //
-    ///////////////////////
+    ///////////////////////////////////////////////////
+    // step 1: build mutual kNN graph across batches //
+    ///////////////////////////////////////////////////
+    std::vector<std::tuple<Index, Index, Scalar>> backbone;
 
-    std::vector<std::tuple<Index, Index, Scalar>> knn_index;
+    {
+        float *mass = V.data();
+        progress_bar_t<Index> prog(Nsample, 1e2);
 
-    float *mass = V.data();
-    std::vector<Scalar> dist_j(options.knn);
-    std::vector<Scalar> weights_j(options.knn);
-    std::vector<Index> neigh_j(options.knn);
+        for (Index j = 0; j < Nsample; ++j) {
 
-    progress_bar_t<Index> prog(Nsample, 1e2);
+            for (Index bb = 0; bb < Nbatch; ++bb) {
+                KnnAlg &alg = *knn_lookup_vec[bb].get();
+                const Index nn_b = batch_index_set.at(bb).size();
+                std::size_t nquery = (std::min(options.knn, nn_b) / Nbatch);
+                if (nquery < 1)
+                    nquery = 1;
 
-    for (Index j = 0; j < Nsample; ++j) {
-
-        Index deg_j = 0;
-
-        for (Index bb = 0; bb < Nbatch; ++bb) {
-            KnnAlg &alg = *knn_lookup_vec[bb].get();
-            Index nn_b = batch_index_set.at(bb).size();
-            std::size_t nquery = (std::min(options.knn, nn_b) / Nbatch);
-            if (nquery < 1)
-                nquery = 1;
-
-            auto pq = alg.searchKnn((void *)(mass + rank * j), nquery);
-            while (!pq.empty()) {
-                float d = 0;
-                std::size_t k;
-                std::tie(d, k) = pq.top();
-                Index i = batch_index_set.at(bb).at(k);
-                if (i != j) {
-                    if (deg_j < dist_j.size()) {
-                        dist_j[deg_j] = d;
-                        neigh_j[deg_j] = i;
-                        ++deg_j;
+                auto pq = alg.searchKnn((void *)(mass + rank * j), nquery);
+                while (!pq.empty()) {
+                    float d = 0;
+                    std::size_t k;
+                    std::tie(d, k) = pq.top();
+                    Index i = batch_index_set.at(bb).at(k);
+                    if (i != j) {
+                        backbone.emplace_back(j, i, 1.0);
                     }
+                    pq.pop();
                 }
-                pq.pop();
+            }
+            prog.update();
+            prog(std::cerr);
+        }
+
+        keep_reciprocal_knn(backbone);
+    }
+
+    TLOG("Constructed kNN graph backbone");
+
+    ///////////////////////////////////
+    // step2: calibrate edge weights //
+    ///////////////////////////////////
+    std::vector<std::tuple<Index, Index, Scalar>> knn_index;
+    {
+        const SpMat B = build_eigen_sparse(backbone, Nsample, Nsample);
+
+        std::vector<Scalar> dist_j(options.knn);
+        std::vector<Scalar> weights_j(options.knn);
+        std::vector<Index> neigh_j(options.knn);
+
+        for (Index j = 0; j < B.outerSize(); ++j) {
+
+            Index deg_j = 0;
+            for (SpMat::InnerIterator it(B, j); it; ++it) {
+                Index i = it.col();
+                dist_j[deg_j] = V.col(i).cwiseProduct(V.col(j)).sum();
+                neigh_j[deg_j] = i;
+                ++deg_j;
+            }
+
+            normalize_weights(deg_j, dist_j, weights_j);
+
+            for (Index i = 0; i < deg_j; ++i) {
+                const Index k = neigh_j[i];
+                const Scalar w = weights_j[i];
+                ASSERT(w > .0, "must be non-negative");
+                knn_index.emplace_back(j, k, w);
+            }
+        }
+    }
+
+    const SpMat W = build_eigen_sparse(knn_index, Nsample, Nsample);
+    write_matrix_market_file(options.out + ".mtx.gz", W);
+
+    TLOG("Adjusted kNN weights");
+
+    Mat Vadj = Vorg;
+    Mat Delta_feature(D, Nbatch);
+    Mat Delta_factor(rank, Nbatch);
+    Delta_feature.setZero();
+    Delta_factor.setZero();
+
+    for (Index aa = 1; aa < Nbatch; ++aa) {
+        const auto &batch_a = batch_index_set.at(aa);
+        const Index nn_a = batch_a.size();
+
+        Mat delta_a(V.rows(), 1);
+        delta_a.setZero();
+        Scalar num_a = 0.;
+
+        for (Index a_k = 0; a_k < nn_a; ++a_k) {
+            const Index j = batch_a.at(a_k);
+
+            for (SpMat::InnerIterator it(W, j); it; ++it) {
+
+                const Index i = it.col();
+
+                if (batch.at(i) < aa) { // mingle toward the previous ones
+
+                    const Scalar wji = it.value();
+
+                    delta_a += wji * (Vorg.col(j) - Vadj.col(i));
+                    num_a += wji;
+                }
             }
         }
 
-        normalize_weights(deg_j, dist_j, weights_j);
+        delta_a /= std::max(num_a, (Scalar)1.0);
 
-        for (Index i = 0; i < deg_j; ++i) {
-            const Index k = neigh_j[i];
-            const Scalar w = weights_j[i];
-            ASSERT(w > .0, "must be non-negative");
-            knn_index.emplace_back(j, k, w);
+        for (Index a_k = 0; a_k < nn_a; ++a_k) {
+            const Index j = batch_a.at(a_k);
+            Vadj.col(j) = Vadj.col(j) - delta_a;
         }
-        prog.update();
-        prog(std::cerr);
+
+        Delta_factor.col(aa) = delta_a;
+        Delta_feature.col(aa) = proj * delta_a;
     }
 
-    const SpMat A = build_eigen_sparse(knn_index, Nsample, Nsample);
-    write_matrix_market_file(options.out + ".mtx.gz", A);
+    write_data_file(options.out + ".factors.gz", Vadj.transpose());
+    write_data_file(options.out + ".delta_factor.gz", Delta_factor);
+    write_data_file(options.out + ".delta_feature.gz", Delta_feature);
+    write_vector_file(options.out + ".cols.gz", columns);
+
+    write_data_file(options.out + ".svd_Vt.gz", Vorg.transpose());
+    write_data_file(options.out + ".svd_U.gz", svd.U);
+    write_data_file(options.out + ".svd_D.gz", svd.D);
 
     return EXIT_SUCCESS;
 }
