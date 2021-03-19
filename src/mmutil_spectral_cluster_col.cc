@@ -14,21 +14,28 @@ main(const int argc, const char *argv[])
     if (file_exists(options.mtx)) {
         Data = create_clustering_data(options);
     } else if (file_exists(options.spectral_file)) {
-        Mat uu;
-        read_data_file(options.spectral_file, uu);
-        Data = standardize(uu).transpose().eval();
+        Mat xx;
+        read_data_file(options.spectral_file, xx);
+        if (options.do_standardize) {
+
+            // avoid too small or too large values
+            Mat temp = standardize(xx);
+            const Scalar lb = -4, ub = 4;
+            temp = temp.unaryExpr([&lb, &ub](const Scalar &x) -> Scalar {
+                return std::min(std::max(x, lb), ub);
+            });
+
+            Data = standardize(temp).transpose().eval();
+
+        } else {
+            Data = xx.transpose().eval();
+        }
     } else {
         TLOG("No input file exits. Try " << argv[0] << " -h");
         return EXIT_FAILURE;
     }
 
-    // avoid too small or too large values
-    const Scalar lb = -4, ub = 4;
-
-    Data = Data.unaryExpr([&lb, &ub](const Scalar &x) -> Scalar {
-        return std::min(std::max(x, lb), ub);
-    });
-
     run_mixture_model(Data, options);
+
     return EXIT_SUCCESS;
 }

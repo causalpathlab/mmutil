@@ -65,6 +65,8 @@ struct cluster_options_t {
         sampling_method = UNIFORM;
 
         verbose = false;
+
+        do_standardize = true;
     }
 
     Index K;              // Truncation level
@@ -104,6 +106,8 @@ struct cluster_options_t {
     bool raw_scale;
     bool log_scale;
     Scalar col_norm;
+
+    bool do_standardize;
 
     void set_method(const std::string _method)
     {
@@ -595,45 +599,47 @@ parse_cluster_options(const int argc,     //
     const char *_usage =
         "\n"
         "[Arguments]\n"
-        "--data (-d)             : MTX file (data)\n"
-        "--mtx (-d)              : MTX file (data)\n"
-        "--sdata (-s)            : Spectral feature file (column x factor)\n"
-        // "--method (-M)           : A clustering method {GMM}\n"
-        "--col (-c)              : Column file\n"
-        "--tau (-u)              : Regularization parameter (default: 1)\n"
-        "--rank (-r)             : The maximal rank of SVD (default: 10)\n"
-        "--lu_iter (-l)          : # of LU iterations (default: 3)\n"
-        "--out (-o)              : Output file header (default: output)\n"
-        "--row_weight (-w)       : Feature re-weighting (default: none)\n"
-        "--col_norm (-C)         : Column normalization (default: 10000)\n"
-        "--out_data (-D)         : Output clustering data (default: false)\n"
-        "--log_scale (-L)        : Data in a log-scale (default: true)\n"
-        "--raw_scale (-R)        : Data in a raw-scale (default: false)\n"
-        "--initial_sample (-S)   : Nystrom sample size (default: 10000)\n"
-        "--block_size (-B)    : Nystrom batch size (default: 10000)\n"
-        "--sampling_method (-N)  : Nystrom sampling method: UNIFORM (default), "
+        "--data (-d)            : MTX file (data)\n"
+        "--mtx (-d)             : MTX file (data)\n"
+        "--sdata (-s)           : Spectral feature file (column x factor)\n"
+        // "--method (-M)       : A clustering method {GMM}\n"
+        "--col (-c)             : Column file\n"
+        "--tau (-u)             : Regularization parameter (default: 1)\n"
+        "--rank (-r)            : The maximal rank of SVD (default: 10)\n"
+        "--lu_iter (-l)         : # of LU iterations (default: 3)\n"
+        "--out (-o)             : Output file header (default: output)\n"
+        "--row_weight (-w)      : Feature re-weighting (default: none)\n"
+        "--col_norm (-C)        : Column normalization (default: 10000)\n"
+        "--out_data (-D)        : Output clustering data (default: false)\n"
+        "--log_scale (-L)       : Data in a log-scale (default: true)\n"
+        "--raw_scale (-R)       : Data in a raw-scale (default: false)\n"
+        "--initial_sample (-S)  : Nystrom sample size (default: 10000)\n"
+        "--block_size (-B)      : Nystrom batch size (default: 10000)\n"
+        "--sampling_method (-N) : Nystrom sampling method: UNIFORM (default), "
         "CV, MEAN\n"
-        "--verbose (-O)          : Output more words (default: false)\n"
+        "--do_std               : Standardize (default: true)\n"
+        "--dont_std             : Don't Standardize (default: false)\n"
+        "--verbose              : Output more words (default: false)\n"
         "\n"
         // "[Options for DBSCAN]\n"
         // "\n"
-        // "--knn (-k)              : K nearest neighbors (default: 10)\n"
-        // "--epsilon (-e)          : maximum cosine distance cutoff (default: "
+        // "--knn (-k)          : K nearest neighbors (default: 10)\n"
+        // "--epsilon (-e)      : maximum cosine distance cutoff (default: "
         // "1.0)\n"
-        // "--bilink (-m)           : # of bidirectional links (default: 10)\n"
-        // "--nlist (-f)            : # nearest neighbor lists (default: 10)\n"
-        // "--min_size (-z)         : minimum size to report (default: 10)\n"
-        // "--num_levels (-n)       : number of DBSCAN levels (default: 10)\n"
-        // "--prune_knn (-P)        : prune kNN graph (reciprocal match)\n"
+        // "--bilink (-m)       : # of bidirectional links (default: 10)\n"
+        // "--nlist (-f)        : # nearest neighbor lists (default: 10)\n"
+        // "--min_size (-z)     : minimum size to report (default: 10)\n"
+        // "--num_levels (-n)   : number of DBSCAN levels (default: 10)\n"
+        // "--prune_knn (-P)    : prune kNN graph (reciprocal match)\n"
         // "\n"
         "[Options for Gaussian mixture models]\n"
         "\n"
-        "--trunc (-K)       : maximum truncation-level of clustering\n"
-        "--burnin (-I)      : burn-in (Gibbs) iterations (default: 10)\n"
-        "--min_vbiter (-v)  : minimum VB iterations (default: 5)\n"
-        "--max_vbiter (-V)  : maximum VB iterations (default: 100)\n"
-        "--convergence (-T) : epsilon value for checking convergence (default: 1e-8)\n"
-        "--kmeanspp (-i)    : Kmeans++ initialization (default: false)\n"
+        "--trunc (-K)           : maximum truncation-level of clustering\n"
+        "--burnin (-I)          : burn-in (Gibbs) iterations (default: 10)\n"
+        "--min_vbiter (-v)      : minimum VB iterations (default: 5)\n"
+        "--max_vbiter (-V)      : maximum VB iterations (default: 100)\n"
+        "--convergence (-T)     : epsilon value for checking convergence (default: 1e-8)\n"
+        "--kmeanspp (-i)        : Kmeans++ initialization (default: false)\n"
         "\n"
         "[Details]\n"
         "Qin and Rohe (2013), Regularized Spectral Clustering under "
@@ -665,7 +671,7 @@ parse_cluster_options(const int argc,     //
 
     const char *const short_opts = "M:d:c:k:e:K:I:v:V:T:u:LR"
                                    "r:l:m:f:z:t:o:w:C:n:DPOih"
-                                   "S:B:N:";
+                                   "S:B:N:10";
 
     const option long_opts[] = {
         { "mtx", required_argument, nullptr, 'd' },             //
@@ -693,6 +699,8 @@ parse_cluster_options(const int argc,     //
         { "min_size", required_argument, nullptr, 'z' },        //
         { "out_data", no_argument, nullptr, 'D' },              //
         { "prune_knn", no_argument, nullptr, 'P' },             //
+        { "do_std", no_argument, nullptr, '1' },                //
+        { "dont_std", no_argument, nullptr, '0' },              //
         { "verbose", no_argument, nullptr, 'O' },               //
         { "log_scale", no_argument, nullptr, 'L' },             //
         { "raw_scale", no_argument, nullptr, 'R' },             //
@@ -780,6 +788,12 @@ parse_cluster_options(const int argc,     //
             break;
         case 'O':
             options.verbose = true;
+            break;
+        case '1':
+            options.do_standardize = true;
+            break;
+        case '0':
+            options.do_standardize = false;
             break;
         case 'M':
             options.set_method(std::string(optarg));
