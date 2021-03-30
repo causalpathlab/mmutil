@@ -28,6 +28,7 @@ struct annotation_model_t {
         , mu_anti(nmarker, ntype)
         , log_normalizer(ntype)
         , score(ntype)
+        , nn(ntype)
         , kappa_init(1.0)  //
         , kappa_max(_kmax) //
         , kappa(kappa_init)
@@ -41,6 +42,7 @@ struct annotation_model_t {
         mu_anti.setZero();
         mu += lab;
         mu_anti += anti_lab;
+        nn.setZero();
     }
 
     template <typename Derived, typename Derived2, typename Derived3>
@@ -94,10 +96,13 @@ struct annotation_model_t {
         // update mean vector //
         ////////////////////////
 
-        mu = Stat * nsize.cwiseInverse().asDiagonal();
+        // Add pseudo count
+        nn = nsize.unaryExpr([](const Scalar &x) -> Scalar { return x + 1.; });
+
+        mu = Stat * nn.cwiseInverse().asDiagonal();
         normalize_columns(mu);
 
-        mu_anti = -Stat_anti * nsize.cwiseInverse().asDiagonal();
+        mu_anti = -Stat_anti * nn.cwiseInverse().asDiagonal();
         normalize_columns(mu_anti);
         // update_log_normalizer();
     }
@@ -151,6 +156,7 @@ struct annotation_model_t {
     Mat mu_anti;        // permuted marker x type matrix
     Vec log_normalizer; // log-normalizer
     Vec score;          // temporary score
+    Vec nn;             // number of samples
 
     const Scalar kappa_init;
     const Scalar kappa_max;
@@ -171,21 +177,20 @@ struct annotation_options_t {
         qc_ann = "";
         out = "output.txt.gz";
 
-        col_norm = 10000;
+        svd_u = "";
+        svd_d = "";
+        svd_v = "";
 
         raw_scale = true;
         log_scale = false;
 
         batch_size = 100000;
-
         max_em_iter = 100;
-
         em_tol = 1e-4;
         kappa_max = 100.;
 
-        output_count_matrix = false;
-
         verbose = false;
+        randomize_init = false;
     }
 
     Str mtx;
@@ -196,21 +201,129 @@ struct annotation_options_t {
     Str qc_ann;
     Str out;
 
-    Scalar col_norm;
+    Str svd_u;
+    Str svd_d;
+    Str svd_v;
 
     bool raw_scale;
     bool log_scale;
 
     Index batch_size;
-
     Index max_em_iter;
-
     Scalar em_tol;
-
-    bool output_count_matrix;
 
     bool verbose;
     Scalar kappa_max;
+    bool randomize_init;
+};
+
+struct mm_data_loader_t {
+
+    template <typename T>
+    mm_data_loader_t(const T &options)
+        : mtx_file(options.mtx)
+        , idx_file(options.mtx + ".index")
+        , log_scale(options.log_scale)
+    {
+
+        CHECK(mmutil::bgzf::peek_bgzf_header(mtx_file, info));
+
+        if (!is_file_bgz(mtx_file))
+            CHECK(mmutil::bgzf::convert_bgzip(mtx_file));
+
+        if (!file_exists(idx_file)) {
+            mmutil::index::build_mmutil_index(options.mtx, idx_file);
+        }
+
+        CHECK(mmutil::index::read_mmutil_index(idx_file, idx_tab));
+    }
+
+    Mat
+    operator()(const Index lb, const Index ub, const std::vector<Index> &subrow)
+    {
+        if (subcol.size() != (ub - lb))
+            subcol.resize(ub - lb);
+        std::iota(subcol.begin(), subcol.end(), lb);
+
+        SpMat x = mmutil::io::read_eigen_sparse_subset_row_col(mtx_file,
+                                                               idx_tab,
+                                                               subrow,
+                                                               subcol);
+
+        if (log_scale) {
+            x = x.unaryExpr(log2_op);
+        }
+
+        Mat xx = Mat(x);
+        normalize_columns(xx);
+
+        return xx;
+    }
+
+    const std::string mtx_file; //
+    const std::string idx_file; //
+    const bool log_scale;       //
+
+    mmutil::index::mm_info_reader_t info; // MM information
+    std::vector<Index> idx_tab;           // column indexing
+    std::vector<Index> subcol;
+
+    struct log2_op_t {
+        Scalar operator()(const Scalar &x) const { return std::log2(1.0 + x); }
+    } log2_op;
+
+    Index num_rows() const { return info.max_row; }
+    Index num_columns() const { return info.max_col; }
+};
+
+struct svd_data_loader_t {
+
+    template <typename T>
+    svd_data_loader_t(const T &options)
+    {
+        read_data_file(options.svd_u, U);
+        read_data_file(options.svd_d, D);
+        read_data_file(options.svd_v, Vt);
+
+        Vt.transposeInPlace();
+        TLOG("U: " << U.rows() << " x " << U.cols());
+        TLOG("Vt: " << Vt.rows() << " x " << Vt.cols());
+
+        ASSERT(U.cols() == D.rows(), "U and D must have the same rank");
+        ASSERT(D.cols() == 1, "D must be just a vector");
+        Ud = U * D.asDiagonal();
+    }
+
+    Mat
+    operator()(const Index lb, const Index ub, const std::vector<Index> &subrow)
+    {
+        Mat ret(subrow.size(), ub - lb);
+        ret.setConstant(1e-4);
+
+        for (Index j = 0; j < (ub - lb); ++j) {
+            const Index c = j + lb;
+
+            for (Index i = 0; i < subrow.size(); ++i) {
+                const Index r = subrow.at(i);
+                if (r < 0 || r >= Ud.rows())
+                    continue;
+
+                ret(i, j) += Ud.row(r) * Vt.col(c);
+            }
+        }
+
+        normalize_columns(ret);
+        return ret;
+    }
+
+    Mat U;
+    Mat D;
+    Mat Vt;
+
+    Mat Ud;
+
+    Index num_rows() const { return U.rows(); }
+    Index num_columns() const { return Vt.cols(); }
 };
 
 template <typename T>
@@ -221,9 +334,6 @@ std::tuple<SpMat,
            std::vector<std::string>>
 read_annotation_matched(const T &options)
 {
-
-    using namespace mmutil::io;
-    using namespace mmutil::index;
 
     using Str = std::string;
 
@@ -343,12 +453,29 @@ read_annotation_matched(const T &options)
     return std::make_tuple(L, L0, Lqc, rows, labels);
 }
 
+template <typename T>
+int fit_annotation(const annotation_options_t &options, T &data_loader);
+
 int
 run_annotation(const annotation_options_t &options)
 {
-    using namespace mmutil::io;
-    using namespace mmutil::index;
+    if (file_exists(options.mtx)) {
+        TLOG("Using MTX data to annotate ...");
+        mm_data_loader_t data_loader(options);
+        return fit_annotation(options, data_loader);
+    } else {
+        TLOG("Using SVD data to annotate ...");
+        svd_data_loader_t data_loader(options);
+        return fit_annotation(options, data_loader);
+    }
 
+    return EXIT_FAILURE;
+}
+
+template <typename LOADER>
+int
+fit_annotation(const annotation_options_t &options, LOADER &data_loader)
+{
     //////////////////////////////////////////////////////////
     // Read the annotation information to construct initial //
     // type-specific marker gene profiles                   //
@@ -360,25 +487,15 @@ run_annotation(const annotation_options_t &options)
     std::vector<std::string> rows;
     std::vector<std::string> labels;
 
+    /////////////////////////////////
+    // read annotation information //
+    /////////////////////////////////
+
     std::tie(L_fg, L_bg, L_qc, rows, labels) = read_annotation_matched(options);
 
     std::vector<std::string> columns;
     CHK_ERR_RET(read_vector_file(options.col, columns),
                 "Failed to read the column file: " << options.col);
-
-    CHK_ERR_RET(mmutil::bgzf::convert_bgzip(options.mtx),
-                "Failed to obtain a bgzipped file: " << options.mtx);
-
-    std::string idx_file = options.mtx + ".index";
-    CHK_ERR_RET(build_mmutil_index(options.mtx, idx_file),
-                "Failed to construct an index file: " << idx_file);
-
-    std::string mtx_file = options.mtx;
-
-    mm_info_reader_t info;
-    CHECK(mmutil::bgzf::peek_bgzf_header(mtx_file, info));
-    const Index D = info.max_row;
-    const Index N = info.max_col;
 
     Index batch_size = options.batch_size;
 
@@ -397,32 +514,14 @@ run_annotation(const annotation_options_t &options)
             subrow.emplace_back(r);
     }
 
-    auto log2_op = [](const Scalar &x) -> Scalar { return std::log2(1.0 + x); };
+    const Index D = data_loader.num_rows();
+    const Index N = data_loader.num_columns();
 
-    std::vector<Index> idx_tab;
-    CHECK(read_mmutil_index(idx_file, idx_tab));
+    TLOG("D = " << D << ", N = " << N);
 
-    auto take_batch_data_subcol = [&](std::vector<Index> &subcol,
-                                      bool do_norm = true) -> Mat {
-        SpMat x =
-            read_eigen_sparse_subset_row_col(mtx_file, idx_tab, subrow, subcol);
-
-        if (options.log_scale) {
-            x = x.unaryExpr(log2_op);
-        }
-
-        Mat xx = Mat(x);
-        if (do_norm)
-            normalize_columns(xx);
-
-        return xx;
-    };
-
-    auto take_batch_data = [&](Index lb, Index ub, bool do_norm = true) -> Mat {
-        std::vector<Index> subcol(ub - lb);
-        std::iota(subcol.begin(), subcol.end(), lb);
-        return take_batch_data_subcol(subcol, do_norm);
-    };
+    ////////////////////////////
+    // Build annotation model //
+    ////////////////////////////
 
     Mat L = row_sub(L_fg, subrow);
     Mat L0 = row_sub(L_bg, subrow);
@@ -446,10 +545,10 @@ run_annotation(const annotation_options_t &options)
     Vec nsize(K);
     Vec mass(K);
 
-    const Scalar pseudo = 1e-8;
-    Mat Stat(M, K);      // feature x label
-    Mat Stat_anti(M, K); // feature x label
-    nsize.setConstant(pseudo);
+    const Scalar pseudo = 1e-8;    //
+    Mat Stat(M, K);                // feature x label
+    Mat Stat_anti(M, K);           // feature x label
+    nsize.setConstant(pseudo);     //
     Stat.setConstant(pseudo);      // sum x(g,j) * z(j, k)
     Stat_anti.setConstant(pseudo); // sum x0(g,j) * z(j, k)
 
@@ -467,7 +566,7 @@ run_annotation(const annotation_options_t &options)
         for (Index lb = 0; lb < N; lb += batch_size) {
             const Index ub = std::min(N, batch_size + lb);
 
-            Mat xx = take_batch_data(lb, ub);
+            Mat xx = data_loader(lb, ub, subrow);
 
             for (Index j = 0; j < xx.cols(); ++j) {
                 const Index i = j + lb;
@@ -491,7 +590,7 @@ run_annotation(const annotation_options_t &options)
     auto find_argmax_membership = [&]() {
         for (Index lb = 0; lb < N; lb += batch_size) {
             const Index ub = std::min(N, batch_size + lb);
-            Mat xx = take_batch_data(lb, ub);
+            Mat xx = data_loader(lb, ub, subrow);
             for (Index j = 0; j < xx.cols(); ++j) {
                 const Index i = j + lb;
                 if (taboo.count(i) > 0)
@@ -506,11 +605,13 @@ run_annotation(const annotation_options_t &options)
     };
 
     auto greedy_initialization = [&]() {
-      // #pragma omp parallel for
+        TLOG("Greedy annotation over " << K << " types");
+
+        // #pragma omp parallel for
         for (Index lb = 0; lb < N; lb += batch_size) {
             const Index ub = std::min(N, batch_size + lb);
 
-            Mat xx = take_batch_data(lb, ub);
+            Mat xx = data_loader(lb, ub, subrow);
 
             DS sampler_k(K); // sample discrete from log-mass
             Vec sj(K);
@@ -542,7 +643,7 @@ run_annotation(const annotation_options_t &options)
                     std::cerr << " [" << labels[k] << "] " << std::setw(10)
                               << nsize(k);
                 }
-                std::cerr << "\r" << std::flush;
+                std::cerr << std::endl;
             }
         }
 
@@ -551,11 +652,11 @@ run_annotation(const annotation_options_t &options)
     };
 
     auto randomized_initialization = [&]() {
-      // #pragma omp parallel for
+        // #pragma omp parallel for
         for (Index lb = 0; lb < N; lb += batch_size) {
             const Index ub = std::min(N, batch_size + lb);
 
-            Mat xx = take_batch_data(lb, ub);
+            Mat xx = data_loader(lb, ub, subrow);
 
             DS sampler_k(K); // sample discrete from log-mass
             Vec sj(K);       //
@@ -589,9 +690,8 @@ run_annotation(const annotation_options_t &options)
                     std::cerr << " [" << labels[k] << "] " << std::setw(10)
                               << nsize(k);
                 }
-                std::cerr << "\r" << std::flush;
+                std::cerr << std::endl;
             }
-
         }
 
         score_init /= static_cast<Scalar>(N);
@@ -633,14 +733,14 @@ run_annotation(const annotation_options_t &options)
             }
 #endif
 
-	    // #pragma omp parallel for
+            // #pragma omp parallel for
             for (Index lb = 0; lb < N; lb += batch_size) {     // batch
                 const Index ub = std::min(N, batch_size + lb); //
 
                 DS sampler_k(K); // sample discrete from log-mass
                 Vec sj(K);       // type x 1 score vector
 
-                Mat xx = take_batch_data(lb, ub, true);
+                Mat xx = data_loader(lb, ub, subrow);
 
                 for (Index j = 0; j < xx.cols(); ++j) {
 
@@ -679,7 +779,7 @@ run_annotation(const annotation_options_t &options)
                         std::cerr << " [" << labels[k] << "] " << std::setw(10)
                                   << nsize(k);
                     }
-                    std::cerr << "\r" << std::flush;
+                    std::cerr << std::endl;
                 }
 
             } // end of batch iteration
@@ -705,13 +805,15 @@ run_annotation(const annotation_options_t &options)
         } // end of EM iteration
     };
 
-    // TLOG("Start randomized initialization");
-    // randomized_initialization();
-    // TLOG("Finished randomized initialization");
-
-    TLOG("Start greedy initialization");
-    greedy_initialization();
-    TLOG("Finished greedy initialization");
+    if (options.randomize_init) {
+        TLOG("Start randomized initialization");
+        randomized_initialization();
+        TLOG("Finished randomized initialization");
+    } else {
+        TLOG("Start greedy initialization");
+        greedy_initialization();
+        TLOG("Finished greedy initialization");
+    }
 
     TLOG("Start training marker gene profiles");
     monte_carlo_update();
@@ -749,7 +851,7 @@ run_annotation(const annotation_options_t &options)
     for (Index lb = 0; lb < N; lb += batch_size) {
         const Index ub = std::min(N, batch_size + lb);
 
-        Mat xx = take_batch_data(lb, ub);
+        Mat xx = data_loader(lb, ub, subrow);
 
         for (Index j = 0; j < xx.cols(); ++j) {
             const Index i = j + lb;

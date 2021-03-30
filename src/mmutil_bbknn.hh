@@ -127,7 +127,7 @@ parse_bbknn_options(const int argc, const char *argv[], OPTIONS &options)
         "${out}.delta_feature.gz : (D x batch) adjustment matrix\n"
         "${out}.svd_U.gz         : (N x rank) features x factor matrix (raw SVD)\n"
         "${out}.svd_D.gz         : (rank x 1) factor loading vector (raw SVD)\n"
-        "${out}.svd_Vt.gz        : (N x rank) sample x factor matrix (raw SVD)\n"
+        "${out}.svd_V.gz         : (N x rank) factor x sample matrix (raw SVD)\n"
         "\n"
         "[Details for kNN graph]\n"
         "\n"
@@ -560,6 +560,10 @@ build_bbknn(const OPTIONS &options)
 
     TLOG("Adjusted kNN weights");
 
+    ////////////////////////////////////
+    // step3: adjusting spectral data //
+    ////////////////////////////////////
+
     Mat Vadj = Vorg;
     Mat Delta_feature(D, Nbatch);
     Mat Delta_factor(rank, Nbatch);
@@ -602,12 +606,14 @@ build_bbknn(const OPTIONS &options)
         Delta_feature.col(aa) = proj * delta_a;
     }
 
+    TLOG("Writing down the results...");
+
     write_data_file(options.out + ".factors.gz", Vadj.transpose());
     write_data_file(options.out + ".delta_factor.gz", Delta_factor);
     write_data_file(options.out + ".delta_feature.gz", Delta_feature);
     write_vector_file(options.out + ".cols.gz", columns);
 
-    write_data_file(options.out + ".svd_Vt.gz", Vorg.transpose());
+    write_data_file(options.out + ".svd_V.gz", Vorg.transpose());
     write_data_file(options.out + ".svd_U.gz", svd.U);
     write_data_file(options.out + ".svd_D.gz", svd.D);
 
