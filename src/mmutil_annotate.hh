@@ -308,7 +308,12 @@ struct svd_data_loader_t {
                 if (r < 0 || r >= Ud.rows())
                     continue;
 
-                ret(i, j) += Ud.row(r) * Vt.col(c);
+                ///////////////////////////////////////////////
+                // model only make sense for positive values //
+                ///////////////////////////////////////////////
+                const Scalar val = Ud.row(r) * Vt.col(c);
+                if (val > 0)
+                    ret(i, j) += val;
             }
         }
 
