@@ -191,11 +191,7 @@ void
 write_matrix_market_stream(OFS &ofs,
                            const Eigen::SparseMatrixBase<Derived> &out)
 {
-
     const Derived &M = out.derived();
-
-    ofs << "%%MatrixMarket matrix coordinate integer general" << std::endl;
-    ofs << M.rows() << " " << M.cols() << " " << M.nonZeros() << std::endl;
 
     using Index = typename Derived::Index;
     using Scalar = typename Derived::Scalar;
@@ -203,7 +199,12 @@ write_matrix_market_stream(OFS &ofs,
 
     // Should this be sorted by the column (the 2nd element)
     if (M.IsRowMajor) {
+
         SpMat Mt = M.transpose();
+
+        ofs << "%%MatrixMarket matrix coordinate integer general" << std::endl;
+        ofs << Mt.cols() << " " << Mt.rows() << " " << Mt.nonZeros()
+            << std::endl;
 
         for (auto k = 0; k < Mt.outerSize(); ++k) {
             for (typename Derived::InnerIterator it(Mt, k); it; ++it) {
@@ -213,7 +214,12 @@ write_matrix_market_stream(OFS &ofs,
                 ofs << j << " " << i << " " << v << std::endl;
             }
         }
+
     } else {
+
+        ofs << "%%MatrixMarket matrix coordinate integer general" << std::endl;
+        ofs << M.rows() << " " << M.cols() << " " << M.nonZeros() << std::endl;
+
         for (auto k = 0; k < M.outerSize(); ++k) {
             for (typename Derived::InnerIterator it(M, k); it; ++it) {
                 const Index i = it.row() + 1; // fix zero-based to one-based

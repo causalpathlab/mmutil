@@ -527,6 +527,8 @@ build_bbknn(const OPTIONS &options)
     // step2: calibrate edge weights //
     ///////////////////////////////////
     std::vector<std::tuple<Index, Index, Scalar>> knn_index;
+    knn_index.clear();
+
     {
         const SpMat B = build_eigen_sparse(backbone, Nsample, Nsample);
 
@@ -538,10 +540,12 @@ build_bbknn(const OPTIONS &options)
 
             Index deg_j = 0;
             for (SpMat::InnerIterator it(B, j); it; ++it) {
-                Index i = it.col();
-                dist_j[deg_j] = V.col(i).cwiseProduct(V.col(j)).sum();
-                neigh_j[deg_j] = i;
+                Index k = it.col();
+                dist_j[deg_j] = V.col(k).cwiseProduct(V.col(j)).sum();
+                neigh_j[deg_j] = k;
                 ++deg_j;
+                if (deg_j >= options.knn)
+                    break;
             }
 
             normalize_weights(deg_j, dist_j, weights_j);
@@ -549,15 +553,13 @@ build_bbknn(const OPTIONS &options)
             for (Index i = 0; i < deg_j; ++i) {
                 const Index k = neigh_j[i];
                 const Scalar w = weights_j[i];
-                ASSERT(w > .0, "must be non-negative");
+
                 knn_index.emplace_back(j, k, w);
             }
         }
     }
 
-    const SpMat W = build_eigen_sparse(knn_index, Nsample, Nsample);
-    write_matrix_market_file(options.out + ".mtx.gz", W);
-
+    SpMat W = build_eigen_sparse(knn_index, Nsample, Nsample);
     TLOG("Adjusted kNN weights");
 
     ////////////////////////////////////
@@ -616,6 +618,29 @@ build_bbknn(const OPTIONS &options)
     write_data_file(options.out + ".svd_V.gz", Vorg.transpose());
     write_data_file(options.out + ".svd_U.gz", svd.U);
     write_data_file(options.out + ".svd_D.gz", svd.D);
+
+    // The following may fail because of memory issue
+    // write_matrix_market_file(options.out + ".mtx.gz", W);
+    // TLOG("Wrote down the kNN weights");
+    {
+        const std::string out_file = options.out + ".mtx.gz";
+        obgzf_stream ofs(out_file.c_str(), std::ios::out);
+        SpMat Wt = W.transpose();
+        ofs << "%%MatrixMarket matrix coordinate integer general" << std::endl;
+        ofs << Wt.cols() << " " << Wt.rows() << " " << Wt.nonZeros()
+            << std::endl;
+
+        for (auto k = 0; k < Wt.outerSize(); ++k) {
+            for (SpMat::InnerIterator it(Wt, k); it; ++it) {
+                const Index i = it.row() + 1; // fix zero-based to one-based
+                const Index j = it.col() + 1; // fix zero-based to one-based
+                const auto v = it.value();
+                ofs << j << " " << i << " " << v << std::endl;
+            }
+        }
+        ofs.close();
+        mmutil::index::build_mmutil_index(out_file, out_file + ".index");
+    }
 
     return EXIT_SUCCESS;
 }
