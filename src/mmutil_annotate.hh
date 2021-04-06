@@ -280,6 +280,7 @@ struct svd_data_loader_t {
 
     template <typename T>
     svd_data_loader_t(const T &options)
+        : log_scale(options.log_scale)
     {
         read_data_file(options.svd_u, U);
         read_data_file(options.svd_d, D);
@@ -312,8 +313,14 @@ struct svd_data_loader_t {
                 // model only make sense for positive values //
                 ///////////////////////////////////////////////
                 const Scalar val = Ud.row(r) * Vt.col(c);
-                if (val > 0)
-                    ret(i, j) += val;
+
+                if (val >= 0) {
+                    if (log_scale) {
+                        ret(i, j) += std::log2(1. + val);
+                    } else {
+                        ret(i, j) += val;
+                    }
+                }
             }
         }
 
@@ -324,8 +331,9 @@ struct svd_data_loader_t {
     Mat U;
     Mat D;
     Mat Vt;
-
     Mat Ud;
+
+    const bool log_scale; //
 
     Index num_rows() const { return U.rows(); }
     Index num_columns() const { return Vt.cols(); }
