@@ -3,7 +3,7 @@ m4_include([aux/ax_openmp.m4])
 m4_include([aux/ax_cxx_compile_stdcxx.m4])
 # m4_include([aux/ax_boost_base.m4])
 
-AC_INIT([mmutil],[0.2.1],[ypp@stat.ubc.ca])
+AC_INIT([mmutil],[0.3.0],[ypp@stat.ubc.ca])
 AC_CONFIG_SRCDIR([config.h.in])
 AC_CONFIG_HEADERS([config.h])
 

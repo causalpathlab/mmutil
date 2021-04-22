@@ -378,14 +378,20 @@ public:
         }
         Scalar operator()(const Scalar &a, const Scalar &b) const
         {
+            if ((a + a0) > one)
+                return fasterdigamma(a + a0 - one) - fasterlog(b + b0);
+
             return fasterdigamma(a + a0) - fasterlog(b + b0);
         }
         const Scalar a0, b0;
+        static constexpr Scalar one = 1.0;
+        static constexpr Scalar zero = 0.0;
     };
 
     // Delta method
     // sqrt V[ln(mu)] = sqrt (V[mu] / mu)
-    //                = 1/sqrt(a)
+    //                = 1/sqrt(a -1 )
+    // approximated at the mode = (a - 1)/b
     struct rate_sd_ln_op_t {
         explicit rate_sd_ln_op_t(const Scalar _a0)
             : a0(_a0)
@@ -393,10 +399,14 @@ public:
         }
         Scalar operator()(const Scalar &a) const
         {
-            return std::max(one / std::sqrt(a + a0), static_cast<Scalar>(0.));
+            if ((a + a0) > one)
+                return std::max(one / std::sqrt(a + a0 - one), zero);
+
+            return std::max(one / std::sqrt(a + a0), zero);
         }
         const Scalar a0;
         static constexpr Scalar one = 1.0;
+        static constexpr Scalar zero = 0.0;
     };
 
     struct ent_op_t {

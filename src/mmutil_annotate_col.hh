@@ -171,7 +171,6 @@ parse_annotation_options(const int argc,     //
 
     ERR_RET(!file_exists(options.col), "No COL data file");
     ERR_RET(!file_exists(options.row), "No ROW data file");
-    ERR_RET(!file_exists(options.ann), "No ANN data file");
 
     if (!file_exists(options.mtx)) {
         ERR_RET(!file_exists(options.svd_u), "No SVD U data file");
