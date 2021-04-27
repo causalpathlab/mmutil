@@ -9,6 +9,7 @@
 #include "mmutil_index.hh"
 #include "mmutil_normalize.hh"
 #include "mmutil_index.hh"
+#include "mmutil_match.hh"
 #include "utils/progress.hh"
 #include "mmutil_bgzf_util.hh"
 #include "mmutil_util.hh"
@@ -300,6 +301,24 @@ struct mm_data_loader_t {
         return xx;
     }
 
+    Mat operator()(const Index lb, const std::vector<Index> &subrow)
+    {
+
+        SpMat x = mmutil::io::read_eigen_sparse_subset_row_col(mtx_file,
+                                                               idx_tab,
+                                                               subrow,
+                                                               { lb });
+
+        if (log_scale) {
+            x = x.unaryExpr(log2_op);
+        }
+
+        Mat xx = Mat(x);
+        normalize_columns(xx);
+
+        return xx;
+    }
+
     const std::string mtx_file; //
     const std::string idx_file; //
     const bool log_scale;       //
@@ -360,6 +379,34 @@ struct svd_data_loader_t {
                     } else {
                         ret(i, j) += val;
                     }
+                }
+            }
+        }
+
+        normalize_columns(ret);
+        return ret;
+    }
+
+    Mat operator()(const Index c, const std::vector<Index> &subrow)
+    {
+        Mat ret(subrow.size(), 1);
+        ret.setConstant(1e-4);
+
+        for (Index i = 0; i < subrow.size(); ++i) {
+            const Index r = subrow.at(i);
+            if (r < 0 || r >= Ud.rows())
+                continue;
+
+            ///////////////////////////////////////////////
+            // model only make sense for positive values //
+            ///////////////////////////////////////////////
+            const Scalar val = Ud.row(r) * Vt.col(c);
+
+            if (val >= 0) {
+                if (log_scale) {
+                    ret(i, 0) += std::log2(1. + val);
+                } else {
+                    ret(i, 0) += val;
                 }
             }
         }
@@ -623,7 +670,7 @@ fit_annotation(const annotation_options_t &options, LOADER &data_loader)
             for (Index lb = 0; lb < N; lb += batch_size) {
                 const Index ub = std::min(N, batch_size + lb);
 
-                Mat xx = data_loader(lb, ub, subrow);
+                const Mat xx = data_loader(lb, ub, subrow);
 
                 for (Index j = 0; j < xx.cols(); ++j) {
                     const Index i = j + lb;
@@ -759,7 +806,7 @@ fit_annotation(const annotation_options_t &options, LOADER &data_loader)
                 DS sampler_k(K); // sample discrete from log-mass
                 Vec sj(K);       // type x 1 score vector
 
-                Mat xx = data_loader(lb, ub, subrow);
+                const Mat xx = data_loader(lb, ub, subrow);
 
                 for (Index j = 0; j < xx.cols(); ++j) {
 
@@ -896,7 +943,7 @@ fit_annotation(const annotation_options_t &options, LOADER &data_loader)
     for (Index lb = 0; lb < N; lb += batch_size) {
         const Index ub = std::min(N, batch_size + lb);
 
-        Mat xx = data_loader(lb, ub, subrow);
+        const Mat xx = data_loader(lb, ub, subrow);
 
         for (Index j = 0; j < xx.cols(); ++j) {
             const Index i = j + lb;
@@ -914,8 +961,9 @@ fit_annotation(const annotation_options_t &options, LOADER &data_loader)
 
             normalized_exp(sj, zi);
 
-            Index argmax;
+            Index argmax, argmin;
             const Scalar smax = sj.maxCoeff(&argmax);
+            const Scalar smin = sj.maxCoeff(&argmin);
             Pr.col(i) = zi;
 
             output.emplace_back(columns[i], labels[argmax], zi(argmax), smax);
@@ -926,6 +974,7 @@ fit_annotation(const annotation_options_t &options, LOADER &data_loader)
     Pr.transposeInPlace();
     write_tuple_file(options.out + ".annot.gz", output);
     write_data_file(options.out + ".annot_prob.gz", Pr);
+
     return EXIT_SUCCESS;
 }
 

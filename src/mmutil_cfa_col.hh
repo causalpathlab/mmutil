@@ -61,6 +61,10 @@ struct cfa_options_t {
         nthreads = 8;
 
         do_internal = false;
+
+        // svd_u_file = "";
+        // svd_d_file = "";
+        svd_v_file = "";
     }
 
     std::string mtx_file;
@@ -71,6 +75,10 @@ struct cfa_options_t {
     std::string trt_ind_file;
     std::string annot_name_file;
     std::string out;
+
+    // std::string svd_u_file;
+    // std::string svd_d_file;
+    std::string svd_v_file;
 
     // SVD and matching
     std::string row_weight_file;
@@ -141,8 +149,34 @@ struct cfa_data_t {
         , n_threads(options.nthreads)
     {
         CHECK(init());
-        TLOG("Training SVD for spectral matching ...");
-        run_svd(options);
+
+        if (file_exists(options.svd_v_file)) {
+            TLOG("Reusing previous SVD results ...");
+            read_data_file(options.svd_v_file, Vt); // Nsample x rank
+            Vt.transposeInPlace();
+            const Index k = Vt.rows();
+            const Index n = Vt.cols();
+
+            ASSERT(Nsample == n, "SVD V file has different sample size");
+
+            if (k > rank) {
+                WLOG("Using only the top " << rank << " factors of the V");
+                Mat temp = Vt;
+                Vt.resize(Nsample, rank);
+                for (Index j = 0; j < rank; ++j)
+                    Vt.col(j) = temp.col(j);
+            }
+
+            if (k < rank) {
+                WLOG("Using k=" << k << " factors");
+                rank = k;
+            }
+
+        } else {
+            TLOG("Training SVD for spectral matching ...");
+            CHECK(run_svd(options));
+        }
+
         TLOG("Done SVD");
 
         if (param_bilink >= rank) {
@@ -213,7 +247,7 @@ private:
     Mat Z;
     Vec ww;
     Index rank;
-    Mat V;
+    Mat Vt;
 
     std::vector<Index> mtx_idx_tab;
 
@@ -288,7 +322,7 @@ Mat
 cfa_data_t::read_cf_block(const std::vector<Index> &cells_j,
                           bool is_internal = false)
 {
-    float *mass = V.data();
+    float *mass = Vt.data();
     const Index n_j = cells_j.size();
     Mat y = read_y_block(cells_j);
     Mat y0(D, n_j);
@@ -405,7 +439,7 @@ cfa_data_t::build_dictionary_by_treatment()
     for (Index tt = 0; tt < Ntrt; ++tt) {
         const Index n_tot = trt_index_set[tt].size(); // # cells
         KnnAlg &alg = *knn_lookup_trt[tt].get();      // lookup
-        float *mass = V.data();                       // raw data
+        float *mass = Vt.data();                      // raw data
 
 #pragma omp parallel for num_threads(n_threads)
         for (Index i = 0; i < n_tot; ++i) {
@@ -436,7 +470,7 @@ cfa_data_t::build_dictionary_by_individual()
     for (Index ii = 0; ii < Nind; ++ii) {
         const Index n_tot = indv_index_set[ii].size(); // # cells
         KnnAlg &alg = *knn_lookup_indv[ii].get();      // lookup
-        float *mass = V.data();                        // raw data
+        float *mass = Vt.data();                       // raw data
 
 #pragma omp parallel for num_threads(n_threads)
         for (Index i = 0; i < n_tot; ++i) {
@@ -463,7 +497,7 @@ cfa_data_t::run_svd(const cfa_options_t &options)
 
     rank = proj.cols();
 
-    V.resize(rank, Nsample);
+    Vt.resize(rank, Nsample);
 
     const Index block_size = options.block_size;
 
@@ -488,7 +522,7 @@ cfa_data_t::run_svd(const cfa_options_t &options)
 
         for (Index j = 0; j < vv.cols(); ++j) {
             const Index r = sub_b[j];
-            V.col(r) = vv.col(j);
+            Vt.col(r) = vv.col(j);
         }
 
         if (options.verbose)
@@ -1021,6 +1055,7 @@ parse_cfa_options(const int argc,     //
         "\n"
         "[Options]\n"
         "\n"
+        "--svd_v (-V)                : SVD V file (N x K)\n"
         "--col_norm (-C)             : Column normalization (default: 10000)\n"
         "\n"
         "--discretize (-D)           : Use discretized annotation matrix (default: true)\n"
@@ -1092,11 +1127,13 @@ parse_cfa_options(const int argc,     //
         "\n";
 
     const char *const short_opts =
-        "m:c:a:A:i:l:t:o:LRS:r:u:w:g:G:BDPC:k:B:T:E:b:n:hzvIN0:1:p:e:g:";
+        "m:V:c:a:A:i:l:t:o:LRS:r:u:w:g:G:BDPC:k:B:T:E:b:n:hzvIN0:1:p:e:g:";
 
     const option long_opts[] = {
         { "mtx", required_argument, nullptr, 'm' },        //
         { "data", required_argument, nullptr, 'm' },       //
+        { "svd_v", required_argument, nullptr, 'V' },      //
+        { "svd_v_file", required_argument, nullptr, 'V' }, //
         { "annot_prob", required_argument, nullptr, 'A' }, //
         { "annot", required_argument, nullptr, 'a' },      //
         { "col", required_argument, nullptr, 'c' },        //
@@ -1150,6 +1187,9 @@ parse_cfa_options(const int argc,     //
         switch (opt) {
         case 'm':
             options.mtx_file = std::string(optarg);
+            break;
+        case 'V':
+            options.svd_v_file = std::string(optarg);
             break;
         case 'A':
             options.annot_prob_file = std::string(optarg);

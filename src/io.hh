@@ -28,6 +28,8 @@
 bool
 file_exists(std::string filename)
 {
+    if (filename.size() < 1)
+        return false;
     std::ifstream f(filename.c_str());
     return f.good();
 }

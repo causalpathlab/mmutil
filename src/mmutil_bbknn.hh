@@ -639,8 +639,29 @@ build_bbknn(const OPTIONS &options)
             }
         }
         ofs.close();
-        mmutil::index::build_mmutil_index(out_file, out_file + ".index");
     }
+
+    //////////////////////////////////
+    // step4: simulate doublet data //
+    //////////////////////////////////
+
+    Mat VadjDbl = Vadj;
+    Mat VorgDbl = Vorg;
+
+    std::vector<Index> rand_idx(Vadj.cols());
+    std::iota(rand_idx.begin(), rand_idx.end(), 0);
+    std::random_device rd;
+    std::mt19937 rng(rd());
+    std::shuffle(rand_idx.begin(), rand_idx.end(), rng);
+
+    for (Index j = 0; j < VadjDbl.cols(); ++j) {
+        const Index k = rand_idx.at(j);
+        VadjDbl.col(j) = Vadj.col(j) * 0.5 + Vadj.col(k) * 0.5;
+        VorgDbl.col(j) = Vorg.col(j) * 0.5 + Vorg.col(k) * 0.5;
+    }
+
+    write_data_file(options.out + ".factors_doublet.gz", VadjDbl.transpose());
+    write_data_file(options.out + ".svd_V_doublet.gz", VorgDbl.transpose());
 
     return EXIT_SUCCESS;
 }

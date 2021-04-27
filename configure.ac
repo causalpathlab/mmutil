@@ -15,6 +15,7 @@ AC_TYPE_SIZE_T
 AC_TYPE_UINT32_T
 
 AX_CXX_COMPILE_STDCXX([17], noext, mandatory)
+user_LDFLAGS="${user_LDFLAGS} -lstdc++fs" # to use c++ filesystem
 
 # AX_CXX_COMPILE_STDCXX([17], noext, mandatory)
 # user_LDFLAGS="${user_LDFLAGS} -ltbb" # to use intel TBB
