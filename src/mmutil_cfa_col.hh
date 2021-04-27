@@ -150,6 +150,8 @@ struct cfa_data_t {
     {
         CHECK(init());
 
+        rank = options.rank;
+
         if (file_exists(options.svd_v_file)) {
             TLOG("Reusing previous SVD results ...");
             read_data_file(options.svd_v_file, Vt); // Nsample x rank

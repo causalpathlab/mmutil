@@ -626,8 +626,11 @@ fit_annotation(const annotation_options_t &options, LOADER &data_loader)
 
     std::vector<Index> subrow;
     for (Index r = 0; r < nnz.size(); ++r) {
-        if (nnz(r) > 0)
+        if (nnz(r) > 0) {
             subrow.emplace_back(r);
+            if (options.verbose)
+                TLOG("features: " << rows[r]);
+        }
     }
 
     Index M = 0, K = 0;
