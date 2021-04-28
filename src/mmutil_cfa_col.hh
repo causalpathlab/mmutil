@@ -704,6 +704,8 @@ run_cfa_col(const OPTIONS &options)
 
     Mat cf_mu(D, K * Nind);
     Mat cf_mu_sd(D, K * Nind);
+    Mat ln_cf_mu(D, K * Nind);
+    Mat ln_cf_mu_sd(D, K * Nind);
 
     Mat resid_mu(D, K * Nind);
     Mat resid_mu_sd(D, K * Nind);
@@ -715,6 +717,8 @@ run_cfa_col(const OPTIONS &options)
     ln_obs_mu.setZero();
     ln_obs_mu_sd.setZero();
 
+    ln_cf_mu.setZero();
+    ln_cf_mu_sd.setZero();
     cf_mu.setZero();
     cf_mu_sd.setZero();
 
@@ -798,11 +802,15 @@ run_cfa_col(const OPTIONS &options)
 
             const Mat cf_mu_i = pois.mu_DK();
             const Mat cf_mu_sd_i = pois.mu_sd_DK();
+            const Mat ln_cf_mu_i = pois.ln_mu_DK();
+            const Mat ln_cf_mu_sd_i = pois.ln_mu_sd_DK();
 
             for (Index k = 0; k < K; ++k) {
                 const Index s = storage_index(k);
                 cf_mu.col(s) = cf_mu_i.col(k);
                 cf_mu_sd.col(s) = cf_mu_sd_i.col(k);
+                ln_cf_mu.col(s) = ln_cf_mu_i.col(k);
+                ln_cf_mu_sd.col(s) = ln_cf_mu_sd_i.col(k);
 
                 const std::string c =
                     data.take_ind_name(ii) + "_" + data.take_annot_name(k);
@@ -980,6 +988,8 @@ run_cfa_col(const OPTIONS &options)
 
     write_vector_file(options.out + ".mu_cols.gz", mu_col_names);
 
+    write_data_file(options.out + ".ln_cf_mu.gz", ln_cf_mu);
+    write_data_file(options.out + ".ln_cf_mu_sd.gz", ln_cf_mu_sd);
     write_data_file(options.out + ".cf_mu.gz", cf_mu);
     write_data_file(options.out + ".cf_mu_sd.gz", cf_mu_sd);
 
@@ -1093,12 +1103,10 @@ parse_cfa_options(const int argc,     //
         "\n"
         "${out}.ln_obs_mu.gz         : (M x n) Log Mean of observed matrix\n"
         "${out}.obs_mu.gz            : (M x n) Mean of observed matrix\n"
-        "${out}.obs_mu_sd.gz         : (M x n) SD of observed matrix\n"
+        "${out}.ln_cf_mu.gz          : (M x n) Log Confounding factors matrix\n"
         "${out}.cf_mu.gz             : (M x n) Confounding factors matrix\n"
         "${out}.resid_mu.gz          : (M x n) Mean after adjusting confounders\n"
-        "${out}.resid_mu_sd.gz       : (M x n) SD after adjusting confounders\n"
         "${out}.ln_resid_mu.gz       : (M x n) Log mean after adjusting confounders\n"
-        "${out}.ln_resid_mu_sd.gz    : (M x n) SD of the log mean after adjusting confounders\n"
         "${out}.mu_col.gz            : (n x 1) column names\n"
         "\n"
         "[Details for kNN graph]\n"
