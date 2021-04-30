@@ -697,6 +697,8 @@ run_cfa_col(const OPTIONS &options)
     std::vector<std::string> mu_col_names(K * Nind);
     std::fill(mu_col_names.begin(), mu_col_names.end(), "");
 
+    Mat obs_sum(D, K * Nind);
+
     Mat obs_mu(D, K * Nind);
     Mat obs_mu_sd(D, K * Nind);
     Mat ln_obs_mu(D, K * Nind);
@@ -712,8 +714,9 @@ run_cfa_col(const OPTIONS &options)
     Mat ln_resid_mu(D, K * Nind);
     Mat ln_resid_mu_sd(D, K * Nind);
 
+    obs_sum.setZero();
     obs_mu.setZero();
-    obs_mu.setZero();
+    obs_mu_sd.setZero();
     ln_obs_mu.setZero();
     ln_obs_mu_sd.setZero();
 
@@ -972,12 +975,15 @@ run_cfa_col(const OPTIONS &options)
             const Mat ln_obs_mu_i = pois.ln_mu_DK();
             const Mat ln_obs_mu_sd_i = pois.ln_mu_sd_DK();
 
+            const Mat obs_sum_i = y * z.transpose();
+
             for (Index k = 0; k < K; ++k) {
                 const Index s = storage_index(k);
                 obs_mu.col(s) = obs_mu_i.col(k);
                 ln_obs_mu.col(s) = ln_obs_mu_i.col(k);
                 obs_mu_sd.col(s) = obs_mu_sd_i.col(k);
                 ln_obs_mu_sd.col(s) = ln_obs_mu_sd_i.col(k);
+                obs_sum.col(s) = obs_sum_i.col(k);
             }
         }
 
@@ -997,6 +1003,7 @@ run_cfa_col(const OPTIONS &options)
     write_data_file(options.out + ".ln_obs_mu_sd.gz", ln_obs_mu_sd);
     write_data_file(options.out + ".obs_mu.gz", obs_mu);
     write_data_file(options.out + ".obs_mu_sd.gz", obs_mu_sd);
+    write_data_file(options.out + ".obs_sum.gz", obs_sum);
 
     // residual effect
 

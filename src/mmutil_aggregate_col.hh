@@ -302,6 +302,8 @@ aggregate_col(const OPTIONS &options)
 
     Mat out_mu;
     Mat out_mu_sd;
+    Mat out_ln_mu;
+    Mat out_ln_mu_sd;
     Mat out_mean;
     Mat out_sum;
 
@@ -354,6 +356,8 @@ aggregate_col(const OPTIONS &options)
         if (i == 0) {
             out_mu.resize(D, Nind * K);
             out_mu_sd.resize(D, Nind * K);
+            out_ln_mu.resize(D, Nind * K);
+            out_ln_mu_sd.resize(D, Nind * K);
             out_mean.resize(D, Nind * K);
             out_sum.resize(D, Nind * K);
             out_mu.setZero();
@@ -395,6 +399,8 @@ aggregate_col(const OPTIONS &options)
         pois.optimize();
         Mat _mu = pois.mu_DK();
         Mat _mu_sd = pois.mu_sd_DK();
+        Mat _ln_mu = pois.ln_mu_DK();
+        Mat _ln_mu_sd = pois.ln_mu_sd_DK();
         Mat _rho = pois.rho_N();
 
         Mat _sum = yy * zz.transpose();            // D x K
@@ -410,6 +416,8 @@ aggregate_col(const OPTIONS &options)
                 out_mean.col(s_obs) = _sum.col(k) / _denom_k;
                 out_mu.col(s_obs) = _mu.col(k);
                 out_mu_sd.col(s_obs) = _mu_sd.col(k);
+                out_ln_mu.col(s_obs) = _ln_mu.col(k);
+                out_ln_mu_sd.col(s_obs) = _ln_mu_sd.col(k);
             }
             ++s_obs;
         }
@@ -425,6 +433,8 @@ aggregate_col(const OPTIONS &options)
     write_vector_file(output + ".mu_cols.gz", out_col);
     write_vector_file(output + ".rho.gz", std_vector(out_rho));
 
+    write_data_file(output + ".ln_mu.gz", out_ln_mu);
+    write_data_file(output + ".ln_mu_sd.gz", out_ln_mu_sd);
     write_data_file(output + ".mu.gz", out_mu);
     write_data_file(output + ".mu_sd.gz", out_mu_sd);
     write_data_file(output + ".mean.gz", out_mean);
