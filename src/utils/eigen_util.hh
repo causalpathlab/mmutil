@@ -598,6 +598,40 @@ struct is_obs_op {
 };
 
 template <typename T>
+struct is_positive_op {
+    using Scalar = typename T::Scalar;
+    const Scalar operator()(const Scalar &x) const
+    {
+        return (std::isfinite(x) && (x > zero_val)) ? one_val : zero_val;
+    }
+    static constexpr Scalar one_val = 1.0;
+    static constexpr Scalar zero_val = 0.0;
+};
+
+template <typename T>
+struct clamp_op {
+    using Scalar = typename T::Scalar;
+    explicit clamp_op(const Scalar _lb, const Scalar _ub)
+        : lb(_lb)
+        , ub(_ub)
+    {
+        ASSERT(lb < ub, "LB < UB");
+    }
+    const Scalar operator()(const Scalar &x) const
+    {
+        if (x > ub)
+            return ub;
+        if (x < lb)
+            return lb;
+        return x;
+    }
+    const Scalar lb;
+    const Scalar ub;
+    static constexpr Scalar one_val = 1.0;
+    static constexpr Scalar zero_val = 0.0;
+};
+
+template <typename T>
 struct add_pseudo_op {
     using Scalar = typename T::Scalar;
     explicit add_pseudo_op(const Scalar pseudo_val)

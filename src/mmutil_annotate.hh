@@ -728,6 +728,19 @@ fit_annotation(const annotation_options_t &options, LOADER &data_loader)
     Mat bias_mean = bias.mean();
     Mat bias_sd = bias.var().cwiseSqrt();
 
+    ///////////////////////////////////////////////////
+    // Give contexts to annotation type-specific way //
+    ///////////////////////////////////////////////////
+
+    Mat C = Mat::Zero(M, num_annot);
+
+    is_positive_op<Mat> _obs;
+
+    for (Index a = 0; a < num_annot; ++a) {
+        annotation_stat_t &stat = *stat_vector.at(a).get();
+        C.col(a) = (stat.L * Mat::Ones(stat.L.cols(), 1)).unaryExpr(_obs);
+    }
+
     ///////////////////////////////
     // Initial greedy assignment //
     ///////////////////////////////
@@ -738,7 +751,7 @@ fit_annotation(const annotation_options_t &options, LOADER &data_loader)
     Scalar score_init = 0;
 
     auto initialization = [&](bool be_greedy = true) {
-        Vec xj;
+        Vec xj(M), xja(M);
 
         for (Index lb = 0; lb < N; lb += batch_size) {
             const Index ub = std::min(N, batch_size + lb);
@@ -766,7 +779,9 @@ fit_annotation(const annotation_options_t &options, LOADER &data_loader)
                 if (be_greedy) {
                     for (Index a = 0; a < num_annot; ++a) {
                         annotation_model_t &annot = *model_vector.at(a).get();
-                        sj += annot.log_score(xj);
+                        xja = xj.cwiseProduct(C.col(a));
+                        normalize_columns(xja);
+                        sj += annot.log_score(xja);
                     }
                 }
 
@@ -776,17 +791,17 @@ fit_annotation(const annotation_options_t &options, LOADER &data_loader)
                 if (xx.col(j).sum() > 0) {
                     for (Index a = 0; a < num_annot; ++a) {
                         annotation_stat_t &stat = *stat_vector.at(a).get();
+                        xja = xj.cwiseProduct(C.col(a));
+                        normalize_columns(xja);
 
                         stat.nsize(k) += 1.0;
 
-                        stat.Stat.col(k) += xj.cwiseProduct(stat.L.col(k));
-
+                        stat.Stat.col(k) += xja.cwiseProduct(stat.L.col(k));
                         stat.Stat_anti.col(k) +=
-                            xj.cwiseProduct(stat.L0.col(k));
+                            xja.cwiseProduct(stat.L0.col(k));
 
-                        stat.unc_stat.col(k) += xj;
-
-                        stat.unc_stat_anti.col(k) += xj;
+                        stat.unc_stat.col(k) += xja;
+                        stat.unc_stat_anti.col(k) += xja;
                     }
 
                     membership[i] = k;
@@ -841,7 +856,7 @@ fit_annotation(const annotation_options_t &options, LOADER &data_loader)
     auto monte_carlo_update = [&]() {
         Scalar score = score_init;
 
-        Vec xj(M);
+        Vec xj(M), xja(M);
 
         for (Index iter = 0; iter < max_em_iter; ++iter) {
             score = 0;
@@ -881,7 +896,9 @@ fit_annotation(const annotation_options_t &options, LOADER &data_loader)
 
                     for (Index a = 0; a < num_annot; ++a) {
                         annotation_model_t &annot = *model_vector.at(a).get();
-                        sj += annot.log_score(xj);
+                        xja = xj.cwiseProduct(C.col(a));
+                        normalize_columns(xja);
+                        sj += annot.log_score(xja);
                     }
 
                     const Index k_now = sampler_k(sj);
@@ -892,24 +909,27 @@ fit_annotation(const annotation_options_t &options, LOADER &data_loader)
                         for (Index a = 0; a < num_annot; ++a) {
                             annotation_stat_t &stat = *stat_vector.at(a).get();
 
+                            xja = xj.cwiseProduct(C.col(a));
+                            normalize_columns(xja);
+
                             stat.nsize(k_prev) -= 1.0;
                             stat.nsize(k_now) += 1.0;
 
                             stat.Stat.col(k_prev) -=
-                                xj.cwiseProduct(stat.L.col(k_prev));
+                                xja.cwiseProduct(stat.L.col(k_prev));
                             stat.Stat.col(k_now) +=
-                                xj.cwiseProduct(stat.L.col(k_now));
+                                xja.cwiseProduct(stat.L.col(k_now));
 
                             stat.Stat_anti.col(k_prev) -=
-                                xj.cwiseProduct(stat.L0.col(k_prev));
+                                xja.cwiseProduct(stat.L0.col(k_prev));
                             stat.Stat_anti.col(k_now) +=
-                                xj.cwiseProduct(stat.L0.col(k_now));
+                                xja.cwiseProduct(stat.L0.col(k_now));
 
-                            stat.unc_stat.col(k_prev) -= xj;
-                            stat.unc_stat.col(k_now) += xj;
+                            stat.unc_stat.col(k_prev) -= xja;
+                            stat.unc_stat.col(k_now) += xja;
 
-                            stat.unc_stat_anti.col(k_prev) -= xj;
-                            stat.unc_stat_anti.col(k_now) += xj;
+                            stat.unc_stat_anti.col(k_prev) -= xja;
+                            stat.unc_stat_anti.col(k_now) += xja;
                         }
 
                         membership[i] = k_now;
@@ -1021,7 +1041,7 @@ fit_annotation(const annotation_options_t &options, LOADER &data_loader)
 
     Pr.setZero();
     Vec sj(K);
-    Vec xj(M);
+    Vec xj(M), xja(M);
 
     for (Index lb = 0; lb < N; lb += batch_size) {
         const Index ub = std::min(N, batch_size + lb);
@@ -1046,7 +1066,9 @@ fit_annotation(const annotation_options_t &options, LOADER &data_loader)
 
             for (Index a = 0; a < num_annot; ++a) {
                 annotation_model_t &annot = *model_vector.at(a).get();
-                sj += annot.log_score(xj);
+                xja = xj.cwiseProduct(C.col(a));
+                normalize_columns(xja);
+                sj += annot.log_score(xja);
             }
 
             normalized_exp(sj, zi);
