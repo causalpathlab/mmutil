@@ -18,37 +18,38 @@ parse_annotation_options(const int argc,     //
     const char *_usage =
         "\n"
         "[Arguments]\n"
-        "--mtx (-m)        : data MTX file\n"
-        "--data (-m)       : data MTX file\n"
+        "--mtx (-m)         : data MTX file\n"
+        "--data (-m)        : data MTX file\n"
         "\n"
-        "--svd_u           : SVD U alternative input (instead of MTX)\n"
-        "--svd_d           : SVD D (X = U D V')\n"
-        "--svd_v           : SVD V (X = U D V')\n"
+        "--svd_u            : SVD U alternative input (instead of MTX)\n"
+        "--svd_d            : SVD D (X = U D V')\n"
+        "--svd_v            : SVD V (X = U D V')\n"
         "\n"
-        "--col (-c)        : data column file\n"
-        "--feature (-f)    : data row file (features)\n"
-        "--row (-f)        : data row file (features)\n"
-        "--ann (-a)        : row annotation file; each line contains a tuple of feature and label\n"
-        "--anti (-A)       : row anti-annotation file; each line contains a tuple of feature and label\n"
-        "--qc (-q)         : row annotation file for Q/C; each line contains a tuple of feature and minimum score\n"
-        "--out (-o)        : Output file header\n"
+        "--col (-c)         : data column file\n"
+        "--feature (-f)     : data row file (features)\n"
+        "--row (-f)         : data row file (features)\n"
+        "--ann (-a)         : row annotation file; each line contains a tuple of feature and label\n"
+        "--anti (-A)        : row anti-annotation file; each line contains a tuple of feature and label\n"
+        "--qc (-q)          : row annotation file for Q/C; each line contains a tuple of feature and minimum score\n"
+        "--out (-o)         : Output file header\n"
         "\n"
-        "--log_scale (-L)  : Data in a log-scale (default: false)\n"
-        "--raw_scale (-R)  : Data in a raw-scale (default: true)\n"
+        "--standardize (-S) : Standardize data (default: false)\n"
+        "--log_scale (-L)   : Data in a log-scale (default: false)\n"
+        "--raw_scale (-R)   : Data in a raw-scale (default: true)\n"
         "\n"
-        "--batch_size (-B) : Batch size (default: 100000)\n"
-        "--kappa_max (-K)  : maximum kappa value (default: 100)\n"
+        "--batch_size (-B)  : Batch size (default: 100000)\n"
+        "--kappa_max (-K)   : maximum kappa value (default: 100)\n"
         "\n"
-        "--em_iter (-i)    : EM iteration (default: 100)\n"
-        "--em_tol (-t)     : EM convergence criterion (default: 1e-4)\n"
+        "--em_iter (-i)     : EM iteration (default: 100)\n"
+        "--em_tol (-t)      : EM convergence criterion (default: 1e-4)\n"
         "\n"
-        "--verbose (-v)    : Set verbose (default: false)\n"
+        "--verbose (-v)     : Set verbose (default: false)\n"
         "\n"
-        "--randomize       : Randomized initialization (default: false)\n"
+        "--randomize        : Randomized initialization (default: false)\n"
         "\n";
 
     const char *const short_opts =
-        "m:U:D:V:c:f:a:A:o:I:B:K:M:LRi:t:hbd:u:r:l:kv0";
+        "m:U:D:V:c:f:a:A:o:I:B:K:M:SLRi:t:hbd:u:r:l:kv0";
 
     const option long_opts[] = {
         { "mtx", required_argument, nullptr, 'm' },        //
@@ -66,6 +67,8 @@ parse_annotation_options(const int argc,     //
         { "anti", required_argument, nullptr, 'A' },       //
         { "qc", required_argument, nullptr, 'q' },         //
         { "out", required_argument, nullptr, 'o' },        //
+        { "standardize", no_argument, nullptr, 'S' },      //
+        { "std", no_argument, nullptr, 'S' },              //
         { "log_scale", no_argument, nullptr, 'L' },        //
         { "raw_scale", no_argument, nullptr, 'R' },        //
         { "batch_size", required_argument, nullptr, 'B' }, //
@@ -140,6 +143,9 @@ parse_annotation_options(const int argc,     //
 
         case 'B':
             options.batch_size = std::stoi(optarg);
+            break;
+        case 'S':
+            options.do_standardize = true;
             break;
         case 'L':
             options.log_scale = true;

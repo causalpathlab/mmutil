@@ -246,6 +246,11 @@ public:
         }
 
         return score;
+
+        // mu_resid.setOnes(); // initialize that there is no diff effect
+        // solve_rho_resid();  // just fix the rho
+        // solve_mu_resid();
+        // return elbo_resid() / denom;
     }
 
     inline Mat residual_mu_DK() { return mu_resid.transpose(); }

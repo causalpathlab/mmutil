@@ -55,6 +55,8 @@ struct cluster_options_t {
         prune_knn = false;
         raw_scale = false;
         log_scale = true;
+        check_index = false;
+
         col_norm = 10000;
 
         row_weight_file = "";
@@ -106,6 +108,7 @@ struct cluster_options_t {
     bool raw_scale;
     bool log_scale;
     Scalar col_norm;
+    bool check_index;
 
     bool do_standardize;
 
@@ -621,6 +624,8 @@ parse_cluster_options(const int argc,     //
         "--dont_std             : Don't Standardize (default: false)\n"
         "--verbose              : Output more words (default: false)\n"
         "\n"
+        "--check_index          : check matrix market index (default: false)\n"
+        "\n"
         // "[Options for DBSCAN]\n"
         // "\n"
         // "--knn (-k)          : K nearest neighbors (default: 10)\n"
@@ -669,7 +674,7 @@ parse_cluster_options(const int argc,     //
     // "https://arxiv.org/abs/1603.09320 See also: "
     // "https://github.com/nmslib/hnswlib";
 
-    const char *const short_opts = "M:d:c:k:e:K:I:v:V:T:u:LR"
+    const char *const short_opts = "M:d:c:k:e:K:I:v:V:T:u:LRE"
                                    "r:l:m:f:z:t:o:w:C:n:DPOih"
                                    "S:B:N:10";
 
@@ -704,6 +709,7 @@ parse_cluster_options(const int argc,     //
         { "verbose", no_argument, nullptr, 'O' },               //
         { "log_scale", no_argument, nullptr, 'L' },             //
         { "raw_scale", no_argument, nullptr, 'R' },             //
+        { "check_index", no_argument, nullptr, 'E' },           //
         { "initial_sample", required_argument, nullptr, 'S' },  //
         { "block_size", required_argument, nullptr, 'B' },      //
         { "sampling_method", required_argument, nullptr, 'N' }, //
@@ -740,6 +746,9 @@ parse_cluster_options(const int argc,     //
             break;
         case 'K':
             options.K = std::stoi(optarg);
+            break;
+        case 'E':
+            options.check_index = true;
             break;
         case 'I':
             options.burnin_iter = std::stoi(optarg);

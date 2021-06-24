@@ -103,7 +103,7 @@ struct annotation_model_t {
         mu = Stat * nn.cwiseInverse().asDiagonal();
         normalize_columns(mu);
 
-        mu_anti = -Stat_anti * nn.cwiseInverse().asDiagonal();
+        mu_anti = Stat_anti * nn.cwiseInverse().asDiagonal();
         normalize_columns(mu_anti);
         // update_log_normalizer();
     }
@@ -153,8 +153,8 @@ struct annotation_model_t {
     const Index nmarker;
     const Index ntype;
 
-    Mat mu;             // refined marker x type matrix
-    Mat mu_anti;        // permuted marker x type matrix
+    Mat mu;             // marker x type matrix
+    Mat mu_anti;        // anti marker x type matrix
     Vec log_normalizer; // log-normalizer
     Vec score;          // temporary score
     Vec nn;             // number of samples
@@ -175,11 +175,16 @@ struct annotation_stat_t {
         , K(L.cols())
         , Stat(M, K)
         , Stat_anti(M, K)
+        , unc_stat(M, K)
+        , unc_stat_anti(M, K)
         , nsize(K)
     {
         nsize.setConstant(pseudo);     //
         Stat.setConstant(pseudo);      // sum x(g,j) * z(j, k)
         Stat_anti.setConstant(pseudo); // sum x0(g,j) * z(j, k)
+
+        unc_stat.setConstant(pseudo);      // sum x(g,j) * z(j, k)
+        unc_stat_anti.setConstant(pseudo); // sum x0(g,j) * z(j, k)
     }
 
     void squeeze(const std::vector<Index> &subrow)
@@ -190,6 +195,9 @@ struct annotation_stat_t {
 
         Stat = row_sub(Stat, subrow);
         Stat_anti = row_sub(Stat_anti, subrow);
+
+        unc_stat = row_sub(unc_stat, subrow);
+        unc_stat_anti = row_sub(unc_stat_anti, subrow);
         M = L.rows();
     }
 
@@ -201,6 +209,10 @@ struct annotation_stat_t {
 
     Mat Stat;
     Mat Stat_anti;
+
+    Mat unc_stat;
+    Mat unc_stat_anti;
+
     Vec nsize;
     static constexpr Scalar pseudo = 1e-8;
 };
@@ -232,6 +244,7 @@ struct annotation_options_t {
 
         verbose = false;
         randomize_init = false;
+        do_standardize = false;
     }
 
     Str mtx;
@@ -256,6 +269,7 @@ struct annotation_options_t {
     bool verbose;
     Scalar kappa_max;
     bool randomize_init;
+    bool do_standardize;
 };
 
 struct mm_data_loader_t {
@@ -694,15 +708,38 @@ fit_annotation(const annotation_options_t &options, LOADER &data_loader)
         }
     }
 
+    //////////////////////////////////////////
+    // standardization mean and inverse std //
+    //////////////////////////////////////////
+
+    ASSERT(subrow.size() == M, "subrow and rows(M) disagree");
+
+    running_stat_t<Mat> bias(M, 1);
+
+    for (Index lb = 0; lb < N; lb += batch_size) {
+        const Index ub = std::min(N, batch_size + lb);
+
+        Mat xx = data_loader(lb, ub, subrow);
+        for (Index j = 0; j < xx.cols(); ++j) {
+            bias(xx.col(j));
+        }
+    }
+
+    Mat bias_mean = bias.mean();
+    Mat bias_sd = bias.var().cwiseSqrt();
+
     ///////////////////////////////
     // Initial greedy assignment //
     ///////////////////////////////
+
     std::vector<Index> membership(N);
     std::fill(membership.begin(), membership.end(), -1);
 
     Scalar score_init = 0;
 
     auto initialization = [&](bool be_greedy = true) {
+        Vec xj;
+
         for (Index lb = 0; lb < N; lb += batch_size) {
             const Index ub = std::min(N, batch_size + lb);
 
@@ -719,10 +756,17 @@ fit_annotation(const annotation_options_t &options, LOADER &data_loader)
 
                 sj.setZero();
 
+                if (options.do_standardize) {
+                    xj = xx.col(j) - bias_mean;
+                    xj /= xj.norm();
+                } else {
+                    xj = xx.col(j);
+                }
+
                 if (be_greedy) {
                     for (Index a = 0; a < num_annot; ++a) {
                         annotation_model_t &annot = *model_vector.at(a).get();
-                        sj += annot.log_score(xx.col(j));
+                        sj += annot.log_score(xj);
                     }
                 }
 
@@ -734,10 +778,15 @@ fit_annotation(const annotation_options_t &options, LOADER &data_loader)
                         annotation_stat_t &stat = *stat_vector.at(a).get();
 
                         stat.nsize(k) += 1.0;
-                        stat.Stat.col(k) +=
-                            xx.col(j).cwiseProduct(stat.L.col(k));
+
+                        stat.Stat.col(k) += xj.cwiseProduct(stat.L.col(k));
+
                         stat.Stat_anti.col(k) +=
-                            xx.col(j).cwiseProduct(stat.L0.col(k));
+                            xj.cwiseProduct(stat.L0.col(k));
+
+                        stat.unc_stat.col(k) += xj;
+
+                        stat.unc_stat_anti.col(k) += xj;
                     }
 
                     membership[i] = k;
@@ -792,6 +841,8 @@ fit_annotation(const annotation_options_t &options, LOADER &data_loader)
     auto monte_carlo_update = [&]() {
         Scalar score = score_init;
 
+        Vec xj(M);
+
         for (Index iter = 0; iter < max_em_iter; ++iter) {
             score = 0;
 
@@ -821,10 +872,16 @@ fit_annotation(const annotation_options_t &options, LOADER &data_loader)
                     const Index k_prev = membership[i];
 
                     sj.setZero();
+                    if (options.do_standardize) {
+                        xj = xx.col(j) - bias_mean;
+                        xj /= xj.norm();
+                    } else {
+                        xj = xx.col(j);
+                    }
 
                     for (Index a = 0; a < num_annot; ++a) {
                         annotation_model_t &annot = *model_vector.at(a).get();
-                        sj += annot.log_score(xx.col(j));
+                        sj += annot.log_score(xj);
                     }
 
                     const Index k_now = sampler_k(sj);
@@ -839,14 +896,20 @@ fit_annotation(const annotation_options_t &options, LOADER &data_loader)
                             stat.nsize(k_now) += 1.0;
 
                             stat.Stat.col(k_prev) -=
-                                xx.col(j).cwiseProduct(stat.L.col(k_prev));
+                                xj.cwiseProduct(stat.L.col(k_prev));
                             stat.Stat.col(k_now) +=
-                                xx.col(j).cwiseProduct(stat.L.col(k_now));
+                                xj.cwiseProduct(stat.L.col(k_now));
 
                             stat.Stat_anti.col(k_prev) -=
-                                xx.col(j).cwiseProduct(stat.L0.col(k_prev));
+                                xj.cwiseProduct(stat.L0.col(k_prev));
                             stat.Stat_anti.col(k_now) +=
-                                xx.col(j).cwiseProduct(stat.L0.col(k_now));
+                                xj.cwiseProduct(stat.L0.col(k_now));
+
+                            stat.unc_stat.col(k_prev) -= xj;
+                            stat.unc_stat.col(k_now) += xj;
+
+                            stat.unc_stat_anti.col(k_prev) -= xj;
+                            stat.unc_stat_anti.col(k_now) += xj;
                         }
 
                         membership[i] = k_now;
@@ -918,13 +981,29 @@ fit_annotation(const annotation_options_t &options, LOADER &data_loader)
     write_vector_file(options.out + ".em_scores.gz", em_score_out);
 
     for (Index a = 0; a < num_annot; ++a) {
+
         annotation_model_t &annot = *model_vector.at(a).get();
-        write_data_file(options.out + ".marker_" + std::to_string(a) +
-                            "_profile.gz",
-                        annot.mu);
-        write_data_file(options.out + ".marker_" + std::to_string(a) +
-                            "_profile_anti.gz",
-                        annot.mu_anti);
+        annotation_stat_t &stat = *stat_vector.at(a).get();
+
+        //////////////////////////
+        // constrained profiles //
+        //////////////////////////
+
+        const std::string hdr = options.out + ".marker_" + std::to_string(a);
+
+        write_data_file(hdr + "_profile.gz", annot.mu);
+        write_data_file(hdr + "_profile_anti.gz", annot.mu_anti);
+
+        ////////////////////////////
+        // unconstrained profiles //
+        ////////////////////////////
+
+        Mat mu = stat.unc_stat * stat.nsize.cwiseInverse().asDiagonal();
+        Mat mu_anti =
+            stat.unc_stat_anti * stat.nsize.cwiseInverse().asDiagonal();
+
+        write_data_file(hdr + "_unc.gz", mu);
+        write_data_file(hdr + "_unc_anti.gz", mu_anti);
     }
 
     //////////////////////////////////////////////
@@ -942,6 +1021,7 @@ fit_annotation(const annotation_options_t &options, LOADER &data_loader)
 
     Pr.setZero();
     Vec sj(K);
+    Vec xj(M);
 
     for (Index lb = 0; lb < N; lb += batch_size) {
         const Index ub = std::min(N, batch_size + lb);
@@ -957,9 +1037,16 @@ fit_annotation(const annotation_options_t &options, LOADER &data_loader)
 
             sj.setZero();
 
+            if (options.do_standardize) {
+                xj = xx.col(j) - bias_mean;
+                xj /= xj.norm();
+            } else {
+                xj = xx.col(j);
+            }
+
             for (Index a = 0; a < num_annot; ++a) {
                 annotation_model_t &annot = *model_vector.at(a).get();
-                sj += annot.log_score(xx.col(j));
+                sj += annot.log_score(xj);
             }
 
             normalized_exp(sj, zi);

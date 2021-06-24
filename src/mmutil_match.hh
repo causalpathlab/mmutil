@@ -36,6 +36,7 @@ struct match_options_t {
         col_norm = 10000;
 
         prune_knn = false;
+        check_index = false;
         raw_scale = false;
         log_scale = true;
         row_weight_file = "";
@@ -63,6 +64,7 @@ struct match_options_t {
     Index lu_iter;
     Scalar col_norm;
 
+    bool check_index;
     bool prune_knn;
     bool raw_scale;
     bool log_scale;
@@ -644,6 +646,8 @@ parse_match_options(const int argc,     //
         "--prune_knn (-P)      : prune kNN graph (reciprocal match)\n"
         "--out (-o)            : Output file name\n"
         "\n"
+        "--check_index          : check matrix market index (default: false)\n"
+        "\n"
         "[Arguments for spectral matching]\n"
         "--tau (-u)            : Regularization parameter (default: tau = 1)\n"
         "--rank (-r)           : The maximal rank of SVD (default: rank = 50)\n"
@@ -680,7 +684,7 @@ parse_match_options(const int argc,     //
         "https://github.com/nmslib/hnswlib\n"
         "\n";
 
-    const char *const short_opts = "s:c:t:g:k:m:f:o:u:r:l:w:C:S:B:PLRM:h";
+    const char *const short_opts = "s:c:t:g:k:m:f:o:u:r:l:w:C:S:B:PILRM:h";
 
     const option long_opts[] = {
         { "src_mtx", required_argument, nullptr, 's' },         //
@@ -697,6 +701,7 @@ parse_match_options(const int argc,     //
         { "row_weight", required_argument, nullptr, 'w' },      //
         { "col_norm", required_argument, nullptr, 'C' },        //
         { "prune_knn", no_argument, nullptr, 'P' },             //
+        { "check_index", no_argument, nullptr, 'I' },           //
         { "log_scale", no_argument, nullptr, 'L' },             //
         { "raw_scale", no_argument, nullptr, 'R' },             //
         { "initial_sample", required_argument, nullptr, 'S' },  //
@@ -764,6 +769,9 @@ parse_match_options(const int argc,     //
             break;
         case 'B':
             options.block_size = std::stoi(optarg);
+            break;
+        case 'I':
+            options.check_index = true;
             break;
         case 'L':
             options.log_scale = true;

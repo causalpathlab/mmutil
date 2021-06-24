@@ -61,6 +61,7 @@ struct cfa_options_t {
         nthreads = 8;
 
         do_internal = false;
+        check_index = false;
 
         // svd_u_file = "";
         // svd_d_file = "";
@@ -85,6 +86,7 @@ struct cfa_options_t {
 
     bool raw_scale;
     bool log_scale;
+    bool check_index;
 
     Scalar tau;
     Index rank;
@@ -144,6 +146,7 @@ struct cfa_data_t {
         , glm_iter(options.glm_iter)
         , knn(options.knn)
         , impute_knn(options.impute_knn)
+        , do_check_index(options.check_index)
         , param_bilink(options.bilink)
         , param_nnlist(options.nlist)
         , n_threads(options.nthreads)
@@ -283,6 +286,7 @@ public: // const names
 private:
     std::size_t knn;
     bool impute_knn;
+    bool do_check_index;
     std::size_t param_bilink;
     std::size_t param_nnlist;
     Index n_threads;
@@ -557,7 +561,8 @@ cfa_data_t::init()
 
     CHECK(read_mmutil_index(idx_file, mtx_idx_tab));
 
-    CHECK(check_index_tab(mtx_file, mtx_idx_tab));
+    if (do_check_index)
+        CHECK(check_index_tab(mtx_file, mtx_idx_tab));
 
     mm_info_reader_t info;
     CHECK(mmutil::bgzf::peek_bgzf_header(mtx_file, info));
@@ -1088,6 +1093,7 @@ parse_cfa_options(const int argc,     //
         "--glm_iter                  : Maximum number of iterations for GLM fitting (default: 100)\n"
         "\n"
         "--do_internal               : Calibration of the baseline by internal matching (default: false)\n"
+        "--check_index               : Check matrix market index (default: false)\n"
         "\n"
         "[Matching options]\n"
         "\n"
@@ -1144,7 +1150,7 @@ parse_cfa_options(const int argc,     //
         "\n";
 
     const char *const short_opts =
-        "m:V:c:a:A:i:l:t:o:LRS:r:u:w:g:G:BDPC:k:B:T:E:b:n:hzvIN0:1:p:e:g:";
+        "m:V:c:a:A:i:l:t:o:HLRS:r:u:w:g:G:BDPC:k:B:T:E:b:n:hzvIN0:1:p:e:g:";
 
     const option long_opts[] = {
         { "mtx", required_argument, nullptr, 'm' },        //
@@ -1160,6 +1166,7 @@ parse_cfa_options(const int argc,     //
         { "lab", required_argument, nullptr, 'l' },        //
         { "label", required_argument, nullptr, 'l' },      //
         { "out", required_argument, nullptr, 'o' },        //
+        { "check_index", no_argument, nullptr, 'H' },      //
         { "log_scale", no_argument, nullptr, 'L' },        //
         { "raw_scale", no_argument, nullptr, 'R' },        //
         { "block_size", required_argument, nullptr, 'S' }, //
@@ -1244,6 +1251,10 @@ parse_cfa_options(const int argc,     //
 
         case 'k':
             options.knn = std::stoi(optarg);
+            break;
+
+        case 'H':
+            options.check_index = true;
             break;
 
         case 'L':

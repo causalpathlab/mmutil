@@ -41,6 +41,8 @@ struct bbknn_options_t {
         bilink = 5; // 2 ~ 100 (bi-directional link per element)
         nlist = 51; // knn ~ N (nearest neighbour)
 
+        check_index = false;
+
         raw_scale = true;
         log_scale = false;
 
@@ -59,6 +61,7 @@ struct bbknn_options_t {
     // SVD and matching
     Str row_weight_file;
 
+    bool check_index;
     bool raw_scale;
     bool log_scale;
 
@@ -116,6 +119,7 @@ parse_bbknn_options(const int argc, const char *argv[], OPTIONS &options)
         "--row_weight (-w)       : Feature re-weighting (default: none)\n"
         "--col_norm (-C)         : Column normalization (default: 10000)\n"
         "\n"
+        "--check_index           : Check matrix market index (default: false)\n"
         "--log_scale (-L)        : Data in a log-scale (default: false)\n"
         "--raw_scale (-R)        : Data in a raw-scale (default: true)\n"
         "\n"
@@ -156,7 +160,7 @@ parse_bbknn_options(const int argc, const char *argv[], OPTIONS &options)
         "https://github.com/nmslib/hnswlib\n"
         "\n";
 
-    const char *const short_opts = "m:c:t:o:LRB:r:u:w:C:k:b:n:G:A:U:hv";
+    const char *const short_opts = "m:c:t:o:ILRB:r:u:w:C:k:b:n:G:A:U:hv";
 
     const option long_opts[] = {
         { "mtx", required_argument, nullptr, 'm' },        //
@@ -166,6 +170,7 @@ parse_bbknn_options(const int argc, const char *argv[], OPTIONS &options)
         { "out", required_argument, nullptr, 'o' },        //
         { "log_scale", no_argument, nullptr, 'L' },        //
         { "raw_scale", no_argument, nullptr, 'R' },        //
+        { "check_index", no_argument, nullptr, 'I' },      //
         { "block_size", required_argument, nullptr, 'B' }, //
         { "rank", required_argument, nullptr, 'r' },       //
         { "lu_iter", required_argument, nullptr, 'u' },    //
@@ -224,6 +229,10 @@ parse_bbknn_options(const int argc, const char *argv[], OPTIONS &options)
 
         case 'k':
             options.knn = std::stoi(optarg);
+            break;
+
+        case 'I':
+            options.check_index = true;
             break;
 
         case 'L':
@@ -484,6 +493,8 @@ build_bbknn(const OPTIONS &options)
         }
     }
 
+    TLOG("Built the dictionaries for fast look-ups");
+
     ///////////////////////////////////////////////////
     // step 1: build mutual kNN graph across batches //
     ///////////////////////////////////////////////////
@@ -536,6 +547,8 @@ build_bbknn(const OPTIONS &options)
         std::vector<Scalar> weights_j(options.knn);
         std::vector<Index> neigh_j(options.knn);
 
+        progress_bar_t<Index> prog(B.outerSize(), 1e2);
+
         for (Index j = 0; j < B.outerSize(); ++j) {
 
             Index deg_j = 0;
@@ -556,11 +569,17 @@ build_bbknn(const OPTIONS &options)
 
                 knn_index.emplace_back(j, k, w);
             }
+
+            prog.update();
+            prog(std::cerr);
         }
     }
 
-    SpMat W = build_eigen_sparse(knn_index, Nsample, Nsample);
     TLOG("Adjusted kNN weights");
+
+    SpMat W = build_eigen_sparse(knn_index, Nsample, Nsample);
+
+    TLOG("A weighted adjacency matrix W");
 
     ////////////////////////////////////
     // step3: adjusting spectral data //
