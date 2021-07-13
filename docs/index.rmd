@@ -1,0 +1,140 @@
+---
+title: "Lightweight single-cell data analysis by Matrix Market Utility"
+author: "Yongjin Park"
+---
+
+[Matrix Market Utility](https://github.com/ypark/mmutil)
+
+# Installation
+
+* Try `configure --help` to figure out appropriate options in your system.
+
+* `make` and `make install` will install binary files
+
+* `pip3 install -e .` will install Python API (experimental)
+
+* `Rcpp` interface will be made available soon.
+
+# Binary utility programs
+
+* `mmutil_aggregate_col`:
+
+```{sh}
+mmutil_aggregate_col -h || exit 0
+```
+
+* `mmutil_annotate_col`:
+
+```{sh}
+mmutil_annotate_col -h || exit 0
+```
+
+* `mmutil_bbknn`:
+
+```{sh}
+mmutil_bbknn -h || exit 0
+```
+
+* `mmutil_cfa_col`:
+
+```{sh}
+mmutil_cfa_col -h || exit 0
+```
+
+* `mmutil_col_score`:
+
+```{sh}
+mmutil_col_score -h || exit 0
+```
+
+* `mmutil_diff`:
+
+```{sh}
+mmutil_diff -h || exit 0
+```
+
+* `mmutil_embed_annot`:
+
+```{sh}
+mmutil_embed_annot -h || exit 0
+```
+
+* `mmutil_filter_col`:
+
+```{sh}
+mmutil_filter_col -h || exit 0
+```
+
+* `mmutil_filter_row`:
+
+```{sh}
+mmutil_filter_row -h || exit 0
+```
+
+* `mmutil_histogram`:
+
+```{sh}
+mmutil_histogram -h || exit 0
+```
+
+* `mmutil_index_col`:
+
+```{sh}
+mmutil_index_col -h || exit 0
+```
+
+* `mmutil_match_col`:
+
+```{sh}
+mmutil_match_col -h || exit 0
+```
+
+* `mmutil_merge_col`:
+
+```{sh}
+mmutil_merge_col -h || exit 0
+```
+
+* `mmutil_row_score`:
+
+```{sh}
+mmutil_row_score -h || exit 0
+```
+
+* `mmutil_select_col`:
+
+```{sh}
+mmutil_select_col -h || exit 0
+```
+
+* `mmutil_select_row`:
+
+```{sh}
+mmutil_select_row -h || exit 0
+```
+
+* `mmutil_simulate`:
+
+```{sh}
+mmutil_simulate -h || exit 0
+```
+
+* `mmutil_spectral_cluster_col`:
+
+```{sh}
+mmutil_spectral_cluster_col -h || exit 0
+```
+
+* `mmutil_spectral_col`:
+
+```{sh}
+mmutil_spectral_col -h || exit 0
+```
+
+* `mmutil_spectral_match_col`:
+
+```{sh}
+mmutil_spectral_match_col -h || exit 0
+```
+
+
