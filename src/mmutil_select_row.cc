@@ -2,7 +2,6 @@
 #include <functional>
 #include <string>
 #include <unordered_set>
-#include <filesystem>
 
 #include "mmutil_select.hh"
 #include "mmutil_filter_col.hh"
@@ -62,13 +61,16 @@ main(const int argc, const char *argv[])
     if (file_exists(out_row_file)) {
         std::string temp_row_file = output + ".rows.gz-backup";
         WLOG("Remove existing output row file: " << out_row_file);
-        std::filesystem::copy(out_row_file.c_str(), temp_row_file.c_str());
-        std::remove(out_row_file.c_str());
+        copy_file(out_row_file, temp_row_file);
+        remove_file(out_row_file);
+        // std::filesystem::copy(out_row_file.c_str(), temp_row_file.c_str());
+        // std::remove(out_row_file.c_str());
     }
 
     {
         std::string temp_row_file = output + "-temp.rows.gz";
-        std::filesystem::rename(temp_row_file.c_str(), out_row_file.c_str());
+        rename_file(temp_row_file, out_row_file);
+        // std::filesystem::rename(temp_row_file.c_str(), out_row_file.c_str());
     }
 
     return EXIT_SUCCESS;

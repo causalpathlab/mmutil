@@ -30,8 +30,17 @@
 #include "utils/progress.hh"
 #include "utils/strbuf.hh"
 #include "utils/bgzstream.hh"
+
+#ifdef __cplusplus
+extern "C" {
+#endif
+
 #include "ext/tabix/bgzf.h"
 #include "ext/tabix/kstring.h"
+
+#ifdef __cplusplus
+}
+#endif
 
 #ifndef MMUTIL_PYTHON_HH_
 #define MMUTIL_PYTHON_HH_

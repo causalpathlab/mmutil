@@ -7,7 +7,16 @@
 #include <zlib.h>
 #include <cstring>
 #include <iostream>
+#ifdef __cplusplus
+extern "C" {
+#endif
+
 #include "ext/tabix/bgzf.h"
+#include "ext/tabix/kstring.h"
+
+#ifdef __cplusplus
+}
+#endif
 
 #ifndef BGZ_STREAM_HH_
 #define BGZ_STREAM_HH_

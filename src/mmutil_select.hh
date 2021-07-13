@@ -4,7 +4,16 @@
 #include "mmutil_util.hh"
 #include "mmutil_index.hh"
 #include "mmutil_io.hh"
+#ifdef __cplusplus
+extern "C" {
+#endif
+
 #include "ext/tabix/bgzf.h"
+#include "ext/tabix/kstring.h"
+
+#ifdef __cplusplus
+}
+#endif
 
 #ifndef MMUTIL_SELECT_HH_
 #define MMUTIL_SELECT_HH_

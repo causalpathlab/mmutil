@@ -1,7 +1,17 @@
 #include "io.hh"
 #include "mmutil.hh"
 #include "mmutil_bgzf_util.hh"
+
+#ifdef __cplusplus
+extern "C" {
+#endif
+
 #include "ext/tabix/bgzf.h"
+#include "ext/tabix/kstring.h"
+
+#ifdef __cplusplus
+}
+#endif
 
 #include <unordered_map>
 

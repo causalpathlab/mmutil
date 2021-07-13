@@ -3,8 +3,9 @@
 #include <cctype>
 #include <eigen3/Eigen/Core>
 #include <eigen3/Eigen/Sparse>
-// #include <filesystem> c++17
+
 #include <fstream>
+#include <cstdio>
 #include <iomanip>
 #include <iostream>
 #include <memory>
@@ -20,7 +21,17 @@
 #include "utils/strbuf.hh"
 #include "utils/tuple_util.hh"
 #include "utils/util.hh"
+
+#ifdef __cplusplus
+extern "C" {
+#endif
+
 #include "ext/tabix/bgzf.h"
+#include "ext/tabix/kstring.h"
+
+#ifdef __cplusplus
+}
+#endif
 
 #ifndef UTIL_IO_HH_
 #define UTIL_IO_HH_
@@ -47,6 +58,26 @@ all_files_exist(std::vector<std::string> filenames)
         TLOG(std::left << std::setw(10) << "Found: " << std::setw(30) << f);
     }
     return ret;
+}
+
+void
+copy_file(const std::string _src, const std::string _dst)
+{
+    std::ifstream src(_src.c_str(), std::ios::binary);
+    std::ofstream dst(_dst.c_str(), std::ios::binary);
+    dst << src.rdbuf();
+}
+
+void
+remove_file(const std::string _file)
+{
+    std::remove(_file.c_str());
+}
+
+void
+rename_file(const std::string _src, const std::string _dst)
+{
+    std::rename(_src.c_str(), _dst.c_str());
 }
 
 /////////////////////////////////
@@ -510,7 +541,7 @@ template <typename T>
 auto
 read_data_file(const std::string filename)
 {
-    typename std::shared_ptr<T> ret(new T {});
+    typename std::shared_ptr<T> ret(new T{});
     auto &in = *ret.get();
 
     if (is_file_gz(filename)) {

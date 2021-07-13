@@ -10,7 +10,16 @@
 #include "mmutil_index.hh"
 #include "mmutil_bgzf_util.hh"
 #include "mmutil_util.hh"
+#ifdef __cplusplus
+extern "C" {
+#endif
+
 #include "ext/tabix/bgzf.h"
+#include "ext/tabix/kstring.h"
+
+#ifdef __cplusplus
+}
+#endif
 
 #ifndef MMUTIL_SPECTRAL_HH_
 #define MMUTIL_SPECTRAL_HH_

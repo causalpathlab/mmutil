@@ -2,7 +2,16 @@
 #include "mmutil.hh"
 #include "mmutil_bgzf_util.hh"
 #include "mmutil_index.hh"
+#ifdef __cplusplus
+extern "C" {
+#endif
+
 #include "ext/tabix/bgzf.h"
+#include "ext/tabix/kstring.h"
+
+#ifdef __cplusplus
+}
+#endif
 
 #include <unordered_map>
 
@@ -263,7 +272,7 @@ find_consecutive_blocks(const std::vector<Index> &index_tab,
             ub_mem = index_tab[ub];
         }
 
-        ret.emplace_back(memory_block_t { lb, lb_mem, ub, ub_mem });
+        ret.emplace_back(memory_block_t{ lb, lb_mem, ub, ub_mem });
     }
 
     return ret;

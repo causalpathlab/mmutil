@@ -4,8 +4,17 @@
 
 #include "io.hh"
 #include "mmutil.hh"
+
+#ifdef __cplusplus
+extern "C" {
+#endif
+
 #include "ext/tabix/bgzf.h"
 #include "ext/tabix/kstring.h"
+
+#ifdef __cplusplus
+}
+#endif
 
 #ifndef MMUTIL_BGZF_UTIL_HH_
 #define MMUTIL_BGZF_UTIL_HH_
