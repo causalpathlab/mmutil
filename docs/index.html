@@ -379,6 +379,8 @@ pre code {
 </div>
 <div id="binary-utility-programs" class="section level1">
 <h1>Binary utility programs</h1>
+<div id="data-manipulation" class="section level2">
+<h2>Data manipulation</h2>
 <ul>
 <li><code>mmutil_aggregate_col</code>:</li>
 </ul>
@@ -407,6 +409,97 @@ pre code {
 ## ${out}.mu.gz         : (M x n) Depth-adjusted Mean matrix
 ## ${out}.mu_sd.gz      : (M x n) SD of the depth-adjusted mean
 ## ${out}.mu_cols.gz    : (n x 1) Column names</code></pre>
+<ul>
+<li><code>mmutil_filter_col</code>:</li>
+</ul>
+<pre class="sh"><code>mmutil_filter_col || exit 0</code></pre>
+<pre><code>## Filter in informative samples to reduce computational cost
+## 
+## mmutil_filter_col THRESHOLD MTX COLUMN OUTPUT
+## 
+## [Arguments]
+## THRESHOLD: Minimum required number of non-zero elements in each column
+## MTX:       Input matrix market file
+## COLUMN:    Input column name file
+## OUTPUT:    Output file header</code></pre>
+<ul>
+<li><code>mmutil_filter_row</code>:</li>
+</ul>
+<pre class="sh"><code>mmutil_filter_row -h || exit 0</code></pre>
+<pre><code>## mmutil_filter_row: invalid option -- &#39;h&#39;
+## 
+## [Arguments]
+## --mtx (-m)        : data MTX file (M x N)
+## --data (-m)       : data MTX file (M x N)
+## --row (-f)        : row file (M x 1)
+## --feature (-f)    : row file (M x 1)
+## --col (-c)        : data column file (N x 1)
+## --out (-o)        : Output file header
+## 
+## [Options]
+## 
+## --score (-S)      : a type of row scores {NNZ, MEAN, CV}
+## --ntop (-t)       : number of top features
+## --cutoff (-k)     : cutoff of row-wise scores
+## --col_cutoff (-C) : column&#39;s #non-zero cutoff
+## 
+## [Output]
+## ${out}.mtx.gz, ${out}.rows.gz, ${out}.cols.gz</code></pre>
+<ul>
+<li><code>mmutil_merge_col</code>:</li>
+</ul>
+<pre class="sh"><code>mmutil_merge_col || exit 0</code></pre>
+<pre><code>## Merge the columns of sparse matrices matching rows
+## 
+## mmutil_merge_col global_row count_threshold output
+##  { mtx[1] row[1] column[1] mtx[2] row[2] column[2] ... }
+## 
+## global_row      : A file that contains the names of rows.
+## count_threshold : The minimum number of non-zero elements per column
+## output          : Header string for the output fileset.
+## mtx[i]          : i-th matrix market format file
+## row[i]          : i-th row file
+## column[i]       : i-th column file</code></pre>
+<ul>
+<li><code>mmutil_select_col</code>:</li>
+</ul>
+<pre class="sh"><code>mmutil_select_col || exit 0</code></pre>
+<pre><code>## Select a subset of columns
+## 
+## mmutil_select_col MTX COLUMN SELECTED OUTPUT
+## 
+## [Arguments]
+## MTX:       [Input] Matrix market file
+## COLUMN:    [Input] Column name file
+## SELECTED:  [Input] Column names to be selected
+## OUTPUT:    [Output] File header</code></pre>
+<ul>
+<li><code>mmutil_select_row</code>:</li>
+</ul>
+<pre class="sh"><code>mmutil_select_row -h || exit 0</code></pre>
+<pre><code>## Select a subset of rows
+## 
+## mmutil_select_row MTX ROW COL SELECTED OUTPUT
+## 
+## [Arguments]
+## MTX:       [Input] Matrix market file
+## ROW:       [Input] Row name file
+## COL:       [Input] Column name file
+## SELECTED:  [Input] Row names to be selected
+## OUTPUT:    [Output] File header</code></pre>
+</div>
+<div id="column-indexing-for-fast-look-up" class="section level2">
+<h2>Column indexing for fast look-up</h2>
+<ul>
+<li><code>mmutil_index_col</code>:</li>
+</ul>
+<pre class="sh"><code>mmutil_index_col || exit 0</code></pre>
+<pre><code>## mmutil_index_col MTX [INDEX]
+## MTX   : Matrix market file (block-gzipped)
+## INDEX : Index file (default: ${MTX}.index)</code></pre>
+</div>
+<div id="cell-type-column-annotation" class="section level2">
+<h2>Cell type (column) annotation</h2>
 <ul>
 <li><code>mmutil_annotate_col</code>:</li>
 </ul>
@@ -441,6 +534,9 @@ pre code {
 ## --verbose (-v)     : Set verbose (default: false)
 ## 
 ## --randomize        : Randomized initialization (default: false)</code></pre>
+</div>
+<div id="batch-normalization" class="section level2">
+<h2>Batch normalization</h2>
 <ul>
 <li><code>mmutil_bbknn</code>:</li>
 </ul>
@@ -509,6 +605,82 @@ pre code {
 ## 
 ## See also:
 ## https://github.com/nmslib/hnswlib</code></pre>
+</div>
+<div id="basic-clustering" class="section level2">
+<h2>Basic clustering</h2>
+<ul>
+<li><code>mmutil_spectral_cluster_col</code>:</li>
+</ul>
+<pre class="sh"><code>mmutil_spectral_cluster_col -h || exit 0</code></pre>
+<pre><code>## 
+## [Arguments]
+## --data (-d)            : MTX file (data)
+## --mtx (-d)             : MTX file (data)
+## --sdata (-s)           : Spectral feature file (column x factor)
+## --col (-c)             : Column file
+## --tau (-u)             : Regularization parameter (default: 1)
+## --rank (-r)            : The maximal rank of SVD (default: 10)
+## --lu_iter (-l)         : # of LU iterations (default: 3)
+## --out (-o)             : Output file header (default: output)
+## --row_weight (-w)      : Feature re-weighting (default: none)
+## --col_norm (-C)        : Column normalization (default: 10000)
+## --out_data (-D)        : Output clustering data (default: false)
+## --log_scale (-L)       : Data in a log-scale (default: true)
+## --raw_scale (-R)       : Data in a raw-scale (default: false)
+## --initial_sample (-S)  : Nystrom sample size (default: 10000)
+## --block_size (-B)      : Nystrom batch size (default: 10000)
+## --sampling_method (-N) : Nystrom sampling method: UNIFORM (default), CV, MEAN
+## --do_std               : Standardize (default: true)
+## --dont_std             : Don&#39;t Standardize (default: false)
+## --verbose              : Output more words (default: false)
+## 
+## --check_index          : check matrix market index (default: false)
+## 
+## [Options for Gaussian mixture models]
+## 
+## --trunc (-K)           : maximum truncation-level of clustering
+## --burnin (-I)          : burn-in (Gibbs) iterations (default: 10)
+## --min_vbiter (-v)      : minimum VB iterations (default: 5)
+## --max_vbiter (-V)      : maximum VB iterations (default: 100)
+## --convergence (-T)     : epsilon value for checking convergence (default: 1e-8)
+## --kmeanspp (-i)        : Kmeans++ initialization (default: false)
+## 
+## [Details]
+## Qin and Rohe (2013), Regularized Spectral Clustering under Degree-corrected Stochastic Block Model
+## Li, Kwok, Lu (2010), Making Large-Scale Nystrom Approximation Possible</code></pre>
+<ul>
+<li><code>mmutil_spectral_col</code>:</li>
+</ul>
+<pre class="sh"><code>mmutil_spectral_col -h || exit 0</code></pre>
+<pre><code>## 
+## [Arguments]
+## --data (-d)            : MTX file (data)
+## --mtx (-d)             : MTX file (data)
+## --tau (-u)             : Regularization parameter (default: tau = 1)
+## --rank (-r)            : The maximal rank of SVD (default: rank = 50)
+## --iter (-l)            : # of LU iterations (default: iter = 5)
+## --row_weight (-w)      : Feature re-weighting (default: none)
+## --col_norm (-C)        : Column normalization (default: 10000)
+## --rand_seed (-s)       : Random seed (default: 1)
+## --initial_sample (-S)  : Nystrom sample size (default: 10000)
+## --block_size (-B)      : Nystrom batch size (default: 10000)
+## --sampling_method (-M) : Nystrom sampling method: CV (default), UNIFORM, MEAN
+## --log_scale (-L)       : Data in a log-scale (default: true)
+## --raw_scale (-R)       : Data in a raw-scale (default: false)
+## --out (-o)             : Output file name
+## 
+## --verbose (-v)         : verbosity
+## --em_iter (-i)         : EM iterations (default: 0)
+## --em_tol (-t)          : EM convergence (default: 1e-2)
+## 
+## --check_index          : check matrix market index (default: false)
+## 
+## [Details]
+## Qin and Rohe (2013), Regularized Spectral Clustering under Degree-corrected Stochastic Block Model
+## Li, Kwok, Lu (2010), Making Large-Scale Nystrom Approximation Possible</code></pre>
+</div>
+<div id="causal-inference" class="section level2">
+<h2>Causal inference</h2>
 <ul>
 <li><code>mmutil_cfa_col</code>:</li>
 </ul>
@@ -594,10 +766,13 @@ pre code {
 ## 
 ## See also:
 ## https://github.com/nmslib/hnswlib</code></pre>
+</div>
+<div id="basic-statistics" class="section level2">
+<h2>Basic statistics</h2>
 <ul>
 <li><code>mmutil_col_score</code>:</li>
 </ul>
-<pre class="sh"><code>mmutil_col_score -h || exit 0</code></pre>
+<pre class="sh"><code>mmutil_col_score || exit 0</code></pre>
 <pre><code>## Calculate scores for the columns in MTX
 ## 
 ## mmutil_col_score MTX COL OUTPUT
@@ -606,6 +781,45 @@ pre code {
 ## MTX:    Input matrix market file
 ## COL:    Input col name file
 ## OUTPUT: Output file name</code></pre>
+<ul>
+<li><code>mmutil_row_score</code>:</li>
+</ul>
+<pre class="sh"><code>mmutil_row_score || exit 0</code></pre>
+<pre><code>## Calculate scores for the rows in MTX
+## 
+## mmutil_row_score MTX ROW OUTPUT
+## 
+## [Arguments]
+## MTX:    Input matrix market file
+## ROW:    Input row name file
+## OUTPUT: Output file name</code></pre>
+<ul>
+<li><code>mmutil_histogram</code>:</li>
+</ul>
+<pre class="sh"><code>mmutil_histogram || exit 0</code></pre>
+<pre><code>## Take the histogram of MTX
+## 
+## mmutil_histogram MTX OUTPUT
+## 
+## [Arguments]
+## MTX:    Input matrix market file
+## OUTPUT: Output file name (or STDOUT)</code></pre>
+<ul>
+<li><code>mmutil_simulate</code>:</li>
+</ul>
+<pre class="sh"><code>mmutil_simulate -h || exit 0</code></pre>
+<pre><code>## mmutil_simulate: invalid option -- &#39;h&#39;
+## 
+## [Arguments]
+## --mu (-u)     : Depth-adjusted mean matrix (M x n)
+## --rho (-r)    : Column depth file (N x 1)
+## --col (-c)    : Column names
+## --out (-o)    : Output file header
+## 
+## ${out}.mtx.gz : (M x N) sparse matrix file</code></pre>
+</div>
+<div id="miscellaneous" class="section level2">
+<h2>Miscellaneous</h2>
 <ul>
 <li><code>mmutil_diff</code>:</li>
 </ul>
@@ -640,59 +854,9 @@ pre code {
 ## --l2 (-l)               : L2 penalty (default: 1e-4)
 ## --tol (-t)              : Convergence criterion (default: 1e-4)
 ## --verbose (-v)          : Set verbose (default: false)</code></pre>
-<ul>
-<li><code>mmutil_filter_col</code>:</li>
-</ul>
-<pre class="sh"><code>mmutil_filter_col -h || exit 0</code></pre>
-<pre><code>## Filter in informative samples to reduce computational cost
-## 
-## mmutil_filter_col THRESHOLD MTX COLUMN OUTPUT
-## 
-## [Arguments]
-## THRESHOLD: Minimum required number of non-zero elements in each column
-## MTX:       Input matrix market file
-## COLUMN:    Input column name file
-## OUTPUT:    Output file header</code></pre>
-<ul>
-<li><code>mmutil_filter_row</code>:</li>
-</ul>
-<pre class="sh"><code>mmutil_filter_row -h || exit 0</code></pre>
-<pre><code>## mmutil_filter_row: invalid option -- &#39;h&#39;
-## 
-## [Arguments]
-## --mtx (-m)        : data MTX file (M x N)
-## --data (-m)       : data MTX file (M x N)
-## --row (-f)        : row file (M x 1)
-## --feature (-f)    : row file (M x 1)
-## --col (-c)        : data column file (N x 1)
-## --out (-o)        : Output file header
-## 
-## [Options]
-## 
-## --score (-S)      : a type of row scores {NNZ, MEAN, CV}
-## --ntop (-t)       : number of top features
-## --cutoff (-k)     : cutoff of row-wise scores
-## --col_cutoff (-C) : column&#39;s #non-zero cutoff
-## 
-## [Output]
-## ${out}.mtx.gz, ${out}.rows.gz, ${out}.cols.gz</code></pre>
-<ul>
-<li><code>mmutil_histogram</code>:</li>
-</ul>
-<pre class="sh"><code>mmutil_histogram -h || exit 0</code></pre>
-<pre><code>## Take the histogram of MTX
-## 
-## mmutil_histogram MTX OUTPUT
-## 
-## [Arguments]
-## MTX:    Input matrix market file
-## OUTPUT: Output file name (or STDOUT)</code></pre>
-<ul>
-<li><code>mmutil_index_col</code>:</li>
-</ul>
-<pre class="sh"><code>mmutil_index_col -h || exit 0</code></pre>
-<pre><code>## [Tue Jul 13 14:23:28 2021] [Error] Check if this file does exist: -h
-## [Tue Jul 13 14:23:28 2021] [Error] This file is not bgzipped: -h</code></pre>
+</div>
+<div id="column-column-matching" class="section level2">
+<h2>Column-column matching</h2>
 <ul>
 <li><code>mmutil_match_col</code>:</li>
 </ul>
@@ -749,143 +913,6 @@ pre code {
 ## See also:
 ## https://github.com/nmslib/hnswlib</code></pre>
 <ul>
-<li><code>mmutil_merge_col</code>:</li>
-</ul>
-<pre class="sh"><code>mmutil_merge_col -h || exit 0</code></pre>
-<pre><code>## Merge the columns of sparse matrices matching rows
-## 
-## mmutil_merge_col global_row count_threshold output
-##  { mtx[1] row[1] column[1] mtx[2] row[2] column[2] ... }
-## 
-## global_row      : A file that contains the names of rows.
-## count_threshold : The minimum number of non-zero elements per column
-## output          : Header string for the output fileset.
-## mtx[i]          : i-th matrix market format file
-## row[i]          : i-th row file
-## column[i]       : i-th column file</code></pre>
-<ul>
-<li><code>mmutil_row_score</code>:</li>
-</ul>
-<pre class="sh"><code>mmutil_row_score -h || exit 0</code></pre>
-<pre><code>## Calculate scores for the rows in MTX
-## 
-## mmutil_row_score MTX ROW OUTPUT
-## 
-## [Arguments]
-## MTX:    Input matrix market file
-## ROW:    Input row name file
-## OUTPUT: Output file name</code></pre>
-<ul>
-<li><code>mmutil_select_col</code>:</li>
-</ul>
-<pre class="sh"><code>mmutil_select_col -h || exit 0</code></pre>
-<pre><code>## Select a subset of columns
-## 
-## mmutil_select_col MTX COLUMN SELECTED OUTPUT
-## 
-## [Arguments]
-## MTX:       [Input] Matrix market file
-## COLUMN:    [Input] Column name file
-## SELECTED:  [Input] Column names to be selected
-## OUTPUT:    [Output] File header</code></pre>
-<ul>
-<li><code>mmutil_select_row</code>:</li>
-</ul>
-<pre class="sh"><code>mmutil_select_row -h || exit 0</code></pre>
-<pre><code>## Select a subset of rows
-## 
-## mmutil_select_row MTX ROW COL SELECTED OUTPUT
-## 
-## [Arguments]
-## MTX:       [Input] Matrix market file
-## ROW:       [Input] Row name file
-## COL:       [Input] Column name file
-## SELECTED:  [Input] Row names to be selected
-## OUTPUT:    [Output] File header</code></pre>
-<ul>
-<li><code>mmutil_simulate</code>:</li>
-</ul>
-<pre class="sh"><code>mmutil_simulate -h || exit 0</code></pre>
-<pre><code>## mmutil_simulate: invalid option -- &#39;h&#39;
-## 
-## [Arguments]
-## --mu (-u)     : Depth-adjusted mean matrix (M x n)
-## --rho (-r)    : Column depth file (N x 1)
-## --col (-c)    : Column names
-## --out (-o)    : Output file header
-## 
-## ${out}.mtx.gz : (M x N) sparse matrix file</code></pre>
-<ul>
-<li><code>mmutil_spectral_cluster_col</code>:</li>
-</ul>
-<pre class="sh"><code>mmutil_spectral_cluster_col -h || exit 0</code></pre>
-<pre><code>## 
-## [Arguments]
-## --data (-d)            : MTX file (data)
-## --mtx (-d)             : MTX file (data)
-## --sdata (-s)           : Spectral feature file (column x factor)
-## --col (-c)             : Column file
-## --tau (-u)             : Regularization parameter (default: 1)
-## --rank (-r)            : The maximal rank of SVD (default: 10)
-## --lu_iter (-l)         : # of LU iterations (default: 3)
-## --out (-o)             : Output file header (default: output)
-## --row_weight (-w)      : Feature re-weighting (default: none)
-## --col_norm (-C)        : Column normalization (default: 10000)
-## --out_data (-D)        : Output clustering data (default: false)
-## --log_scale (-L)       : Data in a log-scale (default: true)
-## --raw_scale (-R)       : Data in a raw-scale (default: false)
-## --initial_sample (-S)  : Nystrom sample size (default: 10000)
-## --block_size (-B)      : Nystrom batch size (default: 10000)
-## --sampling_method (-N) : Nystrom sampling method: UNIFORM (default), CV, MEAN
-## --do_std               : Standardize (default: true)
-## --dont_std             : Don&#39;t Standardize (default: false)
-## --verbose              : Output more words (default: false)
-## 
-## --check_index          : check matrix market index (default: false)
-## 
-## [Options for Gaussian mixture models]
-## 
-## --trunc (-K)           : maximum truncation-level of clustering
-## --burnin (-I)          : burn-in (Gibbs) iterations (default: 10)
-## --min_vbiter (-v)      : minimum VB iterations (default: 5)
-## --max_vbiter (-V)      : maximum VB iterations (default: 100)
-## --convergence (-T)     : epsilon value for checking convergence (default: 1e-8)
-## --kmeanspp (-i)        : Kmeans++ initialization (default: false)
-## 
-## [Details]
-## Qin and Rohe (2013), Regularized Spectral Clustering under Degree-corrected Stochastic Block Model
-## Li, Kwok, Lu (2010), Making Large-Scale Nystrom Approximation Possible</code></pre>
-<ul>
-<li><code>mmutil_spectral_col</code>:</li>
-</ul>
-<pre class="sh"><code>mmutil_spectral_col -h || exit 0</code></pre>
-<pre><code>## 
-## [Arguments]
-## --data (-d)            : MTX file (data)
-## --mtx (-d)             : MTX file (data)
-## --tau (-u)             : Regularization parameter (default: tau = 1)
-## --rank (-r)            : The maximal rank of SVD (default: rank = 50)
-## --iter (-l)            : # of LU iterations (default: iter = 5)
-## --row_weight (-w)      : Feature re-weighting (default: none)
-## --col_norm (-C)        : Column normalization (default: 10000)
-## --rand_seed (-s)       : Random seed (default: 1)
-## --initial_sample (-S)  : Nystrom sample size (default: 10000)
-## --block_size (-B)      : Nystrom batch size (default: 10000)
-## --sampling_method (-M) : Nystrom sampling method: CV (default), UNIFORM, MEAN
-## --log_scale (-L)       : Data in a log-scale (default: true)
-## --raw_scale (-R)       : Data in a raw-scale (default: false)
-## --out (-o)             : Output file name
-## 
-## --verbose (-v)         : verbosity
-## --em_iter (-i)         : EM iterations (default: 0)
-## --em_tol (-t)          : EM convergence (default: 1e-2)
-## 
-## --check_index          : check matrix market index (default: false)
-## 
-## [Details]
-## Qin and Rohe (2013), Regularized Spectral Clustering under Degree-corrected Stochastic Block Model
-## Li, Kwok, Lu (2010), Making Large-Scale Nystrom Approximation Possible</code></pre>
-<ul>
 <li><code>mmutil_spectral_match_col</code>:</li>
 </ul>
 <pre class="sh"><code>mmutil_spectral_match_col -h || exit 0</code></pre>
@@ -940,6 +967,7 @@ pre code {
 ## 
 ## See also:
 ## https://github.com/nmslib/hnswlib</code></pre>
+</div>
 </div>
 
 

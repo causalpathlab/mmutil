@@ -17,52 +17,18 @@ author: "Yongjin Park"
 
 # Binary utility programs
 
+## Data manipulation
+
 * `mmutil_aggregate_col`:
 
 ```{sh}
 mmutil_aggregate_col -h || exit 0
 ```
 
-* `mmutil_annotate_col`:
-
-```{sh}
-mmutil_annotate_col -h || exit 0
-```
-
-* `mmutil_bbknn`:
-
-```{sh}
-mmutil_bbknn -h || exit 0
-```
-
-* `mmutil_cfa_col`:
-
-```{sh}
-mmutil_cfa_col -h || exit 0
-```
-
-* `mmutil_col_score`:
-
-```{sh}
-mmutil_col_score -h || exit 0
-```
-
-* `mmutil_diff`:
-
-```{sh}
-mmutil_diff -h || exit 0
-```
-
-* `mmutil_embed_annot`:
-
-```{sh}
-mmutil_embed_annot -h || exit 0
-```
-
 * `mmutil_filter_col`:
 
 ```{sh}
-mmutil_filter_col -h || exit 0
+mmutil_filter_col || exit 0
 ```
 
 * `mmutil_filter_row`:
@@ -71,40 +37,16 @@ mmutil_filter_col -h || exit 0
 mmutil_filter_row -h || exit 0
 ```
 
-* `mmutil_histogram`:
-
-```{sh}
-mmutil_histogram -h || exit 0
-```
-
-* `mmutil_index_col`:
-
-```{sh}
-mmutil_index_col -h || exit 0
-```
-
-* `mmutil_match_col`:
-
-```{sh}
-mmutil_match_col -h || exit 0
-```
-
 * `mmutil_merge_col`:
 
 ```{sh}
-mmutil_merge_col -h || exit 0
-```
-
-* `mmutil_row_score`:
-
-```{sh}
-mmutil_row_score -h || exit 0
+mmutil_merge_col || exit 0
 ```
 
 * `mmutil_select_col`:
 
 ```{sh}
-mmutil_select_col -h || exit 0
+mmutil_select_col || exit 0
 ```
 
 * `mmutil_select_row`:
@@ -113,11 +55,32 @@ mmutil_select_col -h || exit 0
 mmutil_select_row -h || exit 0
 ```
 
-* `mmutil_simulate`:
+## Column indexing for fast look-up
+
+* `mmutil_index_col`:
 
 ```{sh}
-mmutil_simulate -h || exit 0
+mmutil_index_col || exit 0
 ```
+
+
+## Cell type (column) annotation
+
+* `mmutil_annotate_col`:
+
+```{sh}
+mmutil_annotate_col -h || exit 0
+```
+
+## Batch normalization
+
+* `mmutil_bbknn`:
+
+```{sh}
+mmutil_bbknn -h || exit 0
+```
+
+## Basic clustering
 
 * `mmutil_spectral_cluster_col`:
 
@@ -131,10 +94,65 @@ mmutil_spectral_cluster_col -h || exit 0
 mmutil_spectral_col -h || exit 0
 ```
 
+## Causal inference
+
+* `mmutil_cfa_col`:
+
+```{sh}
+mmutil_cfa_col -h || exit 0
+```
+
+## Basic statistics
+
+* `mmutil_col_score`:
+
+```{sh}
+mmutil_col_score || exit 0
+```
+
+* `mmutil_row_score`:
+
+```{sh}
+mmutil_row_score || exit 0
+```
+
+
+* `mmutil_histogram`:
+
+```{sh}
+mmutil_histogram || exit 0
+```
+
+* `mmutil_simulate`:
+
+```{sh}
+mmutil_simulate -h || exit 0
+```
+
+## Miscellaneous
+
+* `mmutil_diff`:
+
+```{sh}
+mmutil_diff -h || exit 0
+```
+
+* `mmutil_embed_annot`:
+
+```{sh}
+mmutil_embed_annot -h || exit 0
+```
+
+## Column-column matching
+
+* `mmutil_match_col`:
+
+```{sh}
+mmutil_match_col -h || exit 0
+```
+
 * `mmutil_spectral_match_col`:
 
 ```{sh}
 mmutil_spectral_match_col -h || exit 0
 ```
-
-
