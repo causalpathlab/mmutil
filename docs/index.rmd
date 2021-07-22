@@ -11,9 +11,13 @@ author: "Yongjin Park"
 
 * `make` and `make install` will install binary files
 
-* `pip3 install -e .` will install Python API (experimental)
+* `R` API in a separate project. Try this: in `R`:
 
-* `Rcpp` interface will be made available soon.
+`> devtools::install_github("YPARK/mmutilR")`
+
+(You need `Rcpp`, `RcppEigen`, and `tidyverse`)
+
+* `pip3 install -e .` will install Python API (experimental)
 
 # Binary utility programs
 
