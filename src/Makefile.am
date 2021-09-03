@@ -1,4 +1,4 @@
-bin_PROGRAMS = mmutil_select_row mmutil_select_col mmutil_filter_row mmutil_filter_col mmutil_merge_col mmutil_index_col mmutil_row_score mmutil_col_score mmutil_histogram mmutil_bbknn mmutil_cfa_col mmutil_aggregate_col mmutil_spectral_col mmutil_match_col mmutil_annotate_col mmutil_embed_annot mmutil_spectral_match_col mmutil_spectral_cluster_col mmutil_diff mmutil_simulate
+bin_PROGRAMS = mmutil_select_row mmutil_select_col mmutil_filter_row mmutil_filter_col mmutil_merge_col mmutil_index_col mmutil_row_score mmutil_col_score mmutil_histogram mmutil_bbknn mmutil_cfa_col mmutil_aggregate_col mmutil_spectral_col mmutil_match_col mmutil_annotate_col mmutil_embed_annot mmutil_spectral_match_col mmutil_spectral_cluster_col mmutil_diff mmutil_simulate mmutil_knn_lc
 
 tabix = ext/tabix/bgzf.h ext/tabix/bgzf.c utils/bgzstream.hh utils/bgzstream.cc ext/tabix/kstring.c ext/tabix/kstring.h
 
@@ -27,6 +27,8 @@ mmutil_merge_col_SOURCES = mmutil_run_merge_col.cc mmutil_merge_col.hh $(common)
 #######################
 
 mmutil_bbknn_SOURCES = mmutil_normalize.hh mmutil_match.hh mmutil_bbknn.hh mmutil_bbknn.cc $(common) $(spectral)
+
+mmutil_knn_lc_SOURCES = mmutil_knn_network_community.cc mmutil_normalize.hh mmutil_match.hh $(common) $(spectral)
 
 ####################
 # latent embedding #
